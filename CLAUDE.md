@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `tts-sidecar` es un motor de síntesis de voz (TTS) offline en Python usando Chatterbox para clonación de voz en español latinoamericano.
 
-**Rama actual**: `feat/chatterbox-v3`
+**Rama actual**: `main`
 
 ## Comandos comunes
 

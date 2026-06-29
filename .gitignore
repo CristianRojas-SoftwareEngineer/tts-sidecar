@@ -1,8 +1,12 @@
 node_modules/
 dist/
+dist_test/
 assets/
 voices/
 *.spec
 .claude/
 __pycache__/
 *.pyc
+.pytest_cache/
+nuitka-crash-report.xml
+*.egg-info/
