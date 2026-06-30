@@ -53,3 +53,34 @@ Después de compilar:
 bin/win32-x64/tts-sidecar.exe version
 bin/win32-x64/tts-sidecar.exe doctor
 ```
+
+## Paquetes Excluidos (Bloat)
+
+Los siguientes paquetes son dependencias transitivas de `chatterbox-tts` pero no son usados por el código local y están excluidos del build:
+
+| Paquete | Razón | Tamaño estimado |
+|---------|--------|----------------|
+| `gradio` + 1865 archivos | No usado por el proyecto | ~50-100 MB |
+| `gradio_client` | No usado por el proyecto | ~20 MB |
+| `pandas` + templates | Dependencia de gradio | ~30 MB |
+| `sklearn` + 4 DLLs | Dependencia de scipy/numba | ~30 MB |
+| `numba` (JIT disabled) | Dependencia de librosa, JIT deshabilitado en standalone | ~50 MB |
+| `onnx` + `onnxruntime` | No usado por chatterbox | ~100 MB |
+
+## Notas de Dependencias
+
+### soundfile
+
+`soundfile` es un módulo de archivo único (`soundfile.py`, ~1700 líneas) que usa CFFI para bindings nativos. Nuitka incluye automáticamente `_soundfile_data/` (datos CFFI).
+
+### pycaw
+
+`pycaw` es una librería de solo Windows para audio. Está incluida en el build para el comando `devices`.
+
+### numba
+
+numba tiene JIT deshabilitado en standalone mode. Esto puede afectar el rendimiento de algunas funciones de audio de `librosa`, pero no causa crashes.
+
+### Zoneinfo
+
+La estándar library `zoneinfo` añade ~5 MB al payload. Esto es necesario para algunas funcionalidades de Python.
