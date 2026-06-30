@@ -22,7 +22,6 @@ HF_CACHE = Path.home() / ".cache" / "huggingface" / "hub"
 MODEL_CACHE_NAMES = [
     "models--ResembleAI--Chatterbox-Multilingual-es-mx-latam",
     "models--ResembleAI--chatterbox",
-    "chatterbox-multilingual",
 ]
 
 
