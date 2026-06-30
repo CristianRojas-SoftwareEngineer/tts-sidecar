@@ -1,42 +1,23 @@
-# Source code
+# package.json solo expone los scripts `npm run build-*`; el paquete no publica
+# código fuente a npm. Estas reglas excluyen lo que no debe empaquetarse.
+
+# Código fuente y tests Python
 src/
+tests/
 
-# Rust project
-Cargo.toml
-Cargo.lock
-crates/
-target/
-
-# CI/CD
-.circleci/
-.github/
-
-# Documentation source
+# Documentación y CI
 docs/
-ARCHITECTURE.md
-BUILD.md
-USAGE.md
+.circleci/
 
-# Development
-tsconfig.json
-jest.config.js
-*.test.ts
+# Artefactos de build
+dist/
+dist_test/
+__pycache__/
+*.pyc
+*.egg-info/
 
-# IDE
+# IDE / OS
 .vscode/
 .idea/
-
-# OS
 .DS_Store
 Thumbs.db
-
-# Logs
-*.log
-npm-debug.log*
-
-# Test coverage
-coverage/
-
-# Temporary files
-*.tmp
-*.temp
