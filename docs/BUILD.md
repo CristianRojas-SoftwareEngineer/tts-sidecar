@@ -2,15 +2,21 @@
 
 `tts-sidecar` se compila con **Nuitka** (Python → C → binario) para obtener un ejecutable standalone multiplataforma.
 
-## Requisitos
+---
+
+## 1. Requisitos
 
 - **Python 3.13+** ([python.org](https://www.python.org/downloads/))
-- **Nuitka** (`pip install nuitka`)
+- **Nuitka** (`pip install nuitka==4.1.3`)
 - **Visual Studio Build Tools 2022** (Windows) con:
   - "Desktop development with C++"
   - Windows 11 SDK
+- **macOS**: Command Line Tools for Xcode
+- **Linux**: GCC y dependencias de Python
 
-## Plataformas Soportadas
+---
+
+## 2. Plataformas Soportadas
 
 | Plataforma | Comando | Output |
 |------------|---------|--------|
@@ -20,9 +26,11 @@
 | macOS Intel | `npm run build-darwin` | `bin/darwin-x64/tts-sidecar` |
 | macOS Apple Silicon | `npm run build-darwin-arm64` | `bin/darwin-arm64/tts-sidecar` |
 
-## Compilación
+---
 
-### Rápido (usa Nuitka)
+## 3. Compilación Local
+
+### Scripts de Build
 
 ```bash
 # Windows
@@ -35,7 +43,9 @@ npm run build-linux
 npm run build-darwin
 ```
 
-El script `scripts/build_windows.py` ejecuta:
+Los scripts de build (`scripts/build_*.py`) ejecutan Nuitka con las opciones configuradas.
+
+### Opciones de Nuitka
 
 ```bash
 python -m nuitka --standalone --onefile \
@@ -45,7 +55,7 @@ python -m nuitka --standalone --onefile \
   bin/tts-sidecar
 ```
 
-## Verificación
+### Verificación
 
 Después de compilar:
 
@@ -54,7 +64,82 @@ bin/win32-x64/tts-sidecar.exe version
 bin/win32-x64/tts-sidecar.exe doctor
 ```
 
-## Paquetes Excluidos (Bloat)
+---
+
+## 4. CI/CD con CircleCI
+
+El pipeline de CircleCI compila el proyecto para todas las plataformas automáticamente.
+
+### Arquitectura del Pipeline
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Pipeline                                 │
+│                   (multijob)                                │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐          │
+│  │build-win64  │  │build-lin64  │  │build-linarm │          │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘          │
+│         │                 │                 │                 │
+│         ▼                 ▼                 ▼                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐          │
+│  │build-darwin │  │build-darwin │                          │
+│  │    x64      │  │   arm64     │                          │
+│  └─────────────┘  └─────────────┘                          │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Jobs
+
+| Job | Plataforma | Executor | Notas |
+|-----|------------|----------|-------|
+| `build-windows` | Windows x64 | windows-server | Nuitka onefile |
+| `build-linux-x64` | Linux x64 | ubuntu | Nuitka onefile |
+| `build-linux-arm64` | Linux ARM64 | ubuntu | Cross-compile |
+| `build-darwin-x64` | macOS Intel | macos | Nuitka onefile |
+| `build-darwin-arm64` | macOS Apple Silicon | macos | Nuitka onefile |
+
+### Workflow
+
+```yaml
+workflows:
+  version: 2
+  build-all:
+    jobs:
+      - build-windows
+      - build-linux-x64
+      - build-linux-arm64
+      - build-darwin-x64
+      - build-darwin-arm64
+```
+
+El archivo de configuración completo está en `.circleci/config.yml`.
+
+---
+
+## 5. Distribución de Binarios
+
+Los binarios compilados se almacenan en `bin/<platform>/`:
+
+```bash
+bin/
+├── win32-x64/
+│   └── tts-sidecar.exe
+├── linux-x64/
+│   └── tts-sidecar
+├── linux-arm64/
+│   └── tts-sidecar
+├── darwin-x64/
+│   └── tts-sidecar
+└── darwin-arm64/
+    └── tts-sidecar
+```
+
+---
+
+## 6. Paquetes Excluidos (Bloat)
 
 Los siguientes paquetes son dependencias transitivas de `chatterbox-tts` pero no son usados por el código local y están excluidos del build:
 
@@ -67,7 +152,9 @@ Los siguientes paquetes son dependencias transitivas de `chatterbox-tts` pero no
 | `numba` (JIT disabled) | Dependencia de librosa, JIT deshabilitado en standalone | ~50 MB |
 | `onnx` + `onnxruntime` | No usado por chatterbox | ~100 MB |
 
-## Notas de Dependencias
+---
+
+## 7. Notas de Dependencias
 
 ### soundfile
 
@@ -84,3 +171,38 @@ numba tiene JIT deshabilitado en standalone mode. Esto puede afectar el rendimie
 ### Zoneinfo
 
 La estándar library `zoneinfo` añade ~5 MB al payload. Esto es necesario para algunas funcionalidades de Python.
+
+---
+
+## 8. Notas Importantes
+
+- **Nuitka onefile**: El binario incluye el interpreter de Python embebido
+- **Tamaño**: Los binarios Nuitka son más grandes (~100-200MB) pero no requieren Python instalado
+- **macOS**: Los binarios deben ser firmados/notarized para distribución fuera de App Store
+- **Windows**: El binario es autocontenido y no requiere Visual Studio
+- **Linux**: Requiere GCC para compilar las extensiones C de Nuitka
+
+---
+
+## 9. Troubleshooting
+
+### Windows: "Visual Studio not found"
+```powershell
+# Instalar Visual Studio Build Tools
+winget install Microsoft.VisualStudio.2022.BuildTools
+```
+
+### macOS: "clang error"
+```bash
+# Instalar Command Line Tools
+xcode-select --install
+```
+
+### Linux: "gcc not found"
+```bash
+# Ubuntu/Debian
+sudo apt-get install build-essential
+
+# CentOS/RHEL
+sudo yum groupinstall "Development Tools"
+```
