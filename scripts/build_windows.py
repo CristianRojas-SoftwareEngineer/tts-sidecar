@@ -113,7 +113,7 @@ def build_windows():
                 check=False,
             )
             if result.returncode != 0:
-                log("Installer build failed", returncode=result.returncode)
+                log(f"Installer build failed (rc={result.returncode})")
                 if result.stdout:
                     print(result.stdout)
                 if result.stderr:

@@ -138,7 +138,7 @@ def build_linux(target_arch="x86_64"):
                 capture_output=True, text=True,
             )
             if result.returncode != 0:
-                log("AppImage build failed", returncode=result.returncode)
+                log(f"AppImage build failed (rc={result.returncode})")
                 print(result.stdout)
                 print(result.stderr, file=sys.stderr)
                 log("WARNING: AppImage failed — onedir bundle is still in dist/")
