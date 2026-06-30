@@ -30,6 +30,21 @@
 
 ## 3. Compilación Local
 
+### Verificación de Sintaxis (py_compile)
+
+Antes de compilar, se puede verificar que el código Python no tenga errores de sintaxis:
+
+```bash
+# Verificar todos los archivos Python del proyecto
+python -m py_compile src/chatterbox_tts/engine.py
+python -m py_compile src/chatterbox_tts/cli.py
+python -m py_compile src/chatterbox_tts/audio.py
+python -m py_compile src/chatterbox_tts/timing.py
+python -m py_compile src/chatterbox_tts/daemon/*.py
+```
+
+Esto genera archivos `.pyc` en el directorio `__pycache__/` de cada módulo.
+
 ### Scripts de Build
 
 ```bash
