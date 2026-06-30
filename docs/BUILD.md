@@ -32,6 +32,8 @@
 
 ### Verificación de Sintaxis (py_compile)
 
+`py_compile` es parte de la **biblioteca estándar de Python**. No es una dependencia extra - viene incluido con Python automáticamente.
+
 Antes de compilar, se puede verificar que el código Python no tenga errores de sintaxis:
 
 ```bash
