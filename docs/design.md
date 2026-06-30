@@ -80,7 +80,7 @@ tts-sidecar/
 └── docs/
     ├── design.md                 # Este documento
     ├── goal.md                   # Meta del proyecto
-    └── migration-plan.md          # Daemon mode history
+    └── daemon-mode.md            # Daemon mode
 ```
 
 ## Motor Chatterbox Multilingual V3

@@ -134,4 +134,4 @@ MIT — Uso comercial libre.
 
 - [docs/goal.md](docs/goal.md) - Meta del proyecto
 - [docs/design.md](docs/design.md) - Diseño técnico
-- [docs/migration-plan.md](docs/migration-plan.md) - Plan de migración desde XTTS
+- [docs/daemon-mode.md](docs/daemon-mode.md) - Daemon mode (servidor persistente)

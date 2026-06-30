@@ -65,7 +65,7 @@ tts-sidecar/
 └── docs/
     ├── design.md
     ├── goal.md
-    └── migration-plan.md
+    └── daemon-mode.md
 ```
 
 ## Modelos Disponibles
