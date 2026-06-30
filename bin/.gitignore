@@ -1,8 +1,0 @@
-# Binaries are platform-specific and should be built separately
-# DO NOT commit built binaries to git
-#
-# Los binarios compilados se emiten a dist/ (ignorado en el .gitignore raíz),
-# no a bin/. Este directorio solo contiene el entry-point `tts-sidecar`.
-
-# Keep directory structure
-!.gitkeep
