@@ -1,6 +1,6 @@
 # CI/CD Build Pipeline
 
-Este documento describe el pipeline de CI/CD para compilar `tts-sidecar` en múltiples plataformas usando Nuitka.
+Este documento describe el pipeline de CI/CD para compilar `tts-sidecar` en múltiples plataformas usando CircleCI y Nuitka.
 
 ## Arquitectura del Pipeline
 
@@ -31,7 +31,7 @@ Este documento describe el pipeline de CI/CD para compilar `tts-sidecar` en múl
 | `build-linux-x64` | Linux x64 | Nuitka + GCC | ubuntu | Nuitka onefile |
 | `build-linux-arm64` | Linux ARM64 | Nuitka + GCC | ubuntu | Cross-compile |
 | `build-darwin-x64` | macOS Intel | Nuitka + Clang | macos | Nuitka onefile |
-| `build-darwin-arm64` | macOS Apple Silicon | Nuitka + Clang | macos | Cross-compile |
+| `build-darwin-arm64` | macOS Apple Silicon | Nuitka + Clang | macos | Nuitka onefile |
 
 ## Configuración
 
@@ -54,8 +54,10 @@ Este documento describe el pipeline de CI/CD para compilar `tts-sidecar` en múl
 
 ```
 tts-sidecar/
+├── .circleci/
+│   └── config.yml           # Configuración CircleCI
 ├── bin/
-│   └── tts-sidecar           # Entry point (no __main__.py)
+│   └── tts-sidecar           # Entry point
 ├── src/
 │   └── chatterbox_tts/       # Python package
 ├── scripts/
@@ -67,160 +69,145 @@ tts-sidecar/
 └── pyproject.toml
 ```
 
-## Configuración de GitHub Actions (Recomendado)
+## Configuración de CircleCI
+
+El archivo de configuración está en `.circleci/config.yml`.
+
+### Jobs
+
+#### build-windows
+```yaml
+build-windows:
+  docker:
+    - image: cimg/python:3.13
+  steps:
+    - checkout
+    - python/install-packages:
+        package-manager: pip
+        pip-dependency-file: requirements.txt
+    - run:
+        name: Install Nuitka
+        command: pip install nuitka==4.1.3
+    - run:
+        name: Build Windows
+        command: python scripts/build_windows.py
+    - store_artifacts:
+        path: bin/win32-x64/tts-sidecar.exe
+        destination: tts-sidecar-win32-x64.exe
+```
+
+#### build-linux-x64
+```yaml
+build-linux-x64:
+  docker:
+    - image: cimg/python:3.13
+  steps:
+    - checkout
+    - python/install-packages:
+        package-manager: pip
+        pip-dependency-file: requirements.txt
+    - run:
+        name: Install Nuitka
+        command: pip install nuitka==4.1.3
+    - run:
+        name: Install Linux dependencies
+        command: |
+          sudo apt-get update
+          sudo apt-get install -y patchelf
+    - run:
+        name: Build Linux x64
+        command: python scripts/build_linux.py --arch x86_64
+    - store_artifacts:
+        path: bin/linux-x64/tts-sidecar
+        destination: tts-sidecar-linux-x64
+```
+
+#### build-linux-arm64
+```yaml
+build-linux-arm64:
+  docker:
+    - image: cimg/python:3.13
+  steps:
+    - checkout
+    - python/install-packages:
+        package-manager: pip
+        pip-dependency-file: requirements.txt
+    - run:
+        name: Install Nuitka
+        command: pip install nuitka==4.1.3
+    - run:
+        name: Install Linux dependencies
+        command: |
+          sudo apt-get update
+          sudo apt-get install -y patchelf gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+    - run:
+        name: Build Linux ARM64
+        command: python scripts/build_linux.py --arch arm64
+    - store_artifacts:
+        path: bin/linux-arm64/tts-sidecar
+        destination: tts-sidecar-linux-arm64
+```
+
+#### build-darwin-x64
+```yaml
+build-darwin-x64:
+  macos:
+    xcode: "15.0"
+  steps:
+    - checkout
+    - run:
+        name: Set up Python
+        command: |
+          python3 --version
+          python3 -m pip install --upgrade pip
+          pip3 install -r requirements.txt
+    - run:
+        name: Install Nuitka
+        command: pip3 install nuitka==4.1.3
+    - run:
+        name: Build macOS x64
+        command: python3 scripts/build_macos.py --arch x86_64
+    - store_artifacts:
+        path: bin/darwin-x64/tts-sidecar
+        destination: tts-sidecar-darwin-x64
+```
+
+#### build-darwin-arm64
+```yaml
+build-darwin-arm64:
+  macos:
+    xcode: "14.0"
+  steps:
+    - checkout
+    - run:
+        name: Set up Python
+        command: |
+          python3 --version
+          python3 -m pip install --upgrade pip
+          pip3 install -r requirements.txt
+    - run:
+        name: Install Nuitka
+        command: pip3 install nuitka==4.1.3
+    - run:
+        name: Build macOS ARM64
+        command: python3 scripts/build_macos.py --arch arm64
+    - store_artifacts:
+        path: bin/darwin-arm64/tts-sidecar
+        destination: tts-sidecar-darwin-arm64
+```
+
+### Workflow
 
 ```yaml
-name: Build tts-sidecar
-
-on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
-
-jobs:
-  build-windows:
-    runs-on: windows-2022
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install dependencies
-        run: |
-          pip install nuitka==4.1.3
-          pip install -r requirements.txt
-
-      - name: Build Windows
-        run: python scripts/build_windows.py
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tts-sidecar-windows
-          path: bin/win32-x64/tts-sidecar.exe
-
-  build-linux-x64:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install dependencies
-        run: |
-          pip install nuitka==4.1.3
-          pip install -r requirements.txt
-
-      - name: Build Linux x64
-        run: python scripts/build_linux.py --arch x86_64
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tts-sidecar-linux-x64
-          path: bin/linux-x64/tts-sidecar
-
-  build-linux-arm64:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install dependencies
-        run: |
-          pip install nuitka==4.1.3
-          pip install -r requirements.txt
-
-      - name: Build Linux ARM64
-        run: python scripts/build_linux.py --arch arm64
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tts-sidecar-linux-arm64
-          path: bin/linux-arm64/tts-sidecar
-
-  build-darwin-x64:
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install dependencies
-        run: |
-          pip install nuitka==4.1.3
-          pip install -r requirements.txt
-
-      - name: Build macOS x64
-        run: python scripts/build_macos.py --arch x86_64
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tts-sidecar-darwin-x64
-          path: bin/darwin-x64/tts-sidecar
-
-  build-darwin-arm64:
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install dependencies
-        run: |
-          pip install nuitka==4.1.3
-          pip install -r requirements.txt
-
-      - name: Build macOS ARM64
-        run: python scripts/build_macos.py --arch arm64
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tts-sidecar-darwin-arm64
-          path: bin/darwin-arm64/tts-sidecar
-
-  release:
-    needs: [build-windows, build-linux-x64, build-linux-arm64, build-darwin-x64, build-darwin-arm64]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            artifacts/tts-sidecar-windows/tts-sidecar.exe
-            artifacts/tts-sidecar-linux-x64/tts-sidecar
-            artifacts/tts-sidecar-linux-arm64/tts-sidecar
-            artifacts/tts-sidecar-darwin-x64/tts-sidecar
-            artifacts/tts-sidecar-darwin-arm64/tts-sidecar
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+workflows:
+  version: 2
+  build-all:
+    jobs:
+      - build-windows
+      - build-linux-x64
+      - build-linux-arm64
+      - build-darwin-x64
+      - build-darwin-arm64
 ```
 
 ## Distribución de Binarios
