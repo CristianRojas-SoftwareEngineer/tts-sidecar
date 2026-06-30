@@ -36,6 +36,13 @@ def _resolve_voice_paths(args):
         # Resolve from filesystem directly - no model needed
         voice_audio, speech_audio = voices.voice_paths(args.voice)
 
+    # Resolve to absolute paths against the client's CWD before they cross the
+    # process boundary to the daemon, which has a different working directory.
+    if voice_audio:
+        voice_audio = str(Path(voice_audio).resolve())
+    if speech_audio:
+        speech_audio = str(Path(speech_audio).resolve())
+
     return voice_audio, speech_audio
 
 
