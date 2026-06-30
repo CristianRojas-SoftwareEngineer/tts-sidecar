@@ -111,7 +111,6 @@ class ChatterboxEngine:
     to match the es-mx-latam checkpoint (text_emb: 2454×1024).
 
     Supports model caching to avoid reloading on each instantiation.
-    Supports optional torch.compile for CPU acceleration (platform-dependent).
     """
 
     # Model configurations
@@ -124,7 +123,7 @@ class ChatterboxEngine:
     _cache: dict[str, "ChatterboxEngine"] = {}
 
     @classmethod
-    def get_instance(cls, model: str = "es-latam", device: str = "cpu", models_dir: Optional[str] = None, compile_mode: Optional[str] = None) -> "ChatterboxEngine":
+    def get_instance(cls, model: str = "es-latam", device: str = "cpu", models_dir: Optional[str] = None) -> "ChatterboxEngine":
         """
         Get a cached engine instance or create a new one.
 
@@ -134,14 +133,10 @@ class ChatterboxEngine:
             model: Model to use ("es-latam" or "multilingual")
             device: Device for inference ("cpu", "cuda", "mps")
             models_dir: Directory to cache models
-            compile_mode: Optional. Set to "default", "reduce-overhead", or "max-autotune"
-                         to enable torch.compile for CPU. None/False to disable.
-                         Note: changing compile_mode creates a new cached instance.
         """
-        compile_str = compile_mode or "none"
-        cache_key = f"{model}:{device}:{compile_str}"
+        cache_key = f"{model}:{device}"
         if cache_key not in cls._cache:
-            cls._cache[cache_key] = cls(model=model, device=device, models_dir=models_dir, compile_mode=compile_mode)
+            cls._cache[cache_key] = cls(model=model, device=device, models_dir=models_dir)
         return cls._cache[cache_key]
 
     def __init__(
@@ -149,7 +144,6 @@ class ChatterboxEngine:
         model: str = "es-latam",
         device: str = "cpu",
         models_dir: Optional[str] = None,
-        compile_mode: Optional[str] = None,
     ):
         """
         Initialize the Chatterbox TTS engine.
@@ -160,29 +154,15 @@ class ChatterboxEngine:
                    - "multilingual": Base multilingual model
             device: Device for inference ("cpu", "cuda", "mps")
             models_dir: Directory to cache models. Defaults to ~/.cache/huggingface/hub
-            compile_mode: Optional. Set to "default", "reduce-overhead", or "max-autotune"
-                         to enable torch.compile. None/False to disable.
         """
         self.device = device
         self.model_name = self.MODELS.get(model, model)
-        self._compile_mode = compile_mode if (compile_mode and device == "cpu") else None
-        self._compiled = False
 
         # Download model to local cache
         self._cache_dir = self._download_model(self.model_name, models_dir)
 
         # Load model from local files using correct loader
         self._tts = self._load_model(self._cache_dir, self.model_name, device)
-
-        # Apply torch.compile with per-model settings:
-        # - T3: fullgraph=False (autoregressive loop causes graph breaks),
-        #        dynamic=True (variable sequence length per generation)
-        # - S3Gen: fullgraph=True (pure feedforward, static graph),
-        #        dynamic=False (fixed-length token-to-mel decoding)
-        # - Voice Encoder: fullgraph=True (feedforward, static shapes),
-        #        dynamic=False (fixed reference audio length)
-        if self._compile_mode:
-            self._apply_compile()
 
     def _download_model(self, model_name: str, models_dir: Optional[str] = None) -> Path:
         """Download model from HuggingFace or get from local cache."""
@@ -315,56 +295,6 @@ class ChatterboxEngine:
     def _load_multilingual(self, cache_dir: Path, device: str):
         """Load base multilingual model (for comparison/debugging)."""
         return ChatterboxTTS.from_local(cache_dir, device)
-
-    def _apply_compile(self):
-        """
-        Apply torch.compile to model components for CPU acceleration.
-
-        Multi-platform: works on Windows, Linux, and Mac.
-        Falls back gracefully if torch.compile is not available (PyTorch < 2.0).
-        """
-        import time
-
-        # Check if torch.compile is available (PyTorch 2.0+)
-        if not hasattr(torch, 'compile'):
-            print("[Compile] torch.compile not available (requires PyTorch 2.0+). Skipping compilation.")
-            return
-
-        mode = self._compile_mode or "default"
-        print(f"[Compile] Starting compilation (mode='{mode}')...")
-
-        try:
-            tts = self._tts
-            compile_start = time.time()
-
-            # Compile T3 (text encoder - largest component)
-            if hasattr(tts, 't3') and tts.t3 is not None:
-                t3_start = time.time()
-                tts.t3 = torch.compile(tts.t3, mode=mode, fullgraph=False, dynamic=True)
-                print(f"[Compile]   - T3 compiled ({time.time()-t3_start:.1f}s)")
-
-            # S3Gen: pure feedforward UNet (flow matching + HiFiGAN vocoder)
-            # fullgraph=True, dynamic=False: static graph, fixed shapes
-            if hasattr(tts, 's3gen') and tts.s3gen is not None:
-                s3gen_start = time.time()
-                tts.s3gen = torch.compile(tts.s3gen, mode=mode, fullgraph=True, dynamic=False)
-                print(f"[Compile]   - S3Gen compiled ({time.time()-s3gen_start:.1f}s)")
-
-            # Voice Encoder: smaller feedforward network for timbre embedding
-            # fullgraph=True, dynamic=False: static graph, fixed shapes
-            if hasattr(tts, 've') and tts.ve is not None:
-                ve_start = time.time()
-                tts.ve = torch.compile(tts.ve, mode=mode, fullgraph=True, dynamic=False)
-                print(f"[Compile]   - Voice Encoder compiled ({time.time()-ve_start:.1f}s)")
-
-            self._compiled = True
-            print(f"[Compile] Complete ({time.time()-compile_start:.1f}s total)")
-
-        except Exception as e:
-            # If compilation fails for any component, continue with eager mode
-            print(f"[Compile] Warning: {e}")
-            print("[Compile] Continuing with eager mode (non-compiled).")
-            self._compiled = False
 
     def speak(
         self,

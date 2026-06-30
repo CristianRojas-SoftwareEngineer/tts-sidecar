@@ -13,7 +13,6 @@ class SynthesizeRequest(BaseModel):
     speech_audio: Optional[str] = None
     model: str = "es-latam"
     device: str = "cpu"
-    compile_mode: Optional[str] = None
 
 
 class HealthResponse(BaseModel):

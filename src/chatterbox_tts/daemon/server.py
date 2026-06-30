@@ -47,7 +47,7 @@ def set_start_time(timestamp: float):
 # FastAPI application
 app = FastAPI(
     title="tts-sidecar-daemon",
-    description="Persistent TTS daemon with cached model and optional torch.compile",
+    description="Persistent TTS daemon with cached model",
 )
 
 

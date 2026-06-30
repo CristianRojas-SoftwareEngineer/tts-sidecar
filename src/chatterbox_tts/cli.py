@@ -76,7 +76,6 @@ def _synthesize_via_daemon(args, voice_audio, speech_audio):
             speech_audio=speech_audio,
             model=args.model,
             device=args.device,
-            compile_mode=getattr(args, 'compile', None),
         )
         elapsed = time.time() - synth_start
         log(f"[Daemon] Síntesis completada ({elapsed:.1f}s)")
@@ -108,8 +107,7 @@ def cmd_speak(args):
         # Use direct mode - imports only loaded when daemon not used
         from .engine import ChatterboxEngine
 
-        compile_mode = getattr(args, 'compile', None)
-        engine = ChatterboxEngine.get_instance(model=args.model, device=args.device, compile_mode=compile_mode)
+        engine = ChatterboxEngine.get_instance(model=args.model, device=args.device)
 
         audio_bytes = engine.speak(
             text=args.text,
@@ -422,11 +420,6 @@ def main():
     speak_parser.add_argument("--speech-audio",
                               help="Audio file for T3 conditioning (6s) + S3Gen decoder (10s). "
                                    "Use a clean speech segment (10s+ recommended).")
-    speak_parser.add_argument("--compile", "-c", nargs="?", const="default",
-                              choices=["default", "reduce-overhead", "max-autotune"],
-                              help="Enable torch.compile for faster CPU inference. "
-                                   "Modes: default, reduce-overhead, max-autotune. "
-                                   "Default mode is 'default' if flag is present without a value.")
     speak_parser.add_argument("--daemon", action="store_true",
                               help="Use daemon if available (default: auto)")
     speak_parser.add_argument("--no-daemon", action="store_true",

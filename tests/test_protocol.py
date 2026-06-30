@@ -19,7 +19,6 @@ class TestSynthesizeRequest:
         assert req.text == "hola mundo"
         assert req.model == "es-latam"
         assert req.device == "cpu"
-        assert req.compile_mode is None
 
     def test_full_request(self):
         req = SynthesizeRequest(
@@ -28,14 +27,12 @@ class TestSynthesizeRequest:
             speech_audio="/path/to/speech.wav",
             model="multilingual",
             device="cuda",
-            compile_mode="reduce-overhead",
         )
         assert req.text == "test"
         assert req.voice_audio == "/path/to/voice.wav"
         assert req.speech_audio == "/path/to/speech.wav"
         assert req.model == "multilingual"
         assert req.device == "cuda"
-        assert req.compile_mode == "reduce-overhead"
 
     def test_missing_text(self):
         with pytest.raises(ValueError):

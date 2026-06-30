@@ -67,16 +67,13 @@ def serve(port: int = 8765, auto_restart: bool = False, max_retries: int = 0):
         set_start_time(time.time())
 
         with StageTimer("Startup", "Starting daemon..."):
-            # Stage 1: Load model and apply torch.compile
-            with StageTimer("1-Daemon", "Stage 1/3: Loading model and compiling"):
+            # Stage 1: Load model
+            with StageTimer("1-Daemon", "Stage 1/3: Loading model"):
                 from ..engine import ChatterboxEngine
 
-                # CPU-optimized: reduce-overhead is ~53% faster than max-autotune
-                # for autoregressive (T3) workloads on CPU
                 engine = ChatterboxEngine.get_instance(
                     model="es-latam",
                     device="cpu",
-                    compile_mode="reduce-overhead",
                 )
 
                 # Override generate() defaults for faster synthesis

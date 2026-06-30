@@ -20,7 +20,6 @@ class MockArgs:
         self.name = kwargs.get("name", "testcli")
         self.reference = kwargs.get("reference", "ref.wav")
         self.speech = kwargs.get("speech", "speech.wav")
-        self.compile = kwargs.get("compile", None)
         self.daemon = kwargs.get("daemon", False)
         self.no_daemon = kwargs.get("no_daemon", False)
         self.json = kwargs.get("json", False)

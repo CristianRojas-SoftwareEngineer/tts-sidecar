@@ -39,7 +39,7 @@ def mock_daemon_client():
             self.calls = []
 
         def synthesize(self, text, voice_audio=None, speech_audio=None,
-                        model=None, device=None, compile_mode=None):
+                        model=None, device=None):
             self.calls.append({"text": text})
             # Return minimal WAV
             return b"RIFF" + b"\x00" * 40

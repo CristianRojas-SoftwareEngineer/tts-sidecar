@@ -2,7 +2,7 @@
 tts-sidecar daemon module.
 
 Provides a persistent TTS server that keeps the model in memory
-between invocations, enabling caching and torch.compile optimization.
+between invocations, eliminating model load overhead on each call.
 """
 
 from .daemon import DaemonManager

@@ -46,7 +46,6 @@ class DaemonIPCClient:
         speech_audio: Optional[str] = None,
         model: str = "es-latam",
         device: str = "cpu",
-        compile_mode: Optional[str] = None,
     ) -> bytes:
         """
         Synthesize text via daemon.
@@ -65,7 +64,6 @@ class DaemonIPCClient:
                     "speech_audio": speech_audio,
                     "model": model,
                     "device": device,
-                    "compile_mode": compile_mode,
                 },
                 timeout=self.REQUEST_TIMEOUT,
             )
