@@ -8,6 +8,7 @@ import os
 import sys
 import subprocess
 import threading
+import signal
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -195,13 +196,25 @@ def build_windows():
                 target=stream_output, args=(nuitka_proc, "[nuitka] ")
             )
             stream_thread.start()
-            nuitka_proc.wait()
-            stream_thread.join()
+            try:
+                nuitka_proc.wait()
+                stream_thread.join()
+            except KeyboardInterrupt:
+                log("\n[CANCEL] Build cancelled by user. Terminating Nuitka...")
+                nuitka_proc.terminate()
+                try:
+                    nuitka_proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    nuitka_proc.kill()
+                stream_thread.join()
+                sys.exit(130)  # 128 + 2 (SIGINT)
 
         if nuitka_proc.returncode == 0:
             size_mb = output_path.stat().st_size / 1024 / 1024
             log(f"Build successful: {output_path}")
             log(f"Size: {size_mb:.1f} MB")
+        elif nuitka_proc.returncode == -2:
+            pass  # Already handled by KeyboardInterrupt handler above
         else:
             log("Build failed", nuitka_proc.returncode)
             sys.exit(1)
