@@ -56,29 +56,37 @@ tts-sidecar/
 ## Comandos CLI objetivo (invocable desde cualquier lenguaje)
 
 ```bash
-# Instalación
+# 1. Instalación (primera vez - descarga el modelo)
 ./tts-sidecar install
 
-# Síntesis básica (reproducir audio)
-./tts-sidecar speak --text "Hola mundo"
+# 2. Verificación (diagnóstico del sistema)
+./tts-sidecar doctor
+./tts-sidecar version
+./tts-sidecar devices
 
-# Síntesis básica
-./tts-sidecar speak --text "Hola mundo"
-
-# Clonación de voz (requiere dos archivos)
+# 3. Clonación de voz (requiere dos archivos de audio)
 ./tts-sidecar voice-add --name mi_voz --reference timbre.wav --speech condicion.wav
-./tts-sidecar speak --text "Hola" -v mi_voz
 
-# Daemon mode
+# 4. Listar voces registradas
+./tts-sidecar voices
+
+# 5. Síntesis y reproducción (usar voz clonada)
+./tts-sidecar speak --text "Hola mundo" -v mi_voz
+
+# 6. Síntesis a archivo (exportar WAV)
+./tts-sidecar synthesize --text "Hola mundo" -v mi_voz --output audio.wav
+
+# 7. Síntesis básica (sin clonación)
+./tts-sidecar speak --text "Hola mundo"
+./tts-sidecar synthesize --text "Hola mundo" --output audio.wav
+
+# 8. Daemon mode (mantiene modelo en memoria para respuestas más rápidas)
 ./tts-sidecar daemon start
+./tts-sidecar daemon status
 ./tts-sidecar daemon stop
 
-# Exportar a archivo
-./tts-sidecar synthesize --text "Hola" --output audio.wav
-
-# Diagnóstico
-./tts-sidecar doctor
-./tts-sidecar devices
+# 9. Eliminar voz clonada
+./tts-sidecar voice-remove --name mi_voz
 ```
 
 ---
