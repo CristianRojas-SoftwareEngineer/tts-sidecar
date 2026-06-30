@@ -15,6 +15,8 @@ from typing import Optional
 
 import requests
 
+from .. import paths
+
 
 class DaemonManager:
     """
@@ -46,12 +48,16 @@ class DaemonManager:
             print("Daemon already running")
             return True
 
-        # Prepare command
-        cmd = [
-            sys.executable,
-            "-m", "chatterbox_tts.daemon.run",
-            "--port", str(self.port),
-        ]
+        # Prepare command. En modo congelado el ejecutable no acepta `-m módulo`,
+        # así que se auto-invoca mediante su subcomando `daemon serve`.
+        if paths.is_frozen():
+            cmd = [sys.executable, "daemon", "serve", "--port", str(self.port)]
+        else:
+            cmd = [
+                sys.executable,
+                "-m", "chatterbox_tts.daemon.run",
+                "--port", str(self.port),
+            ]
 
         if auto_restart:
             cmd.append("--auto-restart")
@@ -59,13 +65,15 @@ class DaemonManager:
             cmd.extend(["--max-retries", str(max_retries)])
 
         if background:
-            # Set PYTHONPATH so the subprocess can find chatterbox_tts
             env = os.environ.copy()
-            # __file__ is src/chatterbox_tts/daemon/daemon.py
-            # 3 dirname gives us the src/ directory (project root)
-            src_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            if os.path.exists(src_path):
-                env["PYTHONPATH"] = src_path
+            # Modo fuente: fijar PYTHONPATH para que el subproceso encuentre
+            # chatterbox_tts. En modo congelado el ejecutable ya es autocontenido.
+            if not paths.is_frozen():
+                # __file__ is src/chatterbox_tts/daemon/daemon.py
+                # 3 dirname gives us the src/ directory (project root)
+                src_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                if os.path.exists(src_path):
+                    env["PYTHONPATH"] = src_path
 
             if self.system == "Windows":
                 subprocess.Popen(

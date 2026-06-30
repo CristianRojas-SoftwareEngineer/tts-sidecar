@@ -46,30 +46,15 @@ from .server import app, set_engine, set_start_time
 from ..timing import StageTimer, log
 
 
-def main():
-    parser = argparse.ArgumentParser(description="tts-sidecar daemon")
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=8765,
-        help="TCP port to listen on (default: 8765)"
-    )
-    parser.add_argument(
-        "--auto-restart",
-        action="store_true",
-        help="Auto-restart on crash"
-    )
-    parser.add_argument(
-        "--max-retries",
-        type=int,
-        default=0,
-        help="Max restart attempts (0 = infinite)"
-    )
-    args = parser.parse_args()
+def serve(port: int = 8765, auto_restart: bool = False, max_retries: int = 0):
+    """
+    Arrancar el servidor del daemon en primer plano (bloqueante).
 
+    Reutilizable tanto por `main()` (modo `python -m chatterbox_tts.daemon.run`)
+    como por el subcomando `daemon serve` del ejecutable congelado.
+    """
     # Track restarts
     retries = 0
-    max_retries = args.max_retries
 
     def signal_handler(signum, frame):
         log("Daemon: Received shutdown signal")
@@ -103,13 +88,13 @@ def main():
 
             # Stage 2: Server startup
             with StageTimer("2-Daemon", "Stage 2/3: Starting server"):
-                log(f"Daemon ready on http://127.0.0.1:{args.port}")
+                log(f"Daemon ready on http://127.0.0.1:{port}")
 
             # Stage 3: Startup complete
             with StageTimer("3-Daemon", "Stage 3/3: Startup complete"):
                 pass
 
-        if args.auto_restart and max_retries > 0 and retries >= max_retries:
+        if auto_restart and max_retries > 0 and retries >= max_retries:
             log(f"Daemon: Max retries ({max_retries}) reached. Exiting.")
             break
 
@@ -117,7 +102,7 @@ def main():
             uvicorn.run(
                 app,
                 host="127.0.0.1",
-                port=args.port,
+                port=port,
                 log_level="info",
                 access_log=False,
             )
@@ -126,7 +111,7 @@ def main():
         except Exception as e:
             log(f"Daemon: Error: {e}")
 
-        if not args.auto_restart:
+        if not auto_restart:
             break
 
         retries += 1
@@ -134,6 +119,34 @@ def main():
         time.sleep(1)
 
     log("Daemon: Stopped")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="tts-sidecar daemon")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        help="TCP port to listen on (default: 8765)"
+    )
+    parser.add_argument(
+        "--auto-restart",
+        action="store_true",
+        help="Auto-restart on crash"
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=0,
+        help="Max restart attempts (0 = infinite)"
+    )
+    args = parser.parse_args()
+
+    serve(
+        port=args.port,
+        auto_restart=args.auto_restart,
+        max_retries=args.max_retries,
+    )
 
 
 def _patch_generate_defaults(engine):

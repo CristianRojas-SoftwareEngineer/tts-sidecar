@@ -140,9 +140,9 @@ def cmd_speak(args):
 @timed_command
 def cmd_voice_add(args):
     """Add a voice clone from reference audio."""
-    from .engine import ChatterboxEngine
-
     try:
+        from .engine import ChatterboxEngine
+
         engine = ChatterboxEngine(device=args.device)
         ref_path, speech_path = engine.add_voice(
             name=args.name,
@@ -310,12 +310,9 @@ def cmd_install(args):
     """Download and install the Chatterbox model."""
     print("=== Chatterbox TTS Installer ===\n")
 
-    model_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "models",
-        "chatterbox-multilingual"
-    )
-    Path(model_dir).mkdir(parents=True, exist_ok=True)
+    # El modelo se descarga a la caché de HuggingFace (ver engine._download_model),
+    # estable tanto desde fuente como en el ejecutable onefile.
+    model_dir = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
 
     print(f"Installing to: {model_dir}\n")
 
@@ -336,6 +333,17 @@ def cmd_install(args):
 
 def cmd_daemon(args):
     """Manage the tts-sidecar daemon."""
+    if args.action == "serve":
+        # Foreground server. Used by the frozen executable to self-invoke the
+        # daemon (the .exe cannot run `python -m ...`).
+        from .daemon.run import serve
+        serve(
+            port=args.port,
+            auto_restart=getattr(args, "auto_restart", False),
+            max_retries=getattr(args, "max_retries", 0) or 0,
+        )
+        return
+
     from .daemon import DaemonManager
 
     manager = DaemonManager()
@@ -393,7 +401,7 @@ def main():
 
     parser = argparse.ArgumentParser(
         prog="tts-sidecar",
-        description="Chatterbox TTS - 100%% local voice cloning TTS"
+        description="Chatterbox TTS - 100% local voice cloning TTS"
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -480,6 +488,12 @@ def main():
     daemon_status = daemon_subparsers.add_parser("status", help="Show daemon status")
     daemon_status.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
     daemon_status.set_defaults(func=cmd_daemon)
+
+    daemon_serve = daemon_subparsers.add_parser("serve", help="Run the daemon server in the foreground")
+    daemon_serve.add_argument("--port", type=int, default=8765, help="TCP port to listen on (default: 8765)")
+    daemon_serve.add_argument("--auto-restart", action="store_true", help="Auto-restart on crash")
+    daemon_serve.add_argument("--max-retries", type=int, default=0, help="Max restart attempts (0 = infinite)")
+    daemon_serve.set_defaults(func=cmd_daemon)
 
     # version command
     version_parser = subparsers.add_parser("version", help="Show version")

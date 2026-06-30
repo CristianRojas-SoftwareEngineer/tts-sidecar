@@ -10,13 +10,12 @@ por el engine.
 import os
 import shutil
 
+from . import paths
+
 
 def voices_root() -> str:
     """Directorio base que contiene todas las voces registradas."""
-    return os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "voices"
-    )
+    return os.path.join(paths.data_root(), "voices")
 
 
 def voice_dir(name: str) -> str:
