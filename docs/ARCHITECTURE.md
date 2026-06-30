@@ -35,6 +35,16 @@
 - **Nuitka**: Compila Python a ejecutable nativo con interpreter embebido
 - **Resultado**: Un solo archivo binario por SO, sin dependencias externas
 
+### El entry point `bin/tts-sidecar`
+
+El archivo `bin/tts-sidecar` es el **punto de entrada único** de la aplicación. Está escrito en **Python 3**, pero deliberadamente **no lleva extensión `.py`**:
+
+- **Convención de comando CLI**: el objetivo del proyecto es exponer una herramienta invocable como `tts-sidecar speak ...`, no como `tts-sidecar.py speak ...`. Los comandos de terminal no llevan extensión (igual que `git`, `node` o `pip`), de modo que el archivo se nombra como el comando final que representa.
+- **Shebang en vez de extensión**: la primera línea es `#!/usr/bin/env python3`. En Linux/macOS, con el bit de ejecución activo (`chmod +x`), el sistema operativo lee esa línea para saber con qué intérprete ejecutarlo; la extensión `.py` solo orienta a editores y humanos, el SO nunca la necesita. Por eso `./tts-sidecar speak ...` funciona sin nombrar a Python.
+- **Invocación en desarrollo bajo Windows**: Windows ignora el shebang, así que en desarrollo el entry point se invoca explícitamente a través del intérprete: `python bin/tts-sidecar speak --text "Hola"`.
+
+El archivo no contiene lógica de negocio: prepara el entorno (silencia warnings, ajusta `sys.path`, parchea `pkg_resources` para Python 3.13+) y delega en `chatterbox_tts.cli.main`. Además es la **semilla de compilación** que reciben los scripts de `scripts/build_*.py`: Nuitka lo toma como entrada y produce el binario final (`tts-sidecar` en Linux/macOS, `tts-sidecar.exe` en Windows). Véase `docs/BUILD.md`.
+
 ### Estructura del Proyecto
 
 ```
@@ -53,7 +63,7 @@ tts-sidecar/
 │           ├── protocol.py    # Pydantic request/response models
 │           └── run.py         # Entry point
 ├── bin/
-│   └── tts-sidecar           # Entry point
+│   └── tts-sidecar           # Entry point (Python, sin extensión; semilla de Nuitka)
 ├── scripts/
 │   ├── build_windows.py      # Nuitka build for Windows
 │   ├── build_linux.py       # Nuitka build for Linux

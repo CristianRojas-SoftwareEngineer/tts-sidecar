@@ -64,6 +64,11 @@ npm run build-macos
 
 Los scripts de build (`scripts/build_*.py`) ejecutan Nuitka con las opciones configuradas.
 
+> El entry point `bin/tts-sidecar` (un script Python sin extensión) es la semilla que Nuitka
+> compila. El binario resultante hereda ese nombre: `tts-sidecar.exe` en Windows (donde la
+> extensión es obligatoria) y `tts-sidecar-*` sin extensión en Linux/macOS. Véase
+> `docs/ARCHITECTURE.md` para el detalle del entry point y el shebang.
+
 ### Opciones de Nuitka
 
 ```bash
