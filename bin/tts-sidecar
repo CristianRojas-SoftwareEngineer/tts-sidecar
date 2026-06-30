@@ -45,14 +45,23 @@ else:
 if 'pkg_resources' not in sys.modules:
     import importlib.util
     if importlib.util.find_spec('pkg_resources') is None:
-        class _MockPkgResources:
-            @staticmethod
-            def resource_filename(package, resource):
-                spec = importlib.util.find_spec(package)
-                if spec and spec.submodule_search_locations:
-                    return str(Path(spec.submodule_search_locations[0]) / resource)
-                return resource
-        sys.modules['pkg_resources'] = _MockPkgResources()
+        import types
+        import importlib.machinery
+
+        def _resource_filename(package, resource):
+            spec = importlib.util.find_spec(package)
+            if spec and spec.submodule_search_locations:
+                return str(Path(spec.submodule_search_locations[0]) / resource)
+            return resource
+
+        # A real module with __spec__: a bare object would make any later
+        # importlib.util.find_spec('pkg_resources') raise
+        # "pkg_resources.__spec__ is not set" (e.g. from daemon/run.py when it
+        # runs in-process via the frozen `daemon serve` subcommand).
+        _mock = types.ModuleType('pkg_resources')
+        _mock.resource_filename = _resource_filename
+        _mock.__spec__ = importlib.machinery.ModuleSpec('pkg_resources', None)
+        sys.modules['pkg_resources'] = _mock
 
 from chatterbox_tts.cli import main
 

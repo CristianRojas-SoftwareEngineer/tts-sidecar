@@ -22,18 +22,30 @@ logging.getLogger("chatterbox.models.t3.inference.alignment_stream_analyzer").se
 # Workaround for Python 3.13+ where pkg_resources was removed.
 # The perth package (used by chatterbox) imports pkg_resources at import time.
 # We provide a minimal mock before perth is imported.
+#
+# The mock MUST be a real module with a __spec__: when this module runs in the
+# same process as the CLI entry point (e.g. the frozen `daemon serve`
+# subcommand), the entry point may have already installed the mock, and any
+# later importlib.util.find_spec('pkg_resources') would raise
+# "pkg_resources.__spec__ is not set" on a bare object. The `not in sys.modules`
+# guard mirrors bin/tts-sidecar so we never re-check an already-installed mock.
+import sys
 import importlib.util
-if importlib.util.find_spec('pkg_resources') is None:
-    class _MockPkgResources:
-        @staticmethod
-        def resource_filename(package, resource):
-            from pathlib import Path
-            spec = importlib.util.find_spec(package)
-            if spec and spec.submodule_search_locations:
-                return str(Path(spec.submodule_search_locations[0]) / resource)
-            return resource
-    import sys
-    sys.modules['pkg_resources'] = _MockPkgResources()
+if 'pkg_resources' not in sys.modules and importlib.util.find_spec('pkg_resources') is None:
+    import types
+    import importlib.machinery
+    from pathlib import Path
+
+    def _resource_filename(package, resource):
+        spec = importlib.util.find_spec(package)
+        if spec and spec.submodule_search_locations:
+            return str(Path(spec.submodule_search_locations[0]) / resource)
+        return resource
+
+    _mock = types.ModuleType('pkg_resources')
+    _mock.resource_filename = _resource_filename
+    _mock.__spec__ = importlib.machinery.ModuleSpec('pkg_resources', None)
+    sys.modules['pkg_resources'] = _mock
 
 import argparse
 import signal
