@@ -20,7 +20,8 @@ DIST_DIR = PROJECT_ROOT / "dist"
 # HuggingFace default cache location
 HF_CACHE = Path.home() / ".cache" / "huggingface" / "hub"
 MODEL_CACHE_NAMES = [
-    "models--ResembleAI--chatterbox-multilingual",
+    "models--ResembleAI--Chatterbox-Multilingual-es-mx-latam",
+    "models--ResembleAI--chatterbox",
     "chatterbox-multilingual",
 ]
 
