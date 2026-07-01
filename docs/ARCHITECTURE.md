@@ -72,8 +72,8 @@ tts-sidecar/
 ├── scripts/
 │   ├── build_windows.py      # Build PyInstaller para Windows
 │   ├── build_linux.py       # Build PyInstaller para Linux
-│   ├── build_macos.py       # Build PyInstaller para macOS
-│   └── install.py            # Descarga del modelo + setup
+│   └── build_macos.py       # Build PyInstaller para macOS
+│                             # (provisión del modelo: `tts-sidecar setup`)
 ├── tests/                    # Suite de tests pytest
 ├── requirements.txt           # Dependencias Python
 ├── pyproject.toml            # Configuración del proyecto Python

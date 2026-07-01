@@ -14,7 +14,7 @@
     "arm64"
   ],
   "scripts": {
-    "install-model": "python scripts/install.py",
+    "install-model": "python bin/tts-sidecar setup",
     "clean-build": "python scripts/clean_build.py",
     "build-windows": "python scripts/build_windows.py",
     "build-linux": "python scripts/build_linux.py",
@@ -32,6 +32,6 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/tts-sidecar"
+    "url": "https://github.com/CristianRojas-SoftwareEngineer/tts-sidecar"
   }
 }
