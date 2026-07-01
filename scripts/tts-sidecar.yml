@@ -1,0 +1,45 @@
+# Configuración de appimage-builder para empaquetar el bundle onedir de
+# PyInstaller (dist/tts-sidecar) como un AppImage autocontenido.
+#
+# El AppDir se construye copiando el onedir de PyInstaller (ya autocontenido:
+# incluye su propio Python y todas las dependencias) y un AppRun que delega en
+# el ejecutable. build_linux.py invoca:
+#   appimage-builder --appimage-spec scripts/tts-sidecar.yml
+# y renombra el resultado a dist/tts-sidecar-<arch>.AppImage.
+version: 1
+
+script:
+  # Prepara el AppDir a partir del bundle onedir de PyInstaller.
+  - rm -rf AppDir
+  - mkdir -p AppDir/usr/bin
+  # Copia el ejecutable y su _internal/ (bundle autocontenido de PyInstaller).
+  - cp -r dist/tts-sidecar/. AppDir/usr/bin/
+  # Icono mínimo requerido por appimage-builder (placeholder generado por build_linux.py).
+  - mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+  - mkdir -p AppDir/usr/share/applications
+  - cp tts-sidecar.png AppDir/usr/share/icons/hicolor/256x256/apps/tts-sidecar.png
+
+AppDir:
+  path: ./AppDir
+
+  app_info:
+    id: com.tts-sidecar.app
+    name: tts-sidecar
+    icon: tts-sidecar
+    version: !ENV ${APP_VERSION}
+    # Ejecutable dentro del AppDir; los argumentos se pasan tal cual.
+    exec: usr/bin/tts-sidecar
+    exec_args: "$@"
+
+  runtime:
+    # El onedir ya trae su propio Python y librerías; no dependemos del sistema.
+    env:
+      PATH: "${APPDIR}/usr/bin:${PATH}"
+
+  # No se resuelven dependencias vía apt: el bundle de PyInstaller es autocontenido.
+  after_bundle: []
+
+AppImage:
+  arch: !ENV ${TARGET_ARCH}
+  comp: gzip
+  update-information: None

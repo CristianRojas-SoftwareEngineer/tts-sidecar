@@ -321,9 +321,11 @@ class ChatterboxEngine:
         """
         if not voice_audio and not speech_audio:
             raise ValueError(
-                "At least one audio file is required. "
-                "Use --voice-audio for timbre, --speech-audio for conditioning. "
-                "If only --voice-audio is provided, it is used for both."
+                "Se requiere al menos un archivo de audio. "
+                "Usa --voice para una voz registrada, --voice-audio para el timbre "
+                "o --speech-audio para el conditioning. Sin ninguno de estos, la CLI "
+                "recurre a la voz de fábrica 'default'. "
+                "Si solo se da --voice-audio, se usa para ambos."
             )
 
         # Si solo hay voice_audio, úsalo para ambos

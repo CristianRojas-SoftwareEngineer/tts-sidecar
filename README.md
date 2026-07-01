@@ -81,12 +81,29 @@ tts-sidecar speak --text "Hola mundo" -v mi_voz --output audio.wav
 ### Síntesis básica
 
 ```bash
-# Sintetizar y reproducir
+# Sintetizar y reproducir con la voz de fábrica 'default' (no requiere audios)
 tts-sidecar speak --text "Hola mundo"
+
+# Sobrescribir la voz por defecto con una voz registrada
+tts-sidecar speak --text "Hola mundo" --voice mi_voz
 
 # Generar archivo WAV
 tts-sidecar speak --text "Hola mundo" --output audio.wav
 ```
+
+> Sin `--voice` ni audios explícitos, `speak` usa la voz de fábrica **`default`**
+> (empaquetada, de solo lectura). Ver [Modelo de voces](#modelo-de-voces).
+
+### Modelo de voces
+
+Las voces se resuelven en **dos niveles**, con precedencia usuario→fábrica:
+
+- **Fábrica**: empaquetadas en el ejecutable (solo lectura), incluida la voz
+  `default`. Idénticas en desarrollo y en cualquier instalación.
+- **Usuario**: registradas con `voice add`, escribibles, guardadas en el
+  directorio de datos de usuario por SO (estables entre ejecuciones).
+
+Registrar una voz de usuario con el mismo nombre que una de fábrica la sobrescribe.
 
 ### Comandos disponibles
 

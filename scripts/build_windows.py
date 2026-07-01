@@ -75,6 +75,9 @@ def build_windows():
                 # Data files
                 "--collect-data", "soundfile",
                 "--collect-data", "certifi",
+                # Voces de fábrica (incluida la voz 'default') en la raíz del bundle,
+                # resueltas en runtime por paths.bundled_voices_dir() (sys._MEIPASS).
+                "--add-data", f"{PROJECT_ROOT / 'voices'};voices",
                 # Metadata requerida por importlib.metadata / pkg_resources
                 "--recursive-copy-metadata", "chatterbox-tts",
                 "--copy-metadata", "requests",

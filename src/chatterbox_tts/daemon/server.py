@@ -33,12 +33,19 @@ def get_socket_path() -> str:
 # Estado global (asignado por run.py antes de arrancar uvicorn)
 _engine = None
 _start_time = None
+_server = None
 
 
 def set_engine(engine):
     """Asigna la instancia global del engine."""
     global _engine
     _engine = engine
+
+
+def set_server(server):
+    """Registra la instancia de uvicorn.Server para permitir el apagado graceful."""
+    global _server
+    _server = server
 
 
 def set_start_time(timestamp: float):
@@ -113,7 +120,14 @@ async def list_voices():
 
 @app.post("/shutdown")
 async def shutdown():
-    """Endpoint de cierre graceful del daemon."""
-    # HTTPException con status 200 es el mecanismo de FastAPI para interrumpir
-    # el ciclo de request/response y hacer que uvicorn libere el proceso.
-    raise HTTPException(status_code=200, detail="Cerrando daemon")
+    """Endpoint de cierre graceful del daemon.
+
+    Señaliza `should_exit` sobre la instancia de uvicorn.Server para que el
+    servidor termine su ciclo de vida de forma ordenada. Se responde antes de
+    que uvicorn cierre: el flag se procesa en la siguiente iteración del loop.
+    """
+    if _server is not None:
+        _server.should_exit = True
+        return {"status": "shutting_down"}
+    # Sin instancia registrada (no debería ocurrir): el kill por PID es la red de seguridad.
+    raise HTTPException(status_code=503, detail="Servidor no disponible para apagado graceful")

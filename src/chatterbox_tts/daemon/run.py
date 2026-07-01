@@ -55,7 +55,7 @@ import time
 
 import uvicorn
 
-from .server import app, set_engine, set_start_time
+from .server import app, set_engine, set_start_time, set_server
 from ..timing import StageTimer, log
 
 
@@ -111,13 +111,18 @@ def serve(port: int = 8765, auto_restart: bool = False, max_retries: int = 0):
             break
 
         try:
-            uvicorn.run(
+            # Instancia explícita de Server (en lugar de uvicorn.run) para que el
+            # endpoint /shutdown pueda señalizar should_exit y cerrar de forma ordenada.
+            config = uvicorn.Config(
                 app,
                 host="127.0.0.1",
                 port=port,
                 log_level="info",
                 access_log=False,
             )
+            server = uvicorn.Server(config)
+            set_server(server)
+            server.run()
         except KeyboardInterrupt:
             break
         except Exception as e:

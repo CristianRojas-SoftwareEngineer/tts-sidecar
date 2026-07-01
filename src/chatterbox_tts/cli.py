@@ -37,6 +37,10 @@ def _resolve_voice_paths(args):
     if getattr(args, 'voice', None):
         # Resuelve directamente desde el sistema de archivos: no se necesita el modelo.
         voice_audio, speech_audio = voices.voice_paths(args.voice)
+    elif not voice_audio and not speech_audio:
+        # Sin --voice ni audios explícitos: usar la voz de fábrica 'default'
+        # (resolución usuario→fábrica), de modo que `speak --text "Hola"` funcione.
+        voice_audio, speech_audio = voices.voice_paths("default")
 
     # Resuelve a rutas absolutas contra el CWD del cliente antes de que crucen la
     # frontera de proceso hacia el daemon, que tiene otro directorio de trabajo.
@@ -153,7 +157,7 @@ def cmd_speak(args):
 
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
-        print("Run 'tts-sidecar setup' first.", file=sys.stderr)
+        print("Ejecuta 'tts-sidecar setup' primero.", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -172,12 +176,12 @@ def cmd_voice_add(args):
             reference_audio=args.reference,
             speech_audio=args.speech,
         )
-        print(f"Voice '{args.name}' registered:")
+        print(f"Voz '{args.name}' registrada:")
         print(f"  timbre (reference): {ref_path}")
-        print(f"  speech (conditioning): {speech_path}")
+        print(f"  habla (conditioning): {speech_path}")
 
     except Exception as e:
-        print(f"Error adding voice: {e}", file=sys.stderr)
+        print(f"Error al registrar la voz: {e}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -188,13 +192,13 @@ def cmd_voice_remove(args):
 
     try:
         if voices.remove_voice(args.name):
-            print(f"Voice '{args.name}' removed.")
+            print(f"Voz '{args.name}' eliminada.")
         else:
-            print(f"Voice '{args.name}' not found.", file=sys.stderr)
+            print(f"Voz '{args.name}' no encontrada.", file=sys.stderr)
             sys.exit(1)
 
     except Exception as e:
-        print(f"Error removing voice: {e}", file=sys.stderr)
+        print(f"Error al eliminar la voz: {e}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -211,19 +215,19 @@ def cmd_voice_list(args):
             return
 
         if voice_list:
-            print("Registered voices:")
+            print("Voces registradas:")
             for voice in voice_list:
                 print(f"  - {voice}")
         else:
-            print("No voices registered. Run:")
-            print("  tts-sidecar voice add --name myvoice --reference timbre.wav --speech speech.wav")
+            print("No hay voces registradas. Ejecuta:")
+            print("  tts-sidecar voice add --name mi_voz --reference timbre.wav --speech habla.wav")
 
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
-        print("Run 'tts-sidecar setup' first.", file=sys.stderr)
+        print("Ejecuta 'tts-sidecar setup' primero.", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        print(f"Error listing voices: {e}", file=sys.stderr)
+        print(f"Error al listar las voces: {e}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -238,7 +242,7 @@ def cmd_devices(args):
         print(json.dumps({"devices": devices}))
         return
 
-    print("Audio output devices:")
+    print("Dispositivos de salida de audio:")
     for dev in devices:
         print(f"  [{dev['id']}] {dev['name']} (latency: {dev['latency']*1000:.1f}ms)")
 
@@ -265,7 +269,7 @@ def cmd_doctor(args):
         import chatterbox
         checks.append(("PASS", "Chatterbox TTS", chatterbox.__version__))
     except ImportError:
-        checks.append(("FAIL", "Chatterbox TTS", "NOT INSTALLED (pip install chatterbox-tts)"))
+        checks.append(("FAIL", "Chatterbox TTS", "NO INSTALADO (pip install chatterbox-tts)"))
 
     # Chequea la librería de audio
     try:
@@ -276,11 +280,15 @@ def cmd_doctor(args):
             import sounddevice
             checks.append(("PASS", "Audio library", "sounddevice (Linux)"))
         elif platform.system() == "Darwin":
-            import subprocess
-            subprocess.run(["afplay"], check=True, capture_output=True)
-            checks.append(("PASS", "Audio library", "afplay (macOS)"))
+            import shutil
+            # Detecta la disponibilidad del binario sin ejecutarlo: afplay sin
+            # archivo imprime su usage y devuelve exit != 0, lo que abortaría el chequeo.
+            if shutil.which("afplay"):
+                checks.append(("PASS", "Audio library", "afplay (macOS)"))
+            else:
+                checks.append(("FAIL", "Audio library", "afplay no encontrado en el PATH"))
     except ImportError:
-        checks.append(("FAIL", "Audio library", "NOT INSTALLED"))
+        checks.append(("FAIL", "Audio library", "NO INSTALADO"))
     except Exception as e:
         checks.append(("FAIL", "Audio library", str(e)))
 
@@ -288,19 +296,19 @@ def cmd_doctor(args):
     try:
         from .engine import is_model_cached
         if is_model_cached("es-mx-latam"):
-            checks.append(("PASS", "Chatterbox model", "es-mx-latam present in cache"))
+            checks.append(("PASS", "Chatterbox model", "es-mx-latam presente en la caché"))
         else:
-            checks.append(("FAIL", "Chatterbox model", "es-mx-latam not cached (run: tts-sidecar setup)"))
+            checks.append(("FAIL", "Chatterbox model", "es-mx-latam no está en caché (ejecuta: tts-sidecar setup)"))
     except Exception as e:
-        checks.append(("FAIL", "Chatterbox model", f"{e} (run: tts-sidecar setup)"))
+        checks.append(("FAIL", "Chatterbox model", f"{e} (ejecuta: tts-sidecar setup)"))
 
-    # Chequea el directorio de voces (única fuente de verdad)
+    # Chequea el directorio de voces de usuario
     voices_path = voices.voices_root()
-    if os.path.exists(voices_path):
-        count = len(voices.list_voices())
-        checks.append(("PASS", "Voices directory", f"{count} voice(s) registered"))
+    count = len(voices.list_voices())
+    if os.path.exists(voices_path) or count:
+        checks.append(("PASS", "Voices directory", f"{count} voz(voces) disponible(s)"))
     else:
-        checks.append(("SKIP", "Voices directory", "not created yet (optional)"))
+        checks.append(("SKIP", "Voices directory", "sin voces de usuario aún (opcional)"))
 
     checks_failed = sum(1 for status, _, _ in checks if status == "FAIL")
     checks_passed = len(checks) - checks_failed
@@ -320,12 +328,12 @@ def cmd_doctor(args):
 
     print("=== Chatterbox TTS Doctor ===\n")
     print(f"Python: {sys.version}")
-    print(f"Platform: {platform.system()} {platform.release()}")
+    print(f"Plataforma: {platform.system()} {platform.release()}")
     print()
     for status, name, detail in checks:
         print(f"[{status}] {name}: {detail}")
     print()
-    print(f"Checks: {checks_passed} passed, {checks_failed} failed")
+    print(f"Chequeos: {checks_passed} exitosos, {checks_failed} fallidos")
 
     if checks_failed > 0:
         sys.exit(1)
@@ -340,7 +348,7 @@ def cmd_setup(args):
         import chatterbox
         print(f"[PASS] Chatterbox TTS: {chatterbox.__version__}")
     except ImportError:
-        print("[FAIL] Chatterbox TTS: NOT INSTALLED (pip install chatterbox-tts)", file=sys.stderr)
+        print("[FAIL] Chatterbox TTS: NO INSTALADO (pip install chatterbox-tts)", file=sys.stderr)
         sys.exit(1)
 
     try:
@@ -351,11 +359,16 @@ def cmd_setup(args):
             import sounddevice
             print("[PASS] Audio library: sounddevice (Linux)")
         elif platform.system() == "Darwin":
-            import subprocess
-            subprocess.run(["afplay"], check=True, capture_output=True)
-            print("[PASS] Audio library: afplay (macOS)")
+            import shutil
+            # Detecta el binario sin invocarlo: ejecutar afplay sin archivo devuelve
+            # exit != 0 y el except abortaría la descarga del modelo.
+            if shutil.which("afplay"):
+                print("[PASS] Audio library: afplay (macOS)")
+            else:
+                print("[FAIL] Audio library: afplay no encontrado en el PATH", file=sys.stderr)
+                sys.exit(1)
     except ImportError:
-        print("[FAIL] Audio library: NOT INSTALLED", file=sys.stderr)
+        print("[FAIL] Audio library: NO INSTALADO", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
         print(f"[FAIL] Audio library: {e}", file=sys.stderr)
@@ -370,20 +383,20 @@ def cmd_setup(args):
         from .engine import is_model_cached, ChatterboxEngine
 
         if is_model_cached("es-mx-latam"):
-            print(f"\n[PASS] Model 'es-mx-latam' already cached at: {model_dir}")
-            print("Setup complete. Nothing to download.")
+            print(f"\n[PASS] El modelo 'es-mx-latam' ya está en caché en: {model_dir}")
+            print("Provisión completa. No hay nada que descargar.")
             return
 
-        print("\nDownloading es-mx-latam model...")
-        print("(This may take several minutes on first run)\n")
+        print("\nDescargando el modelo es-mx-latam...")
+        print("(Puede tardar varios minutos en la primera ejecución)\n")
 
         ChatterboxEngine.get_instance(model="es-mx-latam", device="cpu")
 
-        print("\n[PASS] Model downloaded successfully!")
-        print(f"  Location: {model_dir}")
+        print("\n[PASS] ¡Modelo descargado correctamente!")
+        print(f"  Ubicación: {model_dir}")
 
     except Exception as e:
-        print(f"[FAIL] Setup failed: {e}", file=sys.stderr)
+        print(f"[FAIL] La provisión falló: {e}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -414,23 +427,23 @@ def cmd_daemon(args):
             max_retries=args.max_retries or 0,
         )
         if success:
-            print("Daemon started successfully")
+            print("Daemon iniciado correctamente")
         else:
-            print("Failed to start daemon", file=sys.stderr)
+            print("No se pudo iniciar el daemon", file=sys.stderr)
             sys.exit(1)
 
     elif args.action == "stop":
         if manager.stop():
-            print("Daemon stopped")
+            print("Daemon detenido")
         else:
-            print("Failed to stop daemon", file=sys.stderr)
+            print("No se pudo detener el daemon", file=sys.stderr)
             sys.exit(1)
 
     elif args.action == "restart":
         if manager.restart():
-            print("Daemon restarted")
+            print("Daemon reiniciado")
         else:
-            print("Failed to restart daemon", file=sys.stderr)
+            print("No se pudo reiniciar el daemon", file=sys.stderr)
             sys.exit(1)
 
     elif args.action == "status":
@@ -442,12 +455,12 @@ def cmd_daemon(args):
             return
 
         if status.get("running"):
-            print(f"Daemon running:")
-            print(f"  Status: {status.get('status', 'unknown')}")
-            print(f"  Model loaded: {status.get('model_loaded', False)}")
-            print(f"  Uptime: {status.get('uptime_seconds', 0):.1f}s")
+            print(f"Daemon en ejecución:")
+            print(f"  Estado: {status.get('status', 'desconocido')}")
+            print(f"  Modelo cargado: {status.get('model_loaded', False)}")
+            print(f"  Tiempo activo: {status.get('uptime_seconds', 0):.1f}s")
         else:
-            print("Daemon not running")
+            print("Daemon no está en ejecución")
 
 
 def main():

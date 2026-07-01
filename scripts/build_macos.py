@@ -88,6 +88,9 @@ def build_macos(target_arch="universal2"):
                 "--collect-all", "onnx",
                 "--collect-data", "soundfile",
                 "--collect-data", "certifi",
+                # Voces de fábrica (incluida 'default') en la raíz del bundle,
+                # resueltas en runtime por paths.bundled_voices_dir() (sys._MEIPASS).
+                "--add-data", f"{PROJECT_ROOT / 'voices'}:voices",
                 "--recursive-copy-metadata", "chatterbox-tts",
                 "--copy-metadata", "requests",
                 # Exclude bloat
@@ -145,18 +148,33 @@ def build_macos(target_arch="universal2"):
 
         with StageTimer("DMG", "Creating .dmg"):
             dmg_path = DIST_DIR / f"tts-sidecar-{arch_flag}.dmg"
+
+            # Staging del contenido del volumen: el .app + un script de post-instalación
+            # que expone `tts-sidecar` en el PATH mediante un symlink en /usr/local/bin,
+            # equivalente a lo que hacen el instalador de Windows y el AppImage de Linux.
+            dmg_src = DIST_DIR / "dmg_src"
+            if dmg_src.exists():
+                shutil.rmtree(dmg_src)
+            dmg_src.mkdir(parents=True)
+            staged_app = dmg_src / app_bundle.name
+            shutil.copytree(app_bundle, staged_app, symlinks=True)
+
+            install_script = dmg_src / "Instalar en el PATH.command"
+            install_script.write_text(_path_install_script(app_bundle.name), encoding="utf-8")
+            os.chmod(install_script, 0o755)
+
             result = subprocess.run(
                 [
                     "create-dmg",
                     "--volname", "tts-sidecar",
                     "--window-pos", "200", "120",
                     "--icon-size", "100",
-                    "--icon", "tts-sidecar", "150", "185",
-                    "--hide-extension", "tts-sidecar.app",
+                    "--icon", app_bundle.name, "150", "185",
+                    "--hide-extension", app_bundle.name,
                     "--app-drop-link", "480", "185",
                     "--format", "ULFO",
                     str(dmg_path),
-                    str(app_bundle),
+                    str(dmg_src),
                 ],
                 capture_output=True, text=True,
             )
@@ -165,6 +183,32 @@ def build_macos(target_arch="universal2"):
                 log("WARNING: .dmg not created — .app bundle is still in dist/")
             else:
                 log(f".dmg created: {dmg_path}")
+
+
+def _path_install_script(app_name: str) -> str:
+    """Genera el script de post-instalación que enlaza tts-sidecar en /usr/local/bin.
+
+    Se incluye en el volumen del .dmg: al ejecutarlo, el usuario obtiene el comando
+    `tts-sidecar` disponible en la terminal, como en Windows (PATH) y Linux (AppImage).
+    """
+    return f"""#!/bin/bash
+# Expone tts-sidecar en el PATH creando un symlink en /usr/local/bin.
+set -e
+
+APP="/Applications/{app_name}"
+TARGET="$APP/Contents/MacOS/tts-sidecar"
+LINK="/usr/local/bin/tts-sidecar"
+
+if [ ! -x "$TARGET" ]; then
+    echo "No se encontró {app_name} en /Applications."
+    echo "Arrastra primero {app_name} a la carpeta Aplicaciones y vuelve a ejecutar este script."
+    exit 1
+fi
+
+sudo mkdir -p /usr/local/bin
+sudo ln -sf "$TARGET" "$LINK"
+echo "Listo: 'tts-sidecar' está disponible en la terminal (via $LINK)."
+"""
 
 
 def _get_version():

@@ -20,10 +20,9 @@ class AudioPlayer:
     Reproducción de audio multiplataforma usando APIs nativas.
 
     Prioridad por plataforma:
-    1. Windows: pycaw (COM) o winsound (fallback)
-    2. Linux: pyalsaaudio o sounddevice
+    1. Windows: winsound (built-in)
+    2. Linux: sounddevice (PortAudio)
     3. macOS: afplay (nativo)
-    4. Fallback: simpleaudio
     """
 
     def __init__(self):
@@ -60,14 +59,10 @@ class AudioPlayer:
             import sounddevice as sd
             return SoundDevicePlayer(sd)
         except ImportError:
-            try:
-                import simpleaudio as sa
-                return SimpleAudioPlayer(sa)
-            except ImportError:
-                raise ImportError(
-                    "No hay librería de reproducción de audio disponible para Linux. "
-                    "Instala una de: sounddevice, simpleaudio"
-                )
+            raise ImportError(
+                "No hay librería de reproducción de audio disponible para Linux. "
+                "Instala sounddevice."
+            )
 
     def play(self, audio_bytes: bytes) -> None:
         """Reproduce audio desde bytes WAV."""
@@ -148,32 +143,6 @@ class SoundDevicePlayer:
         self.sd.play(audio_np, samplerate=sample_rate, blocking=True)
 
 
-class SimpleAudioPlayer:
-    """Player de audio de fallback usando simpleaudio."""
-
-    def __init__(self, sa_module):
-        self.sa = sa_module
-
-    def play(self, audio_bytes: bytes) -> None:
-        """Reproduce bytes WAV usando simpleaudio."""
-        wav_io = io.BytesIO(audio_bytes)
-        with wave.open(wav_io, 'rb') as wf:
-            sample_rate = wf.getframerate()
-            audio_data = wf.readframes(wf.getnframes())
-
-        # Convierte a float32 y luego a int16 para simpleaudio
-        audio_np = np.frombuffer(audio_data, dtype=np.int16)
-        audio_np = audio_np.astype(np.float32) / 32768.0
-
-        play_obj = self.sa.play_buffer(
-            (audio_np * 32767).astype(np.int16),
-            num_channels=1,
-            bytes_per_sample=2,
-            sample_rate=sample_rate
-        )
-        play_obj.wait()
-
-
 def get_audio_devices() -> list[dict]:
     """
     Lista los dispositivos de salida de audio disponibles.
@@ -185,12 +154,24 @@ def get_audio_devices() -> list[dict]:
 
     if system == "Windows":
         try:
-            from pycaw.pycaw import AudioUtilities
-            devices = AudioUtilities.GetAllDevices()
-            return [
-                {"id": i, "name": d.FriendlyName, "latency": getattr(d, 'Latency', 0.0)}
-                for i, d in enumerate(devices)
-            ]
+            from pycaw.pycaw import AudioUtilities, EDataFlow, DEVICE_STATE
+            # Enumera SOLO endpoints de render (salida) activos, descartando los de
+            # captura (micrófonos). GetAllDevices() no distingue el data-flow, así que
+            # se usa el IMMDeviceEnumerator con eRender, análogo al filtro de Linux.
+            enumerator = AudioUtilities.GetDeviceEnumerator()
+            collection = enumerator.EnumAudioEndpoints(
+                EDataFlow.eRender.value, DEVICE_STATE.ACTIVE.value
+            )
+            count = collection.GetCount()
+            result = []
+            for i in range(count):
+                dev = AudioUtilities.CreateDevice(collection.Item(i))
+                result.append({
+                    "id": i,
+                    "name": dev.FriendlyName,
+                    "latency": getattr(dev, "Latency", 0.0),
+                })
+            return result
         except ImportError:
             return [{"id": 0, "name": "Default", "latency": 0.1}]
 

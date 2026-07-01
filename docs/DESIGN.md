@@ -63,10 +63,11 @@ tts-sidecar/
 │   ├── build_linux.py            # Build PyInstaller para Linux
 │   ├── build_macos.py            # Build PyInstaller para macOS
 │   └── install.py                 # Descarga del modelo + setup
-├── voices/                       # Voces clonadas del usuario
-│   └── mi_voz/
+├── voices/                       # Voces de FÁBRICA (commiteadas, empaquetadas, solo lectura)
+│   └── default/                  # Voz por defecto (derivada de assets/)
 │       ├── reference.wav         # Timbre de voz (cualquier largo)
 │       └── speech.wav            # Conditioning (10s+)
+│   # Las voces de USUARIO viven en el user-data-dir por SO, no en el repo
 ├── assets/                       # Audios de prueba
 │   ├── Voice Sampler.wav
 │   └── Speech Sampler.wav
@@ -115,6 +116,23 @@ tts-sidecar/
                     ▼
 6. El usuario escucha el habla en español con la voz clonada
 ```
+
+## Modelo de voces de dos niveles
+
+Las voces se separan en dos orígenes y se resuelven por nombre con precedencia
+**usuario→fábrica** (`voices.py`):
+
+- **Fábrica**: `voices/` en la raíz del repo, versionadas y empaquetadas en el
+  ejecutable vía `--add-data`; de solo lectura. Se resuelven en
+  `paths.bundled_voices_dir()` (raíz del repo en modo fuente, `sys._MEIPASS`
+  congelado). Incluye la voz `default`, derivada de `assets/`.
+- **Usuario**: `data_root()/voices` (user-data-dir por SO congelado; escribible),
+  registradas con `voice add`. Una voz de usuario homónima sobrescribe a la de
+  fábrica.
+
+Sin `--voice` ni audios explícitos, la CLI usa la voz `default`, de modo que
+`tts-sidecar speak --text "Hola"` funciona sin registrar nada. El repositorio ya
+no usa `src/voices/` como origen de voces.
 
 ## Comandos CLI
 

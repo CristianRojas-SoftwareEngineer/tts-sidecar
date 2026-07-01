@@ -101,8 +101,9 @@ class DaemonManager:
         """
         Detiene el daemon. Devuelve True cuando el daemon ya no está corriendo.
 
-        Intenta un cierre graceful vía HTTP; si el proceso sigue en el puerto
-        tras el intento, lo mata por PID.
+        El mecanismo principal es el cierre graceful vía HTTP (/shutdown señaliza
+        should_exit sobre uvicorn.Server). El kill por PID resuelto con psutil es
+        la red de seguridad para el caso en que el proceso siga ocupando el puerto.
         """
         # Verificar si está corriendo
         if not self.is_running():
@@ -185,45 +186,40 @@ class DaemonManager:
         return False
 
     def _get_pid_from_port(self) -> Optional[int]:
-        """Devuelve el PID del proceso que escucha en el puerto del daemon."""
+        """Devuelve el PID del proceso que escucha en el puerto del daemon.
+
+        Usa psutil.net_connections para una resolución uniforme en Windows,
+        Linux y macOS, sin depender de herramientas específicas de cada SO
+        (netstat/ss) ni de sus formatos de salida.
+        """
         try:
-            if self.system == "Windows":
-                # netstat -ano lista procesos con sus PIDs
-                result = subprocess.run(
-                    ["netstat", "-ano"],
-                    capture_output=True,
-                    text=True
-                )
-                for line in result.stdout.splitlines():
-                    if f":{self.port}" in line and "LISTENING" in line:
-                        parts = line.split()
-                        for i, part in enumerate(parts):
-                            if part == "LISTENING" and i < len(parts) - 1:
-                                return int(parts[i + 1])
-            else:
-                # Unix: ss extrae el PID del campo "pid=NNNN"
-                result = subprocess.run(
-                    ["ss", "-tlnp"],
-                    capture_output=True,
-                    text=True
-                )
-                for line in result.stdout.splitlines():
-                    if f":{self.port}" in line:
-                        import re
-                        match = re.search(r"pid=(\d+)", line)
-                        if match:
-                            return int(match.group(1))
+            import psutil
+
+            for conn in psutil.net_connections(kind="inet"):
+                if (
+                    conn.laddr
+                    and conn.laddr.port == self.port
+                    and conn.status == psutil.CONN_LISTEN
+                    and conn.pid
+                ):
+                    return conn.pid
         except Exception:
             pass
         return None
 
     def _kill_pid(self, pid: int):
-        """Mata un proceso por su PID."""
+        """Termina un proceso por su PID (red de seguridad tras el cierre graceful).
+
+        Intenta terminate() (SIGTERM/equivalente) y, si no cede, kill().
+        """
         try:
-            if self.system == "Windows":
-                subprocess.run(["taskkill", "/F", "/PID", str(pid)],
-                             capture_output=True, timeout=5)
-            else:
-                os.kill(pid, signal.SIGKILL)
-        except (ProcessLookupError, subprocess.TimeoutExpired, OSError):
+            import psutil
+
+            proc = psutil.Process(pid)
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except psutil.TimeoutExpired:
+                proc.kill()
+        except Exception:
             pass

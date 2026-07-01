@@ -3,7 +3,13 @@ build/
 dist/
 dist_test/
 assets/
-voices/
+# Voces de usuario ignoradas, pero la voz de fábrica 'default' se versiona
+# (se empaqueta vía --add-data y sirve de voz por defecto).
+voices/*
+!voices/default/
+# Artefactos de build del AppImage
+AppDir/
+tts-sidecar.png
 *.spec
 .claude/
 __pycache__/

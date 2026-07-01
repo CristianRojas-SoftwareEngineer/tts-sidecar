@@ -1,14 +1,21 @@
 """
 Rutas de datos conscientes del modo congelado (frozen-aware).
 
-Fuente única de verdad para la raíz de datos del proyecto, válida en los dos
-modos de ejecución:
+Fuente única de verdad para las raíces de datos del proyecto. Se distinguen dos
+raíces según su propósito:
 
-- **Desde fuente** (`python bin/tts-sidecar`): la raíz es la carpeta `src/`,
-  reproduciendo el layout actual del repositorio.
-- **Congelado** (ejecutable compilado con PyInstaller): la raíz es el directorio de
-  datos de usuario por SO, estable y escribible entre ejecuciones, ya que en
-  onefile `__file__` resuelve a un directorio temporal de extracción efímero.
+- **Raíz de usuario** (`data_root`): estable y **escribible** entre ejecuciones,
+  donde viven las voces de usuario. Desde fuente es la carpeta `src/`; congelado
+  es el directorio de datos de usuario por SO.
+- **Raíz de fábrica** (`bundled_root`): de **solo lectura**, con los recursos
+  empaquetados (p. ej. la voz de fábrica `default`). Desde fuente es la raíz del
+  repositorio; congelado es `sys._MEIPASS`, el directorio donde PyInstaller
+  extrae los datos incluidos vía `--add-data`.
+
+El build es **onedir** (no onefile): el ejecutable convive con su directorio
+`_internal/`. Se usa el user-data-dir por SO para las voces de usuario porque el
+directorio de instalación puede ser de solo lectura (p. ej. `Program Files`,
+`/Applications`), no por un temporal efímero de extracción.
 
 Ninguna función aquí importa ni carga el modelo: son operaciones puras de
 sistema de archivos.
@@ -45,3 +52,24 @@ def data_root() -> str:
     root = os.path.join(base, "tts-sidecar")
     Path(root).mkdir(parents=True, exist_ok=True)
     return root
+
+
+def bundled_root() -> str:
+    """
+    Raíz de recursos de fábrica (solo lectura).
+
+    Congelado: `sys._MEIPASS`, donde PyInstaller extrae los datos empaquetados
+    vía `--add-data`.
+    Desde fuente: la raíz del repositorio (un nivel por encima de `src/`).
+    """
+    if is_frozen():
+        return getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+
+    # src/chatterbox_tts/paths.py -> src/ -> raíz del repo
+    src_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.dirname(src_dir)
+
+
+def bundled_voices_dir() -> str:
+    """Directorio de voces de fábrica empaquetadas (solo lectura)."""
+    return os.path.join(bundled_root(), "voices")

@@ -42,14 +42,15 @@ class TestResolveVoicePaths:
         assert sa is not None
 
     def test_resolve_from_explicit_paths(self):
+        from pathlib import Path
         from chatterbox_tts.cli import _resolve_voice_paths
         args = MockArgs(
             voice_audio="/path/to/voice.wav",
             speech_audio="/path/to/speech.wav"
         )
         va, sa = _resolve_voice_paths(args)
-        assert va == "/path/to/voice.wav"
-        assert sa == "/path/to/speech.wav"
+        assert va == str(Path("/path/to/voice.wav").resolve())
+        assert sa == str(Path("/path/to/speech.wav").resolve())
 
 
 class TestCmdVoiceList:
@@ -62,7 +63,7 @@ class TestCmdVoiceList:
         cmd_voice_list(MockArgs())
 
         out = capsys.readouterr().out
-        assert "Registered voices:" in out
+        assert "Voces registradas:" in out
         assert "crist" in out
         assert "testcli" in out
 
@@ -75,7 +76,7 @@ class TestCmdVoiceList:
         cmd_voice_list(MockArgs())
 
         out = capsys.readouterr().out
-        assert "No voices registered" in out
+        assert "No hay voces registradas" in out
 
     @patch("chatterbox_tts.voices.list_voices")
     def test_cmd_voice_list_json(self, mock_list_voices, capsys):
@@ -102,7 +103,7 @@ class TestCmdVoiceAdd:
         cmd_voice_add(MockArgs(name="newvoice", reference="ref.wav", speech="speech.wav"))
 
         out = capsys.readouterr().out
-        assert "Voice 'newvoice' registered" in out
+        assert "Voz 'newvoice' registrada" in out
         mock_engine.add_voice.assert_called_once()
 
 
@@ -116,7 +117,7 @@ class TestCmdVoiceRemove:
         cmd_voice_remove(MockArgs(name="testcli"))
 
         out = capsys.readouterr().out
-        assert "Voice 'testcli' removed" in out
+        assert "Voz 'testcli' eliminada" in out
 
     @patch("chatterbox_tts.voices.remove_voice")
     def test_cmd_voice_remove_not_found(self, mock_remove_voice, capsys):
@@ -141,7 +142,7 @@ class TestCmdDevices:
         cmd_devices(MockArgs())
 
         out = capsys.readouterr().out
-        assert "Audio output devices:" in out
+        assert "Dispositivos de salida de audio:" in out
         assert "Speaker 1" in out
         assert "Speaker 2" in out
 

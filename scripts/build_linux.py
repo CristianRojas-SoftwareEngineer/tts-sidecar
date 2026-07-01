@@ -98,6 +98,9 @@ def build_linux(target_arch="x86_64"):
                 "--collect-all", "sounddevice",
                 "--collect-data", "soundfile",
                 "--collect-data", "certifi",
+                # Voces de fábrica (incluida 'default') en la raíz del bundle,
+                # resueltas en runtime por paths.bundled_voices_dir() (sys._MEIPASS).
+                "--add-data", f"{PROJECT_ROOT / 'voices'}:voices",
                 "--recursive-copy-metadata", "chatterbox-tts",
                 "--copy-metadata", "requests",
                 # Exclude bloat
@@ -132,12 +135,23 @@ def build_linux(target_arch="x86_64"):
         with StageTimer("AppImage", "Building AppImage"):
             appimageyml = PROJECT_ROOT / "scripts" / "tts-sidecar.yml"
             if not appimageyml.exists():
-                log("WARNING: appimage.yml not found — AppImage not generated.",)
+                log("WARNING: tts-sidecar.yml not found — AppImage not generated.")
                 log(f"Create {appimageyml} with appimage-builder config.")
                 return
 
+            # El spec toma la versión y la arquitectura del entorno.
+            env = os.environ.copy()
+            env["APP_VERSION"] = _get_version()
+            env["TARGET_ARCH"] = appimage_arch
+
+            # appimage-builder requiere un icono presente en el AppDir; genera uno
+            # mínimo si no existe (el proyecto es una CLI sin icono propio).
+            _ensure_placeholder_icon(PROJECT_ROOT)
+
             result = subprocess.run(
-                ["appimage-builder", "--appimage-spec", str(appimageyml), "--debug"],
+                ["appimage-builder", "--recipe", str(appimageyml), "--skip-test"],
+                cwd=str(PROJECT_ROOT),
+                env=env,
                 capture_output=True, text=True,
             )
             if result.returncode != 0:
@@ -145,13 +159,35 @@ def build_linux(target_arch="x86_64"):
                 print(result.stdout)
                 print(result.stderr, file=sys.stderr)
                 log("WARNING: AppImage failed — onedir bundle is still in dist/")
-            else:
-                # Rename to include arch
-                generated = DIST_DIR / f"tts-sidecar-{appimage_arch}.AppImage"
-                default = DIST_DIR / "tts-sidecar.AppImage"
-                if default.exists() and not generated.exists():
-                    default.rename(generated)
+                return
+
+            # appimage-builder deja el .AppImage en el cwd (PROJECT_ROOT); localizarlo
+            # y moverlo a dist/ con el nombre canónico por arquitectura.
+            generated = DIST_DIR / f"tts-sidecar-{appimage_arch}.AppImage"
+            candidates = sorted(PROJECT_ROOT.glob("*.AppImage")) + sorted(DIST_DIR.glob("*.AppImage"))
+            src = next((c for c in candidates if c != generated), None)
+            if src and src.exists():
+                if generated.exists():
+                    generated.unlink()
+                src.rename(generated)
                 log(f"AppImage created: {generated}")
+            elif generated.exists():
+                log(f"AppImage created: {generated}")
+            else:
+                log("WARNING: appimage-builder ran but no .AppImage was found")
+
+
+def _ensure_placeholder_icon(project_root: Path):
+    """Crea un icono PNG mínimo si no existe (appimage-builder lo exige)."""
+    icon = project_root / "tts-sidecar.png"
+    if icon.exists():
+        return
+    # PNG 1x1 transparente (base64) — suficiente como placeholder de icono.
+    import base64
+    png_1x1 = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    )
+    icon.write_bytes(png_1x1)
 
 
 if __name__ == "__main__":

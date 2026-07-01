@@ -90,6 +90,21 @@ Cada voz registrada contiene dos archivos:
 tts-sidecar voice add --name mi_voz --reference timbre.wav --speech condicion.wav
 ```
 
+### Modelo de voces de dos niveles
+
+Las voces se resuelven con precedencia **usuario→fábrica** (`voices.py`):
+
+- **Fábrica**: `voices/` en la raíz del repo, commiteadas y empaquetadas vía
+  `--add-data`; de solo lectura. Se resuelven en `paths.bundled_voices_dir()`
+  (raíz del repo en modo fuente, `sys._MEIPASS` congelado). Incluye la voz
+  `default`, construida desde `assets/`.
+- **Usuario**: `data_root()/voices` (user-data-dir por SO congelado; `src/voices`
+  en modo fuente, hoy sin uso). Escribibles vía `voice add`.
+
+Sin `--voice`, `--voice-audio` ni `--speech-audio`, `cmd_speak` resuelve la voz
+`default`, por lo que `tts-sidecar speak --text "Hola"` funciona sin audios.
+El directorio `src/voices/` fue **eliminado** tras el rediseño.
+
 ## Modelo y provisión
 
 El alias de modelo expuesto por el CLI es **`es-mx-latam`** (repo oficial
@@ -141,13 +156,15 @@ tts-sidecar version [--json]
 ## Estructura de directorios
 
 ```
-voices/                  # Voces registradas del usuario
-mi_voz/
-├── reference.wav        # Audio para timbre (cualquier largo)
-└── speech.wav          # Audio para conditioning (10s+)
+voices/                  # Voces de FÁBRICA (commiteadas, empaquetadas, solo lectura)
+└── default/             # Voz por defecto (derivada de assets/)
+    ├── reference.wav    # Audio para timbre (cualquier largo)
+    └── speech.wav       # Audio para conditioning (10s+)
+# Las voces de USUARIO viven en el user-data-dir por SO (no en el repo)
 
-assets/                  # Audios de prueba
-└── Voice Sampler.wav
+assets/                  # Audios fuente (voz default) y de prueba
+├── Voice Sampler.wav
+└── Speech Sampler.wav
 
 src/chatterbox_tts/      # Código fuente Python
 └── daemon/              # Daemon mode

@@ -133,13 +133,23 @@ tts-sidecar devices --json   # salida legible por máquina
 
 Sintetiza texto. Sin `--output` reproduce el audio inmediatamente; con `--output` lo guarda en un archivo WAV sin reproducirlo.
 
+Sin `--voice` ni audios explícitos, `speak` usa la voz de fábrica **`default`** (empaquetada, de solo lectura), por lo que el ejemplo mínimo funciona sin registrar nada.
+
 ```bash
-# Reproducir
+# Reproducir con la voz de fábrica 'default' (sin audios explícitos)
 tts-sidecar speak --text "Hola mundo"
+
+# Sobrescribir con una voz registrada
+tts-sidecar speak --text "Hola mundo" --voice mi_voz
 
 # Guardar a archivo WAV
 tts-sidecar speak --text "Hola mundo" --output output.wav
 ```
+
+**Orígenes de voz (resolución usuario→fábrica):**
+- **Fábrica**: voces empaquetadas en el ejecutable, de solo lectura (incluye `default`). Idénticas en desarrollo y en cualquier instalación.
+- **Usuario**: voces registradas con `voice add`, escribibles, guardadas en el directorio de datos de usuario por SO (estables entre ejecuciones). Una voz de usuario con el mismo nombre que una de fábrica la sobrescribe.
+- El repositorio ya **no** usa `src/voices/`: las voces de fábrica viven en `voices/` en la raíz.
 
 **Opciones:**
 - `--text, -t` (requerido): Texto a sintetizar
