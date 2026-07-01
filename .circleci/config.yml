@@ -43,8 +43,13 @@ jobs:
       - run:
           name: Build Windows
           command: python scripts/build_windows.py
+      - run:
+          # store_artifacts no expande globs: se copia el instalador (cuyo nombre
+          # incluye la versión) a un nombre estable, independiente de __version__.
+          name: Stage installer artifact
+          command: Copy-Item dist/tts-sidecar-*-setup.exe dist/tts-sidecar-setup.exe
       - store_artifacts:
-          path: dist/tts-sidecar-0.1.0-setup.exe
+          path: dist/tts-sidecar-setup.exe
           destination: tts-sidecar-win32-x64-setup.exe
       - store_artifacts:
           path: dist/tts-sidecar
