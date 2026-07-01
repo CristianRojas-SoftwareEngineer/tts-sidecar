@@ -16,7 +16,7 @@ BUILD_DIR = PROJECT_ROOT / "build"
 
 # Import shared logging utilities
 sys.path.insert(0, str(Path(__file__).parent))
-from build_utils import log, StageTimer, BuildTimer
+from build_utils import log, StageTimer, BuildTimer, copy_license_files
 
 
 def check_dependencies():
@@ -106,6 +106,9 @@ def build_windows():
             if onedir.exists():
                 size_mb = sum(f.stat().st_size for f in onedir.rglob("*") if f.is_file()) / 1024 / 1024
                 log(f"Tamaño del bundle: {size_mb:.1f} MB ({onedir})")
+
+        with StageTimer("Licenses", "Empaquetando avisos de licencia"):
+            copy_license_files(DIST_DIR / "tts-sidecar")
 
         with StageTimer("Installer", "Generando instalador Inno Setup"):
             installer_script = PROJECT_ROOT / "scripts" / "create_installer_windows.py"

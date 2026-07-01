@@ -4,7 +4,7 @@
 
 `tts-sidecar` es un motor de síntesis de voz (TTS) **100% local** que usa **Chatterbox Multilingual V3** para clonación de voz en español latinoamericano. El usuario puede clonar su propia voz a partir de ~10 segundos de audio y generar narración de alta calidad.
 
-- **Licencia**: MIT (código y modelo)
+- **Licencia**: GPL-3.0-or-later (código del proyecto); el modelo y las dependencias conservan sus licencias permisivas (MIT/BSD/Apache)
 - **Idiomas**: 23+ incluyendo Español (es)
 - **Clonación**: diseño dual-audio (`reference.wav` + `speech.wav`, ~10 segundos)
 - **Parámetros del modelo**: 500M
@@ -157,19 +157,6 @@ child_process.spawn("./tts-sidecar", ["speak", "--text", "Hola"])
 # Rust
 std::process::Command::new("./tts-sidecar").args(["speak", "--text", "Hola"]).output()
 ```
-
-## Por qué Python + PyInstaller
-
-> La columna «Rust (alternativa descartada)» documenta un enfoque evaluado y
-> abandonado; el proyecto usa Python + PyInstaller.
-
-| Criterio | Rust (alternativa descartada) | Python + PyInstaller (actual) |
-|----------|-------------------------------|-------------------------------|
-| Motor TTS | ONNX (ort) | Chatterbox directo |
-| Licencia | MIT | MIT |
-| Empaquetado | No bundlea Python | Bundle `--onedir` con intérprete embebido |
-| Dependencias usuario | Toolchain de Rust | Ninguna |
-| Tamaño estimado | ~100MB binario | ~500MB-1GB (sin el modelo, que va aparte) |
 
 ## Compilación PyInstaller
 

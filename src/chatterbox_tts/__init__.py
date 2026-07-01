@@ -1,11 +1,11 @@
 """
 Chatterbox TTS — síntesis de voz con clonación de voz.
-100% local, licencia MIT, soporte para español latinoamericano.
+100% local, licencia GPL-3.0-or-later, soporte para español latinoamericano.
 """
 
 __version__ = "0.1.0"
 __author__ = "TTS Sidecar Team"
-__license__ = "MIT"
+__license__ = "GPL-3.0-or-later"
 
 # Imports perezosos: permite ejecutar --help sin que las dependencias pesadas estén instaladas
 def __getattr__(name):

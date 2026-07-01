@@ -100,6 +100,14 @@ corre los chequeos de `doctor` y descarga el modelo solo si falta (idempotente).
 está cacheado, remitiendo a `tts-sidecar setup` sin disparar descargas. En Windows
 el instalador agrega `{app}` al PATH y ofrece una casilla que ejecuta `setup`.
 
+## Licencia
+
+El código de `tts-sidecar` se distribuye bajo **GPL-3.0-or-later** (ver `LICENSE`). El
+modelo Chatterbox y todas las dependencias empaquetadas conservan sus licencias permisivas
+(MIT/BSD/Apache/ISC/PSF), compatibles con GPLv3; sus atribuciones están en
+`THIRD-PARTY-LICENSES.md`. Al editar documentación, no confundir la licencia del **proyecto**
+(GPLv3) con las menciones «MIT» que describen el **modelo** o las dependencias.
+
 ## Comandos CLI
 
 ```bash

@@ -1,5 +1,10 @@
 # Arquitectura de TTS Sidecar
 
+> **Licencia**: el código de `tts-sidecar` se distribuye bajo GPL-3.0-or-later. El modelo
+> Chatterbox y las dependencias empaquetadas conservan sus licencias permisivas
+> (MIT/BSD/Apache); las menciones «Licencia: MIT» de este documento se refieren al **modelo**.
+> Ver [THIRD-PARTY-LICENSES.md](../THIRD-PARTY-LICENSES.md).
+
 ## Visión General
 
 ```

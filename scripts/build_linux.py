@@ -15,7 +15,7 @@ DIST_DIR = PROJECT_ROOT / "dist"
 BUILD_DIR = PROJECT_ROOT / "build"
 
 sys.path.insert(0, str(Path(__file__).parent))
-from build_utils import log, StageTimer, BuildTimer
+from build_utils import log, StageTimer, BuildTimer, copy_license_files
 
 
 def check_dependencies():
@@ -125,6 +125,9 @@ def build_linux(target_arch="x86_64"):
                     f.stat().st_size for f in onedir.rglob("*") if f.is_file()
                 ) / 1024 / 1024
                 log(f"Bundle size: {size_mb:.1f} MB ({onedir})")
+
+        with StageTimer("Licenses", "Empaquetando avisos de licencia"):
+            copy_license_files(onedir)
 
         with StageTimer("AppImage", "Building AppImage"):
             appimageyml = PROJECT_ROOT / "scripts" / "tts-sidecar.yml"

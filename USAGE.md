@@ -281,3 +281,9 @@ tts-sidecar voice add --name mi_voz --reference timbre.wav --speech condicion.wa
 1. Verifica que `tts-sidecar devices` detecta tu dispositivo
 2. Comprueba que el volumen del sistema no está en mute
 3. Verifica que el dispositivo de audio predeterminado es correcto
+
+## Licencia
+
+`tts-sidecar` se distribuye bajo **GPL-3.0-or-later** (ver [LICENSE](LICENSE)). El modelo
+Chatterbox y las dependencias empaquetadas conservan sus licencias permisivas
+(MIT/BSD/Apache), detalladas en [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).

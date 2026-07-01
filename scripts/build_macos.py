@@ -17,7 +17,7 @@ DIST_DIR = PROJECT_ROOT / "dist"
 BUILD_DIR = PROJECT_ROOT / "build"
 
 sys.path.insert(0, str(Path(__file__).parent))
-from build_utils import log, StageTimer, BuildTimer
+from build_utils import log, StageTimer, BuildTimer, copy_license_files
 
 
 def check_dependencies():
@@ -138,6 +138,9 @@ def build_macos(target_arch="universal2"):
             info_plist = app_bundle / "Contents" / "Info.plist"
             version = _get_version()
             info_plist.write_text(_info_plist_content(version), encoding="utf-8")
+
+            # Empaqueta los avisos de licencia dentro de Contents/Resources
+            copy_license_files(app_bundle / "Contents" / "Resources")
             log(f".app bundle: {app_bundle}")
 
         with StageTimer("DMG", "Creating .dmg"):
@@ -208,7 +211,7 @@ def _info_plist_content(version):
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>NSHumanReadableCopyright</key>
-    <string>MIT License</string>
+    <string>GPL-3.0-or-later</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>

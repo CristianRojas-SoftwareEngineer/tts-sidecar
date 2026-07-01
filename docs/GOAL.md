@@ -4,7 +4,7 @@
 
 ## Objetivo
 
-Obtener un sistema TTS **100% local** con audio nativo por sistema operativo, para transformar texto a audio en **español latino** de la mejor calidad disponible, con **licencia MIT**.
+Obtener un sistema TTS **100% local** con audio nativo por sistema operativo, para transformar texto a audio en **español latino** de la mejor calidad disponible, distribuido bajo **licencia GPL-3.0-or-later** (con dependencias y modelo bajo licencias permisivas compatibles).
 
 Motor TTS: **Chatterbox Multilingual V3** (ResembleAI) — 23+ idiomas, clonación de voz, licencia MIT.
 
@@ -101,7 +101,7 @@ sesión: se arranca antes de sintetizar y se detiene al final.
 - **100% local**: Sin APIs externas ni conexiones a internet para síntesis
 - **Instalador único por SO**: Un archivo ejecutable por plataforma
 - **Sin dependencias externas**: El usuario final no necesita instalar nada más
-- **Licencia MIT**: Todo el código y modelos usados deben ser MIT
+- **Licencia**: El código propio se distribuye bajo GPL-3.0-or-later; todas las dependencias y el modelo usados deben tener licencias permisivas compatibles con GPLv3 (MIT/BSD/Apache/ISC/PSF)
 
 ---
 

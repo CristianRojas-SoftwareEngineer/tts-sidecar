@@ -50,7 +50,8 @@ def get_inno_setup_path():
     return None
 
 
-def generate_iss(source_dir: Path, output_dir: Path, version: str, info_after: Path) -> str:
+def generate_iss(source_dir: Path, output_dir: Path, version: str, info_after: Path,
+                 license_file: Path = None) -> str:
     """
     Genera un script .iss mínimo para Inno Setup.
 
@@ -84,6 +85,9 @@ def generate_iss(source_dir: Path, output_dir: Path, version: str, info_after: P
     lines.append("ChangesEnvironment=yes")
     # Página informativa mostrada al terminar la instalación: explica la provisión del modelo.
     lines.append("InfoAfterFile=" + info_after_win)
+    # Página de licencia (GPL v3) mostrada como paso de aceptación en el asistente.
+    if license_file is not None and license_file.exists():
+        lines.append("LicenseFile=" + str(license_file.resolve()).replace("/", "\\"))
     lines.append("")
     lines.append("[Files]")
     lines.append("Source: " + source_win + "\\*; DestDir: {app}; Flags: ignoreversion recursesubdirs createallsubdirs")
@@ -201,7 +205,8 @@ def main():
         mode="w", suffix=".iss", delete=False, encoding="utf-8"
     ) as f:
         iss_path = Path(f.name)
-        f.write(generate_iss(source_dir, output_dir, version, info_after_path))
+        license_file = Path(__file__).parent.parent / "LICENSE"
+        f.write(generate_iss(source_dir, output_dir, version, info_after_path, license_file))
 
     try:
         print("Compilando instalador con Inno Setup...")

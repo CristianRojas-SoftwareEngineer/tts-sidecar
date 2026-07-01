@@ -1,10 +1,36 @@
 """
-Utilidades de logging compartidas para los scripts de build.
-Provee logging con timestamp [HH:MM:SS] y tracking de etapas.
+Utilidades compartidas para los scripts de build.
+Provee logging con timestamp [HH:MM:SS], tracking de etapas y el empaquetado
+de los avisos de licencia en el bundle distribuible.
 """
 
+import shutil
 import time
 from datetime import datetime
+from pathlib import Path
+
+# Archivos de cumplimiento de licencia que deben viajar dentro de cada artefacto
+# distribuible (PyInstaller elimina los avisos de licencia de las dependencias).
+LICENSE_FILES = ("LICENSE", "THIRD-PARTY-LICENSES.md")
+
+
+def copy_license_files(dest_dir) -> None:
+    """Copia LICENSE y THIRD-PARTY-LICENSES.md desde la raíz del proyecto a dest_dir.
+
+    Se invoca tras PyInstaller en cada plataforma para que el bundle distribuible
+    (onedir de Windows/Linux, .app de macOS) incluya los avisos de licencia que
+    GPLv3 y las licencias permisivas de terceros exigen preservar al redistribuir.
+    """
+    project_root = Path(__file__).parent.parent
+    dest = Path(dest_dir)
+    dest.mkdir(parents=True, exist_ok=True)
+    for name in LICENSE_FILES:
+        src = project_root / name
+        if src.exists():
+            shutil.copy2(src, dest / name)
+            log(f"Licencia empaquetada: {name} -> {dest}")
+        else:
+            log(f"WARNING: no se encontró {name} en la raíz; no se empaquetó")
 
 
 def _format_duration(seconds: float) -> str:

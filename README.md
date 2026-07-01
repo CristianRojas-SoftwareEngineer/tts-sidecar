@@ -144,7 +144,14 @@ new ProcessBuilder("./tts-sidecar", "speak", "--text", "Hola").start()
 
 ## Licencia
 
-MIT — Uso comercial libre.
+**GPL-3.0-or-later** — el código de `tts-sidecar` se distribuye bajo la GNU General Public
+License v3 (ver [LICENSE](LICENSE)). Es software libre y de uso comercial permitido, con la
+condición copyleft de que los trabajos derivados que se distribuyan se liberen bajo la misma
+licencia.
+
+El **modelo de voz** Chatterbox Multilingual V3 y todas las **dependencias** empaquetadas
+conservan sus propias licencias permisivas (MIT/BSD/Apache 2.0), compatibles con GPLv3. El
+detalle de atribuciones está en [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
 
 ## Documentación
 

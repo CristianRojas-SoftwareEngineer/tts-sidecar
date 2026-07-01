@@ -2,7 +2,7 @@
   "name": "tts-sidecar",
   "version": "0.1.0",
   "description": "100% local TTS with voice cloning in Latin American Spanish - Chatterbox Multilingual V3",
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "python": ">=3.13",
   "os": [
     "win32",
