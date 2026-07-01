@@ -179,17 +179,14 @@ class ChatterboxEngine:
             "ResembleAI/chatterbox-multilingual": "models--ResembleAI--chatterbox-multilingual",
         }
         cache_folder = cache_names.get(model_name, f"models--{model_name.replace('/', '--')}")
-        snap_path = cache_path / cache_folder / "snapshots"
+        cached = _resolve_cached_snapshot(cache_path / cache_folder)
 
-        if snap_path.exists():
-            snapshots = [d for d in os.listdir(snap_path) if (snap_path / d).is_dir()]
-            if snapshots:
-                cached = snap_path / snapshots[0]
-                # Verifica que existan los archivos de es-mx-latam
-                if model_name == "es-mx-latam" or "es-mx-latam" in model_name:
-                    if (cached / "t3_es_mx_latam.safetensors").exists():
-                        print(f"Using cached model: {model_name} ({cached})")
-                        return cached
+        if cached is not None:
+            # Verifica que existan los archivos de es-mx-latam
+            if model_name == "es-mx-latam" or "es-mx-latam" in model_name:
+                if (cached / "t3_es_mx_latam.safetensors").exists():
+                    print(f"Using cached model: {model_name} ({cached})")
+                    return cached
 
         # Descarga desde HuggingFace
         print(f"Downloading {model_name} from HuggingFace...")
@@ -596,6 +593,31 @@ class ChatterboxEngine:
         return voices.voice_paths(name)
 
 
+def _resolve_cached_snapshot(model_cache_dir: Path) -> Optional[Path]:
+    """
+    Resuelve el snapshot vigente de un modelo en la caché de HuggingFace.
+
+    Prefiere la revisión apuntada por refs/main (la que huggingface_hub considera
+    actual); si el ref no existe o apunta a un snapshot ausente, cae al snapshot
+    más reciente por mtime. Devuelve None si no hay ninguno.
+    """
+    snap_path = model_cache_dir / "snapshots"
+    if not snap_path.exists():
+        return None
+
+    ref_main = model_cache_dir / "refs" / "main"
+    if ref_main.exists():
+        revision = ref_main.read_text(encoding="utf-8").strip()
+        candidate = snap_path / revision
+        if candidate.is_dir():
+            return candidate
+
+    snapshots = [d for d in snap_path.iterdir() if d.is_dir()]
+    if not snapshots:
+        return None
+    return max(snapshots, key=lambda d: d.stat().st_mtime)
+
+
 def is_model_cached(model: str = "es-mx-latam") -> bool:
     """
     Verifica si el modelo dado ya está en la caché de HuggingFace.
@@ -616,16 +638,10 @@ def is_model_cached(model: str = "es-mx-latam") -> bool:
         "ResembleAI/chatterbox-multilingual": "models--ResembleAI--chatterbox-multilingual",
     }
     cache_folder = cache_names.get(model_name, f"models--{model_name.replace('/', '--')}")
-    snap_path = cache_path / cache_folder / "snapshots"
+    cached = _resolve_cached_snapshot(cache_path / cache_folder)
 
-    if not snap_path.exists():
+    if cached is None:
         return False
-
-    snapshots = [d for d in os.listdir(snap_path) if (snap_path / d).is_dir()]
-    if not snapshots:
-        return False
-
-    cached = snap_path / snapshots[0]
 
     # es-mx-latam exige que el checkpoint del language-pack esté presente
     if model == "es-mx-latam" or "es-mx-latam" in model_name:
