@@ -4,7 +4,7 @@
 # El AppDir se construye copiando el onedir de PyInstaller (ya autocontenido:
 # incluye su propio Python y todas las dependencias) y un AppRun que delega en
 # el ejecutable. build_linux.py invoca:
-#   appimage-builder --appimage-spec scripts/tts-sidecar.yml
+#   appimage-builder --recipe scripts/tts-sidecar.yml --skip-test
 # y renombra el resultado a dist/tts-sidecar-<arch>.AppImage.
 version: 1
 
