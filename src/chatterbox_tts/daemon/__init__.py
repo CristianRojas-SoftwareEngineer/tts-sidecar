@@ -13,7 +13,7 @@ from .protocol import (
     VoicesResponse,
     ErrorResponse,
 )
-from .server import app, get_socket_path
+from .server import app
 
 __all__ = [
     "DaemonManager",
@@ -25,5 +25,4 @@ __all__ = [
     "VoicesResponse",
     "ErrorResponse",
     "app",
-    "get_socket_path",
 ]

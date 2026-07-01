@@ -3,10 +3,6 @@ Servidor FastAPI del daemon de tts-sidecar.
 Expone endpoints HTTP para síntesis TTS con el modelo persistente en memoria.
 """
 
-import platform
-import tempfile
-import os
-
 from fastapi import FastAPI, HTTPException, Response
 
 from .protocol import (
@@ -14,20 +10,6 @@ from .protocol import (
     HealthResponse,
     VoicesResponse,
 )
-
-
-# TODO: get_socket_path es un residuo del diseño original basado en Unix sockets.
-# El servidor usa HTTP/TCP (puerto 8765) en todas las plataformas; esta función
-# ya no se invoca desde ningún lugar del código.
-def get_socket_path() -> str:
-    """Devuelve la ruta de socket apropiada para la plataforma (sin uso activo)."""
-    system = platform.system()
-
-    if system == "Windows":
-        return r"\\.\pipe\tts-sidecar-daemon"
-    else:
-        sock_dir = os.getenv('XDG_RUNTIME_DIR') or tempfile.gettempdir()
-        return os.path.join(sock_dir, "tts-sidecar-daemon.sock")
 
 
 # Estado global (asignado por run.py antes de arrancar uvicorn)
