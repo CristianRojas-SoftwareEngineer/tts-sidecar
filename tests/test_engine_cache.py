@@ -53,6 +53,47 @@ class TestResolveCachedSnapshot:
         assert _resolve_cached_snapshot(tmp_path) == only
 
 
+class TestConditionalsCorruptos:
+    def _engine_sin_modelo(self):
+        """Instancia de ChatterboxEngine sin cargar el modelo real."""
+        from chatterbox_tts.engine import ChatterboxEngine
+
+        eng = ChatterboxEngine.__new__(ChatterboxEngine)
+        eng.device = "cpu"
+        return eng
+
+    def test_load_devuelve_false_con_archivo_corrupto(self, tmp_path):
+        eng = self._engine_sin_modelo()
+        eng._tts = object()
+        (tmp_path / "conditionals.pt").write_bytes(b"no es un checkpoint")
+        assert eng.load_precomputed_conditionals(str(tmp_path)) is False
+
+    def test_speak_recomputa_con_conditionals_corruptos(self, tmp_path, monkeypatch):
+        from chatterbox_tts.engine import ChatterboxEngine
+
+        eng = self._engine_sin_modelo()
+        voice = tmp_path / "voz"
+        voice.mkdir()
+        (voice / "conditionals.pt").write_bytes(b"basura")
+        speech = voice / "speech.wav"
+        speech.write_bytes(b"RIFF")
+
+        recomputos = []
+        eng._prepare_conditionals_multi = lambda **kw: recomputos.append(kw)
+
+        class FakeTTS:
+            conds = None
+
+            def generate(self, text, **kwargs):
+                return [0.0]
+
+        eng._tts = FakeTTS()
+        monkeypatch.setattr(ChatterboxEngine, "_audio_to_wav", lambda self, w: b"RIFF")
+
+        assert eng.speak("hola", speech_audio=str(speech)) == b"RIFF"
+        assert recomputos, "speak debe recomputar los conditionals cuando el .pt es corrupto"
+
+
 class TestIsModelCached:
     def _fake_hub(self, tmp_path, monkeypatch):
         """Redirige ~/.cache/huggingface/hub a una caché sintética."""

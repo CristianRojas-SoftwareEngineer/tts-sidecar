@@ -336,8 +336,16 @@ class ChatterboxEngine:
                 voice_dir = os.path.dirname(speech_audio)
                 conditionals_path = os.path.join(voice_dir, "conditionals.pt")
                 if os.path.exists(conditionals_path):
-                    self.load_precomputed_conditionals(voice_dir)
-                    log("   -> Precomputed conditionals loaded")
+                    if self.load_precomputed_conditionals(voice_dir):
+                        log("   -> Precomputed conditionals loaded")
+                    else:
+                        # conditionals.pt ilegible: degradar al cómputo on-the-fly
+                        # en vez de sintetizar en silencio con los conds previos.
+                        log("   -> conditionals.pt inválido, recomputando on-the-fly...")
+                        self._prepare_conditionals_multi(
+                            voice_audio_path=voice_audio,
+                            speech_audio_path=speech_audio,
+                        )
                 else:
                     log("   -> Computing conditionals on-the-fly...")
                     self._prepare_conditionals_multi(
