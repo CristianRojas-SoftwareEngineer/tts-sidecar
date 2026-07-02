@@ -11,10 +11,8 @@ voices/*
 AppDir/
 tts-sidecar.png
 *.spec
-# Config de Claude Code: versionar las skills; ignorar archivos de sesión
-# (p. ej. continuity-prompt.md, settings.local.json).
-.claude/*
-!.claude/skills/
+# Config de Claude Code: ignorar todo .claude/ (skills, sesión, etc.)
+.claude/
 __pycache__/
 *.pyc
 .pytest_cache/
