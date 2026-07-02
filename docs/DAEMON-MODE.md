@@ -86,8 +86,8 @@ POST /synthesize
 }
 ```
 
-El protocolo no lleva `model` ni `device`: el daemon sirve un único modelo
-fijado al arrancar. `text` está acotado a 5000 caracteres y las rutas de audio
+El protocolo no lleva `model` ni `compute_backend`: el daemon sirve un único modelo
+fijado al arrancar, con el backend de cómputo resuelto una sola vez (auto-detect o override vía variable de entorno). `text` está acotado a 5000 caracteres y las rutas de audio
 deben existir y ser `.wav` (validación previa a la síntesis).
 
 **Response** (Daemon → CLI):
