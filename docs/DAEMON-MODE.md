@@ -82,12 +82,13 @@ POST /synthesize
 {
   "text": "Hola mundo",
   "voice_audio": "/path/to/reference.wav",
-  "speech_audio": "/path/to/speech.wav",
-  "model": "es-mx-latam",
-  "device": "cpu",
-  "compile_mode": "default"
+  "speech_audio": "/path/to/speech.wav"
 }
 ```
+
+El protocolo no lleva `model` ni `device`: el daemon sirve un único modelo
+fijado al arrancar. `text` está acotado a 5000 caracteres y las rutas de audio
+deben existir y ser `.wav` (validación previa a la síntesis).
 
 **Response** (Daemon → CLI):
 ```
@@ -114,16 +115,22 @@ tts-sidecar daemon restart
 # Ver estado del daemon
 tts-sidecar daemon status
 
-# Ejecutar con daemon (comportamiento por defecto)
+# Sin flags: speak sondea el daemon y lo usa si responde (directo si no)
+tts-sidecar speak --text "Hola"
+
+# Forzar daemon (sin sondeo previo; falla si el daemon no responde)
 tts-sidecar speak --text "Hola" --daemon
 
-# Forzar modo directo (ignorar daemon)
+# Forzar modo directo (sin sondear el daemon)
 tts-sidecar speak --text "Hola" --no-daemon
 ```
 
 ## Parámetros Optimizados
 
-El daemon aplica valores optimizados automáticamente:
+Los parámetros optimizados son configuración propia del engine
+(`ChatterboxEngine._apply_synthesis_optimizations`), no monkey-patches del
+daemon: aplican por igual en modo directo y en el daemon, junto con el bypass
+del watermark PerthNet y el timing por sub-etapa:
 
 | Parámetro | Valor | Descripción |
 |-----------|-------|-------------|

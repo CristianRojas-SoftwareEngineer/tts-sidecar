@@ -157,8 +157,8 @@ tts-sidecar speak --text "Hola mundo" --output output.wav
 - `--voice, -v`: Nombre de la voz clonada a usar (auto-carga reference.wav + speech.wav)
 - `--voice-audio`: Ruta a archivo de audio para timbre (usa --speech si no se especifica)
 - `--speech-audio`: Ruta a archivo de audio para conditioning (usa --voice-audio si no se especifica)
-- `--daemon`: Usar el daemon si está disponible (default: automático)
-- `--no-daemon`: Forzar modo directo, ignorar daemon
+- `--daemon`: Usar el daemon sin sondeo previo; si falla, el error se reporta (sin fallback a directo)
+- `--no-daemon`: Forzar modo directo, sin sondear el daemon
 - `--device, -d`: Dispositivo para inferencia (`cpu`, `cuda`, `mps`)
 
 **Ejemplo completo:**
@@ -203,13 +203,17 @@ tts-sidecar daemon start --autorestart --max-retries 3
 
 ### Uso con daemon
 
-Por defecto, `speak` intenta usar el daemon si está corriendo:
+`speak` despacha según tres ramas:
+
+- **Sin flags**: sondea el daemon con un health check corto y lo usa si responde; si no, cae al modo directo sin error.
+- **`--daemon`**: asume el daemon disponible y le envía la síntesis sin sondeo previo; un fallo se reporta como error (sin fallback silencioso).
+- **`--no-daemon`**: modo directo, sin ningún sondeo.
 
 ```bash
 # El daemon se usa automáticamente si está disponible
 tts-sidecar speak --text "Hola" --voice mi_voz
 
-# Forzar modo daemon
+# Forzar modo daemon (falla si el daemon no responde)
 tts-sidecar speak --text "Hola" --voice mi_voz --daemon
 
 # Forzar modo directo (sin daemon)
@@ -218,7 +222,7 @@ tts-sidecar speak --text "Hola" --voice mi_voz --no-daemon
 
 ### Parámetros internos de síntesis
 
-El daemon aplica valores optimizados automáticamente:
+El engine aplica valores optimizados en ambos modos (directo y daemon):
 
 | Parámetro | Valor | Descripción |
 |-----------|-------|-------------|
@@ -226,7 +230,7 @@ El daemon aplica valores optimizados automáticamente:
 | `n_cfm_timesteps` | 4 | Pasos de flow matching (default: 10) |
 | `exaggeration` | 0.75 | Expresividad emocional (default: 0.5) |
 
-Los tiempos de `[Stage 2a]` (T3 autoregresivo) y `[Stage 2b]` (S3Gen vocoder) se muestran en el output cuando se usa el daemon.
+Los tiempos de `[Stage 2a]` (T3 autoregresivo) y `[Stage 2b]` (S3Gen vocoder) se muestran en el output en ambos modos.
 
 ---
 

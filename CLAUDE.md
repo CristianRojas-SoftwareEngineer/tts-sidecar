@@ -55,9 +55,9 @@ Chatterbox (`chatterbox-tts` package) con arquitectura `ChatterboxMultilingualTT
 - **T3**: Modelo autoregresivo texto → tokens (2454-token vocab)
 - **S3Gen**: Flow matching vocoder (24kHz)
 - **Voice Encoder**: Embedding de timbre desde audio de referencia
-- **PerthNet**: Watermarker (bypaseado en daemon para velocidad)
+- **PerthNet**: Watermarker (bypaseado por el engine en ambos modos)
 
-### Parámetros de síntesis optimizados (daemon)
+### Parámetros de síntesis optimizados (engine, ambos modos)
 
 | Parámetro | Valor | Descripción |
 |-----------|-------|-------------|
@@ -184,12 +184,16 @@ assets/                  # Audios fuente (voz default) y de prueba
 src/chatterbox_tts/      # Código fuente Python
 └── daemon/              # Daemon mode
 
-tests/                   # Tests pytest (37 tests)
+tests/                   # Tests pytest (95 tests)
 ├── conftest.py
-├── test_timing.py
-├── test_protocol.py
+├── test_audio.py
+├── test_build_utils.py
+├── test_cli.py
 ├── test_daemon.py
-└── test_cli.py
+├── test_engine_cache.py
+├── test_protocol.py
+├── test_timing.py
+└── test_voices.py
 ```
 <!-- </directory_structure> -->
 
