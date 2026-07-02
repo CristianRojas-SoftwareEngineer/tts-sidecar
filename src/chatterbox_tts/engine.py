@@ -22,6 +22,13 @@ import numpy as np
 import torch
 
 from . import voices
+from .model_cache import (
+    MODELS as _MODEL_ALIASES,
+    _resolve_cached_snapshot,
+    cache_folder_for,
+    hub_cache_path,
+    is_model_cached,  # re-export para compatibilidad interna
+)
 from .timing import StageTimer, log
 
 # =============================================================================
@@ -113,11 +120,8 @@ class ChatterboxEngine:
     Soporta caché de modelos para evitar recargarlos en cada instanciación.
     """
 
-    # Configuraciones de modelo
-    MODELS = {
-        "multilingual": "ResembleAI/chatterbox-multilingual",
-        "es-mx-latam": "ResembleAI/Chatterbox-Multilingual-es-mx-latam",
-    }
+    # Configuraciones de modelo (mapa único en model_cache)
+    MODELS = _MODEL_ALIASES
 
     # Caché a nivel de clase para los modelos cargados (evita recargar en cada speak)
     _cache: dict[str, "ChatterboxEngine"] = {}
@@ -169,17 +173,8 @@ class ChatterboxEngine:
         from huggingface_hub import snapshot_download
         import os
 
-        cache_path = Path(os.path.expanduser("~/.cache/huggingface/hub"))
-
         # Intenta encontrar un modelo ya cacheado
-        cache_names = {
-            "es-mx-latam": "models--ResembleAI--Chatterbox-Multilingual-es-mx-latam",
-            "multilingual": "models--ResembleAI--chatterbox-multilingual",
-            "ResembleAI/Chatterbox-Multilingual-es-mx-latam": "models--ResembleAI--Chatterbox-Multilingual-es-mx-latam",
-            "ResembleAI/chatterbox-multilingual": "models--ResembleAI--chatterbox-multilingual",
-        }
-        cache_folder = cache_names.get(model_name, f"models--{model_name.replace('/', '--')}")
-        cached = _resolve_cached_snapshot(cache_path / cache_folder)
+        cached = _resolve_cached_snapshot(hub_cache_path() / cache_folder_for(model_name))
 
         if cached is not None:
             # Verifica que existan los archivos de es-mx-latam
@@ -599,60 +594,3 @@ class ChatterboxEngine:
             Tupla de (reference_path, speech_path)
         """
         return voices.voice_paths(name)
-
-
-def _resolve_cached_snapshot(model_cache_dir: Path) -> Optional[Path]:
-    """
-    Resuelve el snapshot vigente de un modelo en la caché de HuggingFace.
-
-    Prefiere la revisión apuntada por refs/main (la que huggingface_hub considera
-    actual); si el ref no existe o apunta a un snapshot ausente, cae al snapshot
-    más reciente por mtime. Devuelve None si no hay ninguno.
-    """
-    snap_path = model_cache_dir / "snapshots"
-    if not snap_path.exists():
-        return None
-
-    ref_main = model_cache_dir / "refs" / "main"
-    if ref_main.exists():
-        revision = ref_main.read_text(encoding="utf-8").strip()
-        candidate = snap_path / revision
-        if candidate.is_dir():
-            return candidate
-
-    snapshots = [d for d in snap_path.iterdir() if d.is_dir()]
-    if not snapshots:
-        return None
-    return max(snapshots, key=lambda d: d.stat().st_mtime)
-
-
-def is_model_cached(model: str = "es-mx-latam") -> bool:
-    """
-    Verifica si el modelo dado ya está en la caché de HuggingFace.
-
-    Replica la lógica de detección de snapshots de ChatterboxEngine._download_model
-    (cache_path + cache_names + verificación de safetensors para es-mx-latam) SIN
-    disparar ninguna descarga ni cargar el modelo en memoria.
-    """
-    model_name = ChatterboxEngine.MODELS.get(model, model)
-
-    cache_path = Path(os.path.expanduser("~/.cache/huggingface/hub"))
-
-    # Mapa de alias de modelo al nombre de carpeta en la caché de HuggingFace
-    cache_names = {
-        "es-mx-latam": "models--ResembleAI--Chatterbox-Multilingual-es-mx-latam",
-        "multilingual": "models--ResembleAI--chatterbox-multilingual",
-        "ResembleAI/Chatterbox-Multilingual-es-mx-latam": "models--ResembleAI--Chatterbox-Multilingual-es-mx-latam",
-        "ResembleAI/chatterbox-multilingual": "models--ResembleAI--chatterbox-multilingual",
-    }
-    cache_folder = cache_names.get(model_name, f"models--{model_name.replace('/', '--')}")
-    cached = _resolve_cached_snapshot(cache_path / cache_folder)
-
-    if cached is None:
-        return False
-
-    # es-mx-latam exige que el checkpoint del language-pack esté presente
-    if model == "es-mx-latam" or "es-mx-latam" in model_name:
-        return (cached / "t3_es_mx_latam.safetensors").exists()
-
-    return True

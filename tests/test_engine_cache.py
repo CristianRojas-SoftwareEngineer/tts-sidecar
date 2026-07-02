@@ -7,7 +7,7 @@ is_model_cached sobre una caché sintética en tmp_path.
 import os
 import time
 
-from chatterbox_tts.engine import _resolve_cached_snapshot, is_model_cached
+from chatterbox_tts.model_cache import _resolve_cached_snapshot, is_model_cached
 
 ES_MX_FOLDER = "models--ResembleAI--Chatterbox-Multilingual-es-mx-latam"
 

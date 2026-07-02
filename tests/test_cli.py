@@ -181,7 +181,7 @@ class TestCmdVersion:
 
 
 class TestCmdSpeak:
-    @patch("chatterbox_tts.engine.is_model_cached", return_value=True)
+    @patch("chatterbox_tts.model_cache.is_model_cached", return_value=True)
     @patch("chatterbox_tts.engine.ChatterboxEngine")
     def test_cmd_speak_saves_with_output(self, mock_engine_cls, mock_cached, capsys):
         from chatterbox_tts.cli import cmd_speak
@@ -198,7 +198,7 @@ class TestCmdSpeak:
         out = capsys.readouterr().out
         assert "Audio guardado: out.wav" in out
 
-    @patch("chatterbox_tts.engine.is_model_cached", return_value=True)
+    @patch("chatterbox_tts.model_cache.is_model_cached", return_value=True)
     @patch("chatterbox_tts.audio.AudioPlayer")
     @patch("chatterbox_tts.engine.ChatterboxEngine")
     def test_cmd_speak_plays_without_output(self, mock_engine_cls, mock_player_cls, mock_cached):

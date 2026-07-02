@@ -101,7 +101,7 @@ def _synthesize_via_daemon(args, voice_audio, speech_audio):
 
 def _require_model_cached(model: str = "es-mx-latam"):
     """Verifica que el modelo esté en caché y, si no lo está, aborta remitiendo a 'setup'."""
-    from .engine import is_model_cached
+    from .model_cache import is_model_cached
     if not is_model_cached(model):
         print(
             f"Error: el modelo '{model}' no está descargado.",
@@ -292,7 +292,7 @@ def cmd_doctor(args):
 
     # Chequea el modelo: verifica que es-mx-latam esté en caché (sin cargar ni descargar)
     try:
-        from .engine import is_model_cached
+        from .model_cache import is_model_cached
         if is_model_cached("es-mx-latam"):
             checks.append(("PASS", "Chatterbox model", "es-mx-latam presente en la caché"))
         else:
@@ -378,7 +378,7 @@ def cmd_setup(args):
     model_dir = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
 
     try:
-        from .engine import is_model_cached, ChatterboxEngine
+        from .model_cache import is_model_cached
 
         if is_model_cached("es-mx-latam"):
             print(f"\n[PASS] El modelo 'es-mx-latam' ya está en caché en: {model_dir}")
@@ -388,6 +388,7 @@ def cmd_setup(args):
         print("\nDescargando el modelo es-mx-latam...")
         print("(Puede tardar varios minutos en la primera ejecución)\n")
 
+        from .engine import ChatterboxEngine
         ChatterboxEngine.get_instance(model="es-mx-latam", device="cpu")
 
         print("\n[PASS] ¡Modelo descargado correctamente!")
