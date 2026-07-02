@@ -136,6 +136,11 @@ class SoundDevicePlayer:
         audio_np = np.frombuffer(audio_data, dtype=np.int16)
         audio_np = audio_np.astype(np.float32) / 32768.0
 
+        # Un WAV multicanal llega intercalado: sin el reshape, sounddevice lo
+        # reproduciría como mono al doble de velocidad.
+        if n_channels > 1:
+            audio_np = audio_np.reshape((-1, n_channels))
+
         self.sd.play(audio_np, samplerate=sample_rate, blocking=True)
 
 
@@ -168,7 +173,9 @@ def get_audio_devices() -> list[dict]:
                     "latency": getattr(dev, "Latency", 0.0),
                 })
             return result
-        except ImportError:
+        except Exception:
+            # No solo ImportError: un fallo COM de pycaw (sesiones RDP, hosts
+            # sin audio) también debe degradar al fallback, no crashear.
             return [{"id": 0, "name": "Default", "latency": 0.1}]
 
     elif system in ("Darwin", "Linux"):
