@@ -74,13 +74,19 @@ class DaemonIPCClient:
                     print(f"   [Stage 2b] S3Gen vocoder:   {s3gen_time}s")
                 return response.content
             else:
-                error = response.json().get("detail", "Error desconocido")
+                try:
+                    error = response.json().get("detail", "Error desconocido")
+                except ValueError:
+                    # Cuerpo de error no-JSON: no romper la promesa de DaemonIPCError
+                    error = f"HTTP {response.status_code}"
                 raise DaemonIPCError(f"Error del daemon: {error}")
 
         except requests.ConnectionError as e:
             raise DaemonIPCError(f"No se puede conectar al daemon: {e}")
         except requests.Timeout as e:
             raise DaemonIPCError(f"Timeout del daemon: {e}")
+        except requests.RequestException as e:
+            raise DaemonIPCError(f"Error de comunicación con el daemon: {e}")
 
     def list_voices(self) -> list[str]:
         """Lista las voces registradas vía daemon."""

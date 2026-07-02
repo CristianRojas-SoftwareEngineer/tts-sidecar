@@ -78,10 +78,6 @@ class AudioPlayer:
 class WindowsAudioPlayer:
     """Reproducción de audio en Windows usando winsound (built-in)."""
 
-    def __init__(self, audio_client=None):
-        # audio_client se conserva por compatibilidad con firmas anteriores pero no se usa
-        pass
-
     def play(self, audio_bytes: bytes) -> None:
         """Reproduce bytes WAV en Windows usando winsound built-in."""
         import winsound

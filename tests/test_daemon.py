@@ -54,6 +54,37 @@ class TestServerConcurrency:
             server.set_engine(old_engine)
 
 
+class TestKillPidVerificado:
+    def _fake_psutil(self, cmdline):
+        proc = MagicMock()
+        proc.cmdline.return_value = cmdline
+        psutil_mock = MagicMock()
+        psutil_mock.Process.return_value = proc
+        return psutil_mock, proc
+
+    def test_no_termina_procesos_ajenos(self, capsys):
+        """WARNING-04: si otro servicio ocupa el puerto, no se le hace terminate()."""
+        from chatterbox_tts.daemon.daemon import DaemonManager
+
+        psutil_mock, proc = self._fake_psutil(["node", "otro-servidor.js"])
+        with patch.dict(sys.modules, {"psutil": psutil_mock}):
+            DaemonManager()._kill_pid(1234)
+
+        proc.terminate.assert_not_called()
+        assert "no parece ser el daemon" in capsys.readouterr().err
+
+    def test_termina_el_daemon_propio(self):
+        from chatterbox_tts.daemon.daemon import DaemonManager
+
+        psutil_mock, proc = self._fake_psutil(
+            ["python", "-m", "chatterbox_tts.daemon.run", "--port", "8765"]
+        )
+        with patch.dict(sys.modules, {"psutil": psutil_mock}):
+            DaemonManager()._kill_pid(1234)
+
+        proc.terminate.assert_called_once()
+
+
 class TestDaemonManager:
     @patch("requests.get")
     def test_is_running_true(self, mock_get):

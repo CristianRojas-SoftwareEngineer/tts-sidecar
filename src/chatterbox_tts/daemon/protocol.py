@@ -31,12 +31,6 @@ class HealthResponse(BaseModel):
     """Segundos transcurridos desde el inicio del daemon."""
 
 
-class ErrorResponse(BaseModel):
-    """Respuesta de error."""
-    error: str
-    code: str
-
-
 class VoicesResponse(BaseModel):
     """Lista de voces registradas."""
     voices: list[str]

@@ -207,15 +207,37 @@ class DaemonManager:
             pass
         return None
 
+    @staticmethod
+    def _is_own_daemon_process(proc) -> bool:
+        """Comprueba que el proceso identificado por puerto sea nuestro daemon.
+
+        Sin esta verificación, otro servicio que ocupara el puerto 8765 sería
+        terminado por 'daemon stop' (acción destructiva sobre un proceso ajeno).
+        """
+        try:
+            cmdline = " ".join(proc.cmdline())
+        except Exception:
+            return False
+        markers = ("chatterbox_tts.daemon", "tts-sidecar", "daemon serve")
+        return any(marker in cmdline for marker in markers)
+
     def _kill_pid(self, pid: int):
         """Termina un proceso por su PID (red de seguridad tras el cierre graceful).
 
-        Intenta terminate() (SIGTERM/equivalente) y, si no cede, kill().
+        Solo actúa si el cmdline corresponde al daemon propio; intenta
+        terminate() (SIGTERM/equivalente) y, si no cede, kill().
         """
         try:
             import psutil
 
             proc = psutil.Process(pid)
+            if not self._is_own_daemon_process(proc):
+                print(
+                    f"El proceso {pid} en el puerto {self.port} no parece ser el daemon "
+                    "de tts-sidecar; no se termina.",
+                    file=sys.stderr,
+                )
+                return
             proc.terminate()
             try:
                 proc.wait(timeout=5)

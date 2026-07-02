@@ -413,7 +413,7 @@ def cmd_daemon(args):
 
     from .daemon import DaemonManager
 
-    manager = DaemonManager()
+    manager = DaemonManager(port=getattr(args, "port", None))
 
     if args.action == "start":
         # Exige que el modelo esté en caché antes de lanzar el servidor.
@@ -540,6 +540,7 @@ def main():
     daemon_subparsers = daemon_parser.add_subparsers(dest="action", help="Acciones del daemon")
 
     daemon_start = daemon_subparsers.add_parser("start", help="Inicia el daemon")
+    daemon_start.add_argument("--port", type=int, default=8765, help="Puerto TCP donde escuchar (default: 8765)")
     daemon_start.add_argument("--autorestart", action="store_true", help="Auto-reinicio en caso de crash")
     daemon_start.add_argument("--max-retries", type=int, help="Máximo de intentos de reinicio")
     daemon_start.set_defaults(func=cmd_daemon)
