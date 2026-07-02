@@ -5,6 +5,7 @@ Expone endpoints HTTP para síntesis TTS con el modelo persistente en memoria.
 
 import logging
 import os
+import threading
 
 from fastapi import FastAPI, HTTPException, Response
 
@@ -57,11 +58,19 @@ async def health_check():
     )
 
 
+# Serializa la síntesis completa (preparación de conds + generate): engine.speak
+# muta estado global del modelo (tts.conds) y dos peticiones concurrentes
+# cruzarían voces.
+_synthesis_lock = threading.Lock()
+
+
 @app.post("/synthesize")
-async def synthesize(req: SynthesizeRequest) -> Response:
+def synthesize(req: SynthesizeRequest) -> Response:
     """
     Sintetiza texto a audio usando el modelo cacheado en memoria.
 
+    Endpoint síncrono (def): FastAPI lo despacha a su threadpool, de modo que
+    una síntesis larga no bloquea el event loop y /health sigue respondiendo.
     Devuelve el audio como binario WAV.
     """
     if not _engine:
@@ -79,12 +88,13 @@ async def synthesize(req: SynthesizeRequest) -> Response:
             )
 
     try:
-        audio_bytes = _engine.speak(
-            text=req.text,
-            voice_audio=req.voice_audio,
-            speech_audio=req.speech_audio,
-            verbose=True,
-        )
+        with _synthesis_lock:
+            audio_bytes = _engine.speak(
+                text=req.text,
+                voice_audio=req.voice_audio,
+                speech_audio=req.speech_audio,
+                verbose=True,
+            )
 
         timing = getattr(_engine, '_synthesis_timing', {})
         headers = {

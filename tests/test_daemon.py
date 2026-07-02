@@ -8,6 +8,52 @@ from unittest.mock import patch, MagicMock
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
+class TestServerConcurrency:
+    def test_health_responde_durante_sintesis(self, tmp_path):
+        """Una síntesis bloqueada no debe congelar /health (WARNING-03)."""
+        import threading
+        from fastapi.testclient import TestClient
+        from chatterbox_tts.daemon import server
+
+        started = threading.Event()
+        release = threading.Event()
+
+        class SlowEngine:
+            def speak(self, **kwargs):
+                started.set()
+                assert release.wait(timeout=10), "la síntesis nunca fue liberada"
+                return b"RIFF" + b"\x00" * 40
+
+        wav = tmp_path / "voz.wav"
+        wav.write_bytes(b"RIFF")
+
+        old_engine = server._engine
+        server.set_engine(SlowEngine())
+        server.set_start_time(0.0)
+        try:
+            with TestClient(server.app) as client:
+                result = {}
+
+                def synth():
+                    result["resp"] = client.post(
+                        "/synthesize", json={"text": "hola", "speech_audio": str(wav)}
+                    )
+
+                t = threading.Thread(target=synth)
+                t.start()
+                assert started.wait(timeout=10), "la síntesis no arrancó"
+
+                # Con la síntesis en curso, /health debe responder
+                health = client.get("/health", timeout=5)
+                assert health.status_code == 200
+
+                release.set()
+                t.join(timeout=10)
+                assert result["resp"].status_code == 200
+        finally:
+            server.set_engine(old_engine)
+
+
 class TestDaemonManager:
     @patch("requests.get")
     def test_is_running_true(self, mock_get):
