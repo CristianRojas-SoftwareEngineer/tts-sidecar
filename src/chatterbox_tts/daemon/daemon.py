@@ -163,12 +163,13 @@ class DaemonManager:
         return {"running": True, "status": "unknown"}
 
     def is_running(self) -> bool:
-        """Comprueba si el daemon está corriendo y responde al health check."""
-        try:
-            response = requests.get(f"{self.base_url}/health", timeout=2)
-            return response.status_code == 200
-        except (requests.ConnectionError, requests.Timeout):
-            return False
+        """Comprueba si el daemon está corriendo y responde al health check.
+
+        Delegación al cliente IPC: una sola implementación del health check.
+        """
+        from .ipc import DaemonIPCClient
+
+        return DaemonIPCClient(port=self.port).is_running()
 
     def _wait_for_ready(self, timeout: float = None) -> bool:
         """Espera hasta que el daemon esté listo para aceptar conexiones."""

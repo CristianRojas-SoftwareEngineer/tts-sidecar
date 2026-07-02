@@ -243,11 +243,11 @@ class ChatterboxEngine:
             # Verifica que existan los archivos de es-mx-latam
             if model_name == "es-mx-latam" or "es-mx-latam" in model_name:
                 if (cached / "t3_es_mx_latam.safetensors").exists():
-                    print(f"Using cached model: {model_name} ({cached})")
+                    log(f"Using cached model: {model_name} ({cached})")
                     return cached
 
         # Descarga desde HuggingFace
-        print(f"Downloading {model_name} from HuggingFace...")
+        log(f"Downloading {model_name} from HuggingFace")
         if model_name == "es-mx-latam":
             model_name = "ResembleAI/Chatterbox-Multilingual-es-mx-latam"
 
@@ -258,7 +258,7 @@ class ChatterboxEngine:
                 token=os.getenv("HF_TOKEN"),
             )
         )
-        print(f"Model downloaded to: {cached_path}")
+        log(f"Model downloaded to: {cached_path}")
         return cached_path
 
     def _load_model(self, cache_dir: Path, model_name: str, device: str):
@@ -345,7 +345,7 @@ class ChatterboxEngine:
         # Si no hay conds incorporados, exige audio_prompt_path en generate()
         tts._require_voice_prompt = conds is None
 
-        print(f"Model loaded: es-MX-Latam (vocab=2454, device={device}, builtin_voice={'yes' if conds else 'no'})")
+        log(f"Model loaded: es-MX-Latam (vocab=2454, device={device}, builtin_voice={'yes' if conds else 'no'})")
         return tts
 
     def _load_multilingual(self, cache_dir: Path, device: str):
@@ -451,7 +451,20 @@ class ChatterboxEngine:
         speech_audio_path: str,
     ):
         """
-        Prepara los conditionals con fuentes de audio separadas.
+        Prepara los conditionals del modelo con fuentes de audio separadas.
+
+        Si voice_audio_path es None, usa speech_audio_path para todo.
+        """
+        self._tts.conds = self._compute_conditionals(voice_audio_path, speech_audio_path)
+
+    def _compute_conditionals(
+        self,
+        voice_audio_path: Optional[str],
+        speech_audio_path: str,
+    ):
+        """
+        Computa los conditionals con fuentes de audio separadas (implementación
+        única, compartida con la precomputación a disco de add_voice).
 
         - voice_audio_path: audio para el Voice Encoder (usa el audio COMPLETO para el embedding de timbre)
         - speech_audio_path: audio para el conditioning del T3 (6s) + decoder S3Gen (10s)
@@ -505,7 +518,7 @@ class ChatterboxEngine:
             emotion_adv=0.5 * torch.ones(1, 1, 1),
         ).to(device=self.device)
 
-        tts.conds = Conditionals(t3_cond, s3gen_ref_dict)
+        return Conditionals(t3_cond, s3gen_ref_dict)
 
     def _audio_to_wav(self, audio_data) -> bytes:
         """Convierte un array numpy o tensor de audio a bytes WAV."""
@@ -604,9 +617,9 @@ class ChatterboxEngine:
         if precompute:
             try:
                 self._precompute_and_save_conditionals(voices_dir, ref_path, speech_path)
-                print(f"Conditionals precomputados para la voz '{name}'")
+                log(f"Conditionals precomputados para la voz '{name}'")
             except Exception as e:
-                print(f"Advertencia: no se pudieron precomputar los conditionals: {e}")
+                log(f"Advertencia: no se pudieron precomputar los conditionals: {e}")
 
         return (ref_path, speech_path)
 
@@ -614,51 +627,11 @@ class ChatterboxEngine:
         """
         Precomputa los conditionals desde los archivos de audio y los guarda a disco.
 
-        Crea un archivo conditionals.pt en el directorio de la voz.
+        Reutiliza el cómputo único de _compute_conditionals y crea un archivo
+        conditionals.pt en el directorio de la voz.
         """
-        import os
-        import torch
-        import librosa
-        from chatterbox.mtl_tts import Conditionals
-
-        tts = self._tts
-
-        # Carga el audio
-        ref_24k, _ = librosa.load(reference_audio, sr=24000)
-        ref_16k_voice = librosa.resample(ref_24k, orig_sr=24000, target_sr=16000)
-
-        ref_24k_speech, _ = librosa.load(speech_audio, sr=24000)
-        ref_16k_speech = librosa.resample(ref_24k_speech, orig_sr=24000, target_sr=16000)
-
-        # Embedding del Voice Encoder
-        ve_embed = torch.from_numpy(
-            tts.ve.embeds_from_wavs([ref_16k_voice], sample_rate=16000)
-        )
-        ve_embed = ve_embed.mean(axis=0, keepdim=True).to(self.device)
-
-        # Referencia de S3Gen
-        ref_24k_speech = ref_24k_speech[:tts.DEC_COND_LEN]
-        s3gen_ref_dict = tts.s3gen.embed_ref(ref_24k_speech, 24000, device=self.device)
-
-        # Tokens de conditioning del T3
-        t3_cond_prompt_tokens = None
-        if plen := tts.t3.hp.speech_cond_prompt_len:
-            s3_tokzr = tts.s3gen.tokenizer
-            t3_cond_prompt_tokens, _ = s3_tokzr.forward(
-                [ref_16k_speech[:tts.ENC_COND_LEN]], max_len=plen
-            )
-            t3_cond_prompt_tokens = torch.atleast_2d(t3_cond_prompt_tokens).to(self.device)
-
-        t3_cond = T3Cond(
-            speaker_emb=ve_embed,
-            cond_prompt_speech_tokens=t3_cond_prompt_tokens,
-            emotion_adv=0.5 * torch.ones(1, 1, 1),
-        ).to(device=self.device)
-
-        # Guarda los conditionals
-        conds = Conditionals(t3_cond, s3gen_ref_dict)
-        save_path = os.path.join(voice_dir, "conditionals.pt")
-        conds.save(save_path)
+        conds = self._compute_conditionals(reference_audio, speech_audio)
+        conds.save(os.path.join(voice_dir, "conditionals.pt"))
 
     def load_precomputed_conditionals(self, voice_dir: str) -> bool:
         """

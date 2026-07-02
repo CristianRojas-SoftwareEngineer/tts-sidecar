@@ -144,11 +144,7 @@ def cmd_speak(args):
             # engine.speak ya escribió el archivo vía output_path
             log(f"[I/O] Audio guardado: {args.output}")
         else:
-            log("[Playback] Reproduciendo audio...")
-            from .audio import AudioPlayer
-            player = AudioPlayer()
-            player.play(audio_bytes)
-            log("[Playback] Reproducción finalizada")
+            _emit_audio(audio_bytes, None)
 
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -265,11 +261,13 @@ def cmd_version(args):
         print(f"tts-sidecar {__version__}")
 
 
-def cmd_doctor(args):
-    """Ejecuta los chequeos de diagnóstico."""
-    from . import voices
+def _environment_checks() -> list[tuple[str, str, str]]:
+    """Chequeos de entorno compartidos por doctor y setup.
 
-    checks = []  # lista de (status, name, detail) con status en PASS/FAIL/SKIP
+    Devuelve una lista de (status, name, detail) con status en PASS/FAIL:
+    Chatterbox importable + librería de audio de la plataforma.
+    """
+    checks = []
 
     # Chequea Chatterbox
     try:
@@ -298,6 +296,16 @@ def cmd_doctor(args):
         checks.append(("FAIL", "Audio library", "NO INSTALADO"))
     except Exception as e:
         checks.append(("FAIL", "Audio library", str(e)))
+
+    return checks
+
+
+def cmd_doctor(args):
+    """Ejecuta los chequeos de diagnóstico."""
+    from . import voices
+
+    # lista de (status, name, detail) con status en PASS/FAIL/SKIP
+    checks = _environment_checks()
 
     # Chequea el modelo: verifica que es-mx-latam esté en caché (sin cargar ni descargar)
     try:
@@ -350,36 +358,12 @@ def cmd_setup(args):
     """Provisiona el runtime: corre los chequeos de entorno y descarga el modelo si falta."""
     print("=== Chatterbox TTS Setup ===\n")
 
-    # 1. Chequeos de entorno (igual que doctor): Chatterbox importable + librería de audio.
-    try:
-        import chatterbox
-        print(f"[PASS] Chatterbox TTS: {chatterbox.__version__}")
-    except ImportError:
-        print("[FAIL] Chatterbox TTS: NO INSTALADO (pip install chatterbox-tts)", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        if platform.system() == "Windows":
-            import pycaw
-            print("[PASS] Audio library: pycaw (Windows)")
-        elif platform.system() == "Linux":
-            import sounddevice
-            print("[PASS] Audio library: sounddevice (Linux)")
-        elif platform.system() == "Darwin":
-            import shutil
-            # Detecta el binario sin invocarlo: ejecutar afplay sin archivo devuelve
-            # exit != 0 y el except abortaría la descarga del modelo.
-            if shutil.which("afplay"):
-                print("[PASS] Audio library: afplay (macOS)")
-            else:
-                print("[FAIL] Audio library: afplay no encontrado en el PATH", file=sys.stderr)
-                sys.exit(1)
-    except ImportError:
-        print("[FAIL] Audio library: NO INSTALADO", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"[FAIL] Audio library: {e}", file=sys.stderr)
-        sys.exit(1)
+    # 1. Chequeos de entorno (implementación compartida con doctor).
+    for status, name, detail in _environment_checks():
+        if status == "FAIL":
+            print(f"[FAIL] {name}: {detail}", file=sys.stderr)
+            sys.exit(1)
+        print(f"[{status}] {name}: {detail}")
 
     # 2. Provisión del modelo (idempotente): descarga solo si no está ya en caché.
     # El modelo se descarga a la caché de HuggingFace (ver engine._download_model),
