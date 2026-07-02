@@ -87,8 +87,6 @@ def _synthesize_via_daemon(args, voice_audio, speech_audio):
             text=args.text,
             voice_audio=voice_audio,
             speech_audio=speech_audio,
-            model=args.model,
-            device=args.device,
         )
         elapsed = time.time() - synth_start
         log(f"[Daemon] Síntesis completada ({elapsed:.1f}s)")

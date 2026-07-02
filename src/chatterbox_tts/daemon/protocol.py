@@ -2,17 +2,23 @@
 Definiciones del protocolo IPC del daemon de tts-sidecar.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
+
+# Tope de texto por petición: acota el trabajo del T3 y evita el DoS local
+# trivial de un payload ilimitado.
+MAX_TEXT_LENGTH = 5000
 
 
 class SynthesizeRequest(BaseModel):
-    """Request de síntesis de habla."""
-    text: str
+    """Request de síntesis de habla.
+
+    El daemon sirve un único modelo/dispositivo fijado al arrancar; la petición
+    no lleva `model` ni `device` (el servidor los ignoraría).
+    """
+    text: str = Field(min_length=1, max_length=MAX_TEXT_LENGTH)
     voice_audio: Optional[str] = None
     speech_audio: Optional[str] = None
-    model: str = "es-mx-latam"
-    device: str = "cpu"
 
 
 class HealthResponse(BaseModel):

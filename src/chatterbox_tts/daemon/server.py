@@ -3,6 +3,9 @@ Servidor FastAPI del daemon de tts-sidecar.
 Expone endpoints HTTP para síntesis TTS con el modelo persistente en memoria.
 """
 
+import logging
+import os
+
 from fastapi import FastAPI, HTTPException, Response
 
 from .protocol import (
@@ -64,6 +67,17 @@ async def synthesize(req: SynthesizeRequest) -> Response:
     if not _engine:
         raise HTTPException(status_code=503, detail="Modelo no cargado")
 
+    # Valida las rutas de audio antes de que lleguen a librosa.load: deben
+    # existir y ser .wav. Los mensajes de error no exponen rutas del sistema.
+    for field, path in (("voice_audio", req.voice_audio), ("speech_audio", req.speech_audio)):
+        if path is None:
+            continue
+        if not path.lower().endswith(".wav") or not os.path.isfile(path):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{field}: se requiere una ruta a un archivo .wav existente",
+            )
+
     try:
         audio_bytes = _engine.speak(
             text=req.text,
@@ -86,9 +100,12 @@ async def synthesize(req: SynthesizeRequest) -> Response:
         )
 
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        # El detalle real (con rutas) queda solo en el log del servidor.
+        logging.getLogger(__name__).warning("synthesize: recurso no encontrado: %s", e)
+        raise HTTPException(status_code=404, detail="Recurso de voz no encontrado")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.getLogger(__name__).error("synthesize: error interno: %s", e)
+        raise HTTPException(status_code=500, detail="Error interno de síntesis")
 
 
 @app.get("/voices", response_model=VoicesResponse)
