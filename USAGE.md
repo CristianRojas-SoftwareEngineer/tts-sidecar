@@ -47,9 +47,15 @@ descarga una sola vez a `~/.cache/huggingface/hub` mediante el comando `setup`.
 tts-sidecar setup
 ```
 
-**Qué esperar:** `setup` primero corre los chequeos de entorno (los mismos que
-`doctor`) y luego descarga el modelo solo si falta. En la primera ejecución verás
-algo como:
+**Qué esperar:** `setup` integra primero el comando en el PATH (solo en Linux,
+ejecutado desde el AppImage; en Windows y macOS ese paso lo cubren el instalador
+y el script del `.dmg`), después corre los chequeos de entorno (los mismos que
+`doctor`) y por último descarga el modelo solo si falta. Un fallo del chequeo de
+audio **no detiene la provisión**: `setup` lo degrada a `[WARN]` y continúa,
+porque la síntesis a archivo (`speak --output`) funciona sin subsistema de
+sonido (p. ej. en hosts headless o sesiones SSH); `doctor`, en cambio, lo sigue
+reportando como `[FAIL]` con salida 1, como señal diagnóstica. En la primera
+ejecución verás algo como:
 
 ```
 === Chatterbox TTS Setup ===
@@ -84,7 +90,7 @@ Provisión completa. No hay nada que descargar.
   # Primer uso con el AppImage descargado
   chmod +x tts-sidecar-0.1.0-x86_64.AppImage
   ./tts-sidecar-0.1.0-x86_64.AppImage setup
-  # → chequeos + symlink en ~/.local/bin + descarga del modelo
+  # → symlink en ~/.local/bin + chequeos + descarga del modelo
 
   # Desde entonces, en una terminal nueva:
   tts-sidecar speak --text "Hola"
@@ -552,6 +558,29 @@ archivos de la voz. Ciérralo (p. ej. `tts-sidecar daemon stop`) y reintenta.
 3. Verifica que el dispositivo de audio predeterminado es correcto
 4. Ejecuta `tts-sidecar doctor`: el chequeo "Audio library" falla si el host no
    tiene un subsistema de audio funcional (p. ej. sesiones remotas o headless)
+
+En un host sin audio puedes seguir usando la síntesis a archivo
+(`tts-sidecar speak --text "Hola" --output audio.wav`); `setup` también funciona
+allí (degrada el chequeo de audio a `[WARN]` y provisiona igual).
+
+### El sistema bloquea el primer arranque (binarios sin firmar)
+
+Los binarios distribuidos no están firmados ni notarizados, así que la primera
+apertura puede ser bloqueada por el sistema:
+
+- **macOS (Gatekeeper)**: al abrir el `.app`/`.dmg` por primera vez, haz clic
+  derecho sobre él → **Abrir** y confirma; o quita la cuarentena desde una
+  terminal:
+
+  ```bash
+  xattr -d com.apple.quarantine /Applications/tts-sidecar-universal2.app
+  ```
+
+- **Windows (SmartScreen)**: si aparece «Windows protegió tu PC» al ejecutar el
+  instalador, pulsa **Más información** → **Ejecutar de todas formas**.
+
+Esto solo ocurre en el primer arranque; las ejecuciones posteriores no vuelven a
+pedir confirmación.
 
 ## Licencia
 

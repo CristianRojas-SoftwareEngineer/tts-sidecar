@@ -14,7 +14,7 @@
 | Plataforma | Herramienta | Instalación |
 |------------|-------------|-------------|
 | Windows | Inno Setup 6 | `choco install innosetup -y --version=6.3.3` o [jrsoftware.org](https://jrsoftware.org/isdl.php) |
-| Linux | appimage-builder | `pip install appimage-builder==1.1.0` |
+| Linux | appimagetool + runtime estático (type2-runtime) | Descarga automática pineada por URL + SHA-256 (`build_linux.py`); sin instalación manual |
 | macOS | create-dmg | `brew install create-dmg` (script de shell de Homebrew, no existe en PyPI) |
 
 ### Política interactiva de dependencias de build
@@ -25,15 +25,21 @@ instalar pineado o degradar**. Si una herramienta falta y hay TTY, el script
 muestra el comando exacto de instalación y pregunta s/n; sin TTY (CI) no
 pregunta, emite la instrucción manual y resuelve según criticidad:
 
-- **Requeridas** (PyInstaller, sounddevice en Linux): sin ellas el build no
-  tiene sentido; el script aborta si no se resuelven.
-- **Empaquetadores** (appimage-builder, create-dmg, Inno Setup): sin ellos el
+- **Requeridas** (PyInstaller, sounddevice en Linux y macOS): sin ellas el
+  build no tiene sentido; el script aborta si no se resuelven.
+- **Empaquetadores** (appimagetool, create-dmg, Inno Setup): sin ellos el
   bundle onedir/.app sigue siendo usable; el stage degrada con warning.
 
 Las versiones pineadas viven como constantes en `scripts/build_utils.py`
-(`PYINSTALLER_PIN=6.21.0`, `APPIMAGE_BUILDER_PIN=1.1.0`, `INNOSETUP_PIN=6.3.3`),
-espejo de las que instala `.circleci/config.yml`: un build local produce el
-mismo artefacto que el CI.
+(`PYINSTALLER_PIN=6.21.0`, `INNOSETUP_PIN=6.3.3`), espejo de las que instala
+`.circleci/config.yml`: un build local produce el mismo artefacto que el CI.
+El tooling del AppImage no se instala vía pip: `APPIMAGE_TOOLING` pinea las
+URLs de release de `appimagetool` (`APPIMAGETOOL_PIN=1.9.1`) y del runtime
+estático de type2-runtime (`TYPE2_RUNTIME_PIN=20251108`) con su SHA-256 por
+arquitectura; `build_linux.py` los descarga a `build/appimage-tooling/`
+verificando el checksum (`fetch_pinned_asset`). El runtime estático arranca
+sin `libfuse2` (ausente por defecto en distros modernas), garantizando el
+primer arranque del AppImage en cualquier distro.
 
 ---
 
@@ -41,7 +47,7 @@ mismo artefacto que el CI.
 
 | Plataforma | Comando | Artefacto |
 |------------|---------|-----------|
-| Windows x64 | `python scripts/build_windows.py` | `dist/tts-sidecar-0.1.0-x64-setup.exe` (instalador) |
+| Windows x64 | `python scripts/build_windows.py` | `dist/tts-sidecar-0.1.0-x86_64-setup.exe` (instalador) |
 | Linux x64 | `python scripts/build_linux.py --arch x86_64` | `dist/tts-sidecar-0.1.0-x86_64.AppImage` |
 | Linux ARM64 | `python scripts/build_linux.py --arch arm64` | `dist/tts-sidecar-0.1.0-aarch64.AppImage` |
 | macOS universal2 | `python scripts/build_macos.py --arch universal2` | `dist/tts-sidecar-0.1.0-universal2.dmg` |
@@ -72,7 +78,7 @@ python -m py_compile src/chatterbox_tts/daemon/*.py
 # Windows (requiere Inno Setup instalado)
 python scripts/build_windows.py
 
-# Linux (requiere appimage-builder)
+# Linux (descarga appimagetool + runtime estático, pineados por SHA-256)
 python scripts/build_linux.py --arch x86_64
 
 # macOS (requiere create-dmg)
@@ -118,7 +124,7 @@ dist/tts-sidecar/tts-sidecar.exe doctor
 dist/tts-sidecar/tts-sidecar.exe setup
 
 # Instalador (Windows)
-dist/tts-sidecar-0.1.0-x64-setup.exe
+dist/tts-sidecar-0.1.0-x86_64-setup.exe
 ```
 
 ### Matriz de integración con el SO
@@ -191,7 +197,7 @@ Los artefactos publicados por CI se almacenan en `dist/`:
 
 ```
 dist/
-├── tts-sidecar-0.1.0-x64-setup.exe      # Windows (instalador Inno Setup)
+├── tts-sidecar-0.1.0-x86_64-setup.exe   # Windows (instalador Inno Setup)
 ├── tts-sidecar/                          # Windows onedir (carpeta)
 ├── tts-sidecar-0.1.0-x86_64.AppImage    # Linux x64
 ├── tts-sidecar-0.1.0-aarch64.AppImage   # Linux ARM64
@@ -224,9 +230,9 @@ en el bundle congelado.
 
 | Plataforma | Librería | Notas |
 |------------|----------|-------|
-| Windows | `pycaw` | Incluida |
-| Linux | `sounddevice` | Incluida |
-| macOS | `afplay` (built-in) | Ninguna librería adicional |
+| Windows | `pycaw` | Incluida (enumeración; reproduce `winsound`, built-in) |
+| Linux | `sounddevice` | Incluida (reproducción y enumeración) |
+| macOS | `afplay` (built-in) + `sounddevice` | `afplay` reproduce; `sounddevice` (incluida en el bundle) enumera dispositivos para `doctor`/`devices` |
 
 ### Paquetes recopilados con `--collect-all`
 

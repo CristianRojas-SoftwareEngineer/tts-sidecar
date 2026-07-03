@@ -21,12 +21,12 @@ LICENSE_FILES = ("LICENSE", "THIRD-PARTY-LICENSES.md")
 LOGO_SOURCE = Path(__file__).parent.parent / "assets" / "images" / "TTS Sidecar - Logo.png"
 
 # PNG 1×1 transparente (base64) usado como placeholder de icono cuando la fuente
-# del logo no existe. appimage-builder exige un icono presente en el AppDir.
+# del logo no existe. El AppImage exige un icono presente en el AppDir.
 _PLACEHOLDER_PNG_1X1 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 )
 
-# Timeout aplicado a los subprocesos de empaquetado de plataforma (appimage-builder
+# Timeout aplicado a los subprocesos de empaquetado de plataforma (appimagetool
 # en Linux, create-dmg en macOS) para que un empaquetador colgado no cuelgue el job
 # de CI indefinidamente; consistente con el timeout ya usado por el instalador de
 # Windows (create_installer_windows.py) (SUGGESTION-05).
@@ -42,8 +42,39 @@ PYINSTALLER_TIMEOUT = 1800
 # .circleci/config.yml: un build local con estas versiones produce el mismo
 # artefacto que el CI. Actualizar deliberadamente y en ambos lugares a la vez.
 PYINSTALLER_PIN = "6.21.0"
-APPIMAGE_BUILDER_PIN = "1.1.0"
 INNOSETUP_PIN = "6.3.3"
+
+# Tooling pineado del empaquetado AppImage (L-03): appimagetool empaqueta el
+# AppDir y el runtime estático de type2-runtime (FUSE 3 estático con
+# autoextracción de respaldo) se incrusta con --runtime-file, eliminando la
+# dependencia de libfuse2 que las distros modernas ya no instalan por defecto.
+# Pines por URL de release + SHA-256 (fetch_pinned_asset los verifica): misma
+# política que los pines de versión de pip/choco. Actualizar deliberadamente
+# URL y hash a la vez.
+APPIMAGETOOL_PIN = "1.9.1"
+TYPE2_RUNTIME_PIN = "20251108"
+APPIMAGE_TOOLING = {
+    "x86_64": {
+        "appimagetool": (
+            f"https://github.com/AppImage/appimagetool/releases/download/{APPIMAGETOOL_PIN}/appimagetool-x86_64.AppImage",
+            "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0",
+        ),
+        "runtime": (
+            f"https://github.com/AppImage/type2-runtime/releases/download/{TYPE2_RUNTIME_PIN}/runtime-x86_64",
+            "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d",
+        ),
+    },
+    "aarch64": {
+        "appimagetool": (
+            f"https://github.com/AppImage/appimagetool/releases/download/{APPIMAGETOOL_PIN}/appimagetool-aarch64.AppImage",
+            "f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158",
+        ),
+        "runtime": (
+            f"https://github.com/AppImage/type2-runtime/releases/download/{TYPE2_RUNTIME_PIN}/runtime-aarch64",
+            "00cbdfcf917cc6c0ff6d3347d59e0ca1f7f45a6df1a428a0d6d8a78664d87444",
+        ),
+    },
+}
 
 
 def module_available(module_name: str) -> bool:
@@ -100,6 +131,47 @@ def ensure_build_dependency(name, check, install_cmd=None, required=False) -> bo
     return False
 
 
+def fetch_pinned_asset(url: str, sha256: str, dest) -> Path:
+    """Descarga un binario pineado verificando su SHA-256, con caché en dest.
+
+    Si dest ya existe con el hash esperado, no descarga (caché). Si el hash
+    del archivo descargado no coincide con el pin, elimina el archivo y aborta
+    el build: un binario externo alterado nunca debe entrar al artefacto.
+    Devuelve la ruta de dest.
+    """
+    import hashlib
+    import urllib.request
+
+    dest = Path(dest)
+
+    def _sha256_of(path: Path) -> str:
+        digest = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    if dest.exists() and _sha256_of(dest) == sha256:
+        log(f"{dest.name}: en caché (checksum OK)")
+        return dest
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    log(f"Descargando {url} -> {dest}")
+    with urllib.request.urlopen(url, timeout=BUILD_SUBPROCESS_TIMEOUT) as resp, \
+            open(dest, "wb") as out:
+        shutil.copyfileobj(resp, out)
+
+    actual = _sha256_of(dest)
+    if actual != sha256:
+        dest.unlink()
+        log(f"ERROR: checksum de {dest.name} no coincide con el pin")
+        log(f"  esperado: {sha256}")
+        log(f"  obtenido: {actual}")
+        sys.exit(1)
+    log(f"{dest.name}: descargado y verificado (SHA-256 OK)")
+    return dest
+
+
 def check_pyinstaller() -> None:
     """Verifica que PyInstaller esté instalado (ofrece instalarlo si falta).
 
@@ -128,7 +200,8 @@ def common_pyinstaller_args(
 
     `data_sep` es el separador de `--add-data` según el SO: ';' en Windows,
     ':' en Linux/macOS. `extra_collect_all` añade paquetes `--collect-all`
-    específicos de la plataforma (p. ej. pycaw en Windows, sounddevice en Linux).
+    específicos de la plataforma (p. ej. pycaw en Windows, sounddevice en
+    Linux y macOS).
     """
     return [
         sys.executable, "-m", "PyInstaller",

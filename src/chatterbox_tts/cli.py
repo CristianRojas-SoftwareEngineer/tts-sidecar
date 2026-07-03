@@ -437,6 +437,12 @@ def cmd_setup(args):
     En Linux, ejecutado desde un AppImage, también integra el comando en el PATH
     (symlink de $APPIMAGE en ~/.local/bin); --remove-path revierte ese symlink
     sin correr chequeos ni descargas.
+
+    setup es provisión, no diagnóstico: el FAIL del chequeo de audio se degrada
+    a WARN y la provisión continúa (la síntesis a archivo con `speak --output`
+    funciona sin subsistema de sonido, p. ej. en hosts headless/SSH). Cualquier
+    otro FAIL sigue abortando. El rol diagnóstico lo cumple `doctor`, que
+    conserva el FAIL de audio con salida 1.
     """
     if getattr(args, "remove_path", False):
         _remove_linux_path()
@@ -450,9 +456,17 @@ def cmd_setup(args):
     # el symlink es inocuo y reversible con --remove-path.
     _integrate_linux_path()
 
-    # 2. Chequeos de entorno (implementación compartida con doctor).
+    # 2. Chequeos de entorno (implementación compartida con doctor). El FAIL
+    # de audio es advisory aquí: sin sonido la reproducción no funcionará,
+    # pero la síntesis a archivo sí, y bloquear la descarga del modelo dejaría
+    # al host permanentemente sin provisión. Los demás FAIL abortan.
     for status, name, detail in _environment_checks():
         if status == "FAIL":
+            if name == "Audio library":
+                print(f"[WARN] {name}: {detail}")
+                print("[WARN] La reproducción de audio no estará disponible; "
+                      "la síntesis a archivo (speak --output) funciona igual.")
+                continue
             print(f"[FAIL] {name}: {detail}", file=sys.stderr)
             sys.exit(1)
         print(f"[{status}] {name}: {detail}")

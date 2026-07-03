@@ -543,7 +543,8 @@ class TestSetupLinuxPath:
 
     def test_setup_integra_path_antes_de_chequeos_fallidos(self, monkeypatch, tmp_path, capsys):
         # L-02: un host degradado (chequeo FAIL) debe obtener igualmente el
-        # comando en el PATH, en paridad con Windows y macOS.
+        # comando en el PATH, en paridad con Windows y macOS. Se usa un FAIL
+        # no-audio porque el de audio ya no aborta setup (A-01).
         if not _symlinks_supported(tmp_path):
             pytest.skip("el entorno no permite crear symlinks")
         import chatterbox_tts.cli as cli
@@ -552,7 +553,7 @@ class TestSetupLinuxPath:
         appimage = self._linux_appimage_env(monkeypatch, tmp_path)
         monkeypatch.setattr(
             cli, "_environment_checks",
-            lambda: [("FAIL", "Audio", "sin subsistema de audio")],
+            lambda: [("FAIL", "Chatterbox TTS", "NO INSTALADO")],
         )
 
         with pytest.raises(SystemExit):
@@ -561,6 +562,53 @@ class TestSetupLinuxPath:
         link = home / ".local" / "bin" / "tts-sidecar"
         assert link.is_symlink()
         assert link.resolve() == appimage.resolve()
+
+
+class TestSetupAudioAdvisory:
+    """A-01: setup es provisión, no diagnóstico — el FAIL de audio se degrada
+    a WARN y la provisión continúa; doctor conserva el FAIL con salida 1."""
+
+    def test_fail_de_audio_no_aborta_setup_y_llega_a_la_provision(self, monkeypatch, capsys):
+        import chatterbox_tts.cli as cli
+
+        monkeypatch.setattr(
+            cli, "_environment_checks",
+            lambda: [("PASS", "Chatterbox TTS", "0.3.0"),
+                     ("FAIL", "Audio library", "sin subsistema de sonido")],
+        )
+        with patch("chatterbox_tts.model_cache.is_model_cached", return_value=True):
+            cli.cmd_setup(MockArgs(remove_path=False))  # no debe lanzar SystemExit
+
+        out = capsys.readouterr().out
+        assert "[WARN] Audio library" in out
+        assert "speak --output" in out
+        assert "Provisión completa" in out
+
+    def test_fail_no_audio_sigue_abortando_setup(self, monkeypatch, capsys):
+        import chatterbox_tts.cli as cli
+
+        monkeypatch.setattr(
+            cli, "_environment_checks",
+            lambda: [("FAIL", "Chatterbox TTS", "NO INSTALADO")],
+        )
+        with pytest.raises(SystemExit):
+            cli.cmd_setup(MockArgs(remove_path=False))
+
+        assert "[FAIL] Chatterbox TTS" in capsys.readouterr().err
+
+    def test_doctor_conserva_el_fail_de_audio_con_salida_1(self, monkeypatch, capsys):
+        import chatterbox_tts.cli as cli
+
+        monkeypatch.setattr(
+            cli, "_environment_checks",
+            lambda: [("FAIL", "Audio library", "sin subsistema de sonido")],
+        )
+        with patch("chatterbox_tts.model_cache.is_model_cached", return_value=True):
+            with pytest.raises(SystemExit) as exc_info:
+                cli.cmd_doctor(MockArgs(json=False))
+
+        assert exc_info.value.code == 1
+        assert "[FAIL] Audio library" in capsys.readouterr().out
 
 
 class TestCmdSpeakTextVacio:

@@ -59,10 +59,10 @@ jobs:
           command: Copy-Item dist/tts-sidecar-*-setup.exe dist/tts-sidecar-setup.exe
       - store_artifacts:
           path: dist/tts-sidecar-setup.exe
-          destination: tts-sidecar-win32-x64-setup.exe
+          destination: tts-sidecar-win32-x86_64-setup.exe
       - store_artifacts:
           path: dist/tts-sidecar
-          destination: tts-sidecar-win32-x64/
+          destination: tts-sidecar-win32-x86_64/
 
   build-linux-x64:
     docker:
@@ -78,9 +78,9 @@ jobs:
           package-manager: pip
           pip-dependency-file: requirements.txt
       - run:
-          name: Install PyInstaller and appimage-builder
+          name: Install PyInstaller
           command: |
-            pip install pyinstaller==6.21.0 appimage-builder==1.1.0
+            pip install pyinstaller==6.21.0
       - run:
           name: Build Linux x64
           command: python scripts/build_linux.py --arch x86_64
@@ -118,7 +118,7 @@ jobs:
           command: |
             python -m pip install --upgrade pip
             python -m pip install -r requirements.txt
-            python -m pip install pyinstaller==6.21.0 appimage-builder==1.1.0
+            python -m pip install pyinstaller==6.21.0
       - run:
           name: Build Linux ARM64
           command: python scripts/build_linux.py --arch arm64

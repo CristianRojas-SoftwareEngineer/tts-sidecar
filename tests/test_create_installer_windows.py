@@ -22,7 +22,17 @@ def iss(tmp_path):
 
 
 def test_nombre_del_instalador_incluye_version_y_sufijo(iss):
-    assert "OutputBaseFilename=tts-sidecar-9.9.9-x64-setup" in iss
+    # A-03: vocabulario de arquitectura unificado al estilo `uname -m` (x86_64),
+    # en paridad con los AppImage de Linux.
+    assert "OutputBaseFilename=tts-sidecar-9.9.9-x86_64-setup" in iss
+
+
+def test_setup_postinstalacion_persiste_la_consola(iss):
+    # W-03: el setup post-instalación se lanza vía `cmd /k` para que la consola
+    # quede abierta mostrando el resultado (éxito o fallo) hasta que el usuario
+    # la cierre — paridad con la Terminal persistente del .command de macOS.
+    assert 'Filename: {cmd}; Parameters: "/k ""{app}\\tts-sidecar.exe"" setup"' in iss
+    assert "postinstall skipifsilent runasoriginaluser nowait" in iss
 
 
 def test_agrega_path_condicionado_por_needsaddpath(iss):

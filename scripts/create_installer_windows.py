@@ -66,7 +66,9 @@ def generate_iss(source_dir: Path, output_dir: Path, version: str, info_after: P
     lines.append("DefaultDirName={autopf}\\tts-sidecar")
     lines.append("DefaultGroupName=tts-sidecar")
     lines.append("OutputDir=" + output_win)
-    lines.append("OutputBaseFilename=tts-sidecar-" + version + "-x64-setup")
+    # Vocabulario de arquitectura unificado al estilo `uname -m` (x86_64/aarch64),
+    # en paridad con los AppImage de Linux (A-03).
+    lines.append("OutputBaseFilename=tts-sidecar-" + version + "-x86_64-setup")
     lines.append("WizardStyle=modern")
     lines.append("PrivilegesRequired=admin")
     lines.append("ArchitecturesAllowed=x64compatible")
@@ -105,7 +107,10 @@ def generate_iss(source_dir: Path, output_dir: Path, version: str, info_after: P
     lines.append("[Run]")
     # Checkbox post-instalación: descarga el modelo en el contexto del usuario (sin elevación)
     # para que la caché de HuggingFace quede en el perfil del usuario real, no del admin.
-    lines.append('Filename: {app}\\tts-sidecar.exe; Parameters: setup; Description: "Descargar ahora el modelo de voz (setup)"; Flags: postinstall skipifsilent runasoriginaluser nowait')
+    # Se lanza vía `cmd /k` para que la consola persista al terminar (W-03): si setup
+    # falla, el error queda visible en lugar de desaparecer con la ventana — paridad
+    # con la Terminal persistente del .command de macOS.
+    lines.append('Filename: {cmd}; Parameters: "/k ""{app}\\tts-sidecar.exe"" setup"; Description: "Descargar ahora el modelo de voz (setup)"; Flags: postinstall skipifsilent runasoriginaluser nowait')
     lines.append("")
     lines.append("[Code]")
     lines.append("function NeedsAddPath(Param: string): boolean;")
@@ -265,7 +270,7 @@ def main():
             print("STDERR:", result.stderr, file=sys.stderr)
             sys.exit(1)
 
-        installer_name = f"tts-sidecar-{version}-x64-setup.exe"
+        installer_name = f"tts-sidecar-{version}-x86_64-setup.exe"
         installer_path = output_dir / installer_name
 
         if installer_path.exists():
@@ -273,7 +278,7 @@ def main():
             print(f"Installer created: {installer_path}")
             print(f"Size: {size_mb:.1f} MB")
         else:
-            candidates = list(output_dir.glob("tts-sidecar-*-x64-setup.exe"))
+            candidates = list(output_dir.glob("tts-sidecar-*-x86_64-setup.exe"))
             if candidates:
                 p = candidates[0]
                 size_mb = p.stat().st_size / 1024 / 1024

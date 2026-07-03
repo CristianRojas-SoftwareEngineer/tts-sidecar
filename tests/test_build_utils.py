@@ -7,7 +7,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 import build_utils
-from build_utils import get_version, bundle_size_mb, ensure_build_dependency
+from build_utils import (
+    get_version, bundle_size_mb, ensure_build_dependency, fetch_pinned_asset,
+)
 
 
 def test_lee_version_de_init_sintetico(tmp_path):
@@ -110,6 +112,53 @@ class TestEnsureBuildDependency:
             ensure_build_dependency(
                 "herramienta", lambda: False, ["pip", "install", "x"], required=True,
             )
+
+
+class TestFetchPinnedAsset:
+    """L-03: descarga pineada por URL + SHA-256 del tooling del AppImage
+    (appimagetool y runtime estático). Sin red: se sirve un archivo local
+    vía file:// y se verifica la rama de caché y la de checksum."""
+
+    CONTENIDO = b"binario pineado de prueba"
+    # SHA-256 precomputado de CONTENIDO.
+    SHA_OK = __import__("hashlib").sha256(CONTENIDO).hexdigest()
+
+    def _servir(self, tmp_path) -> str:
+        src = tmp_path / "asset.bin"
+        src.write_bytes(self.CONTENIDO)
+        return src.resolve().as_uri()
+
+    def test_descarga_y_verifica_checksum(self, tmp_path):
+        url = self._servir(tmp_path)
+        dest = tmp_path / "cache" / "asset.bin"
+
+        resultado = fetch_pinned_asset(url, self.SHA_OK, dest)
+
+        assert resultado == dest
+        assert dest.read_bytes() == self.CONTENIDO
+
+    def test_checksum_incorrecto_aborta_y_elimina_el_archivo(self, tmp_path):
+        url = self._servir(tmp_path)
+        dest = tmp_path / "cache" / "asset.bin"
+
+        with pytest.raises(SystemExit):
+            fetch_pinned_asset(url, "0" * 64, dest)
+        assert not dest.exists()
+
+    def test_cache_con_checksum_valido_no_descarga(self, tmp_path, monkeypatch):
+        dest = tmp_path / "cache" / "asset.bin"
+        dest.parent.mkdir(parents=True)
+        dest.write_bytes(self.CONTENIDO)
+
+        import urllib.request
+
+        def _red_prohibida(*a, **k):
+            raise AssertionError("no debe descargar si la caché tiene el hash pineado")
+
+        monkeypatch.setattr(urllib.request, "urlopen", _red_prohibida)
+
+        resultado = fetch_pinned_asset("https://example.invalid/asset.bin", self.SHA_OK, dest)
+        assert resultado == dest
 
 
 def test_bundle_size_mb_suma_archivos_anidados(tmp_path):

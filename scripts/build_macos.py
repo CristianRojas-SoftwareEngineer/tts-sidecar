@@ -3,7 +3,9 @@
 Build script for macOS x64 and ARM64 apps using PyInstaller --onedir.
 Produces a .app bundle (macOS application) inside the --onedir folder.
 
-macOS uses afplay (built-in) for audio — no sounddevice or pycaw needed.
+macOS plays audio with afplay (built-in), but device enumeration
+(doctor/setup/devices) uses sounddevice, so the bundle must collect it
+(PortAudio binary included); pycaw is Windows-only and not needed here.
 """
 
 import os
@@ -20,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from build_utils import (
     log, StageTimer, BuildTimer, copy_license_files, get_version,
     check_pyinstaller, common_pyinstaller_args, bundle_size_mb,
-    ensure_icns, ensure_build_dependency,
+    ensure_icns, ensure_build_dependency, module_available,
     BUILD_SUBPROCESS_TIMEOUT, PYINSTALLER_TIMEOUT,
 )
 
@@ -30,6 +32,18 @@ def check_dependencies():
     check_pyinstaller()
 
     with StageTimer("CheckDeps", "Verificando dependencias"):
+        # sounddevice es dependencia del producto en macOS: afplay reproduce,
+        # pero doctor/setup/devices enumeran dispositivos con sounddevice
+        # (audio.py). Sin ella en el bundle, todo Mac congelado reportaría
+        # FAIL de audio. required. Sin pin: es dependencia de runtime
+        # gobernada por requirements.txt, no una herramienta de build.
+        ensure_build_dependency(
+            "sounddevice",
+            lambda: module_available("sounddevice"),
+            install_cmd=[sys.executable, "-m", "pip", "install", "sounddevice"],
+            required=True,
+        )
+
         # create-dmg es un script de shell (Homebrew), no un paquete de
         # PyPI: se invoca como binario vía subprocess, no se importa como
         # módulo Python. Es herramienta del empaquetador (opcional): sin
@@ -60,10 +74,13 @@ def build_macos(target_arch="universal2"):
             entry_point = PROJECT_ROOT / "bin" / "tts-sidecar"
 
         with StageTimer("PyInstaller", "Compilando con PyInstaller (9-15 min)"):
-            # No sounddevice, no pycaw — afplay (built-in) es el player de macOS.
+            # afplay (built-in) es el player de macOS, pero la enumeración de
+            # dispositivos (doctor/setup/devices) usa sounddevice: se recolecta
+            # completo para que el binario de PortAudio viaje en el bundle.
             pyinstaller_args = common_pyinstaller_args(
                 entry_point, PROJECT_ROOT, DIST_DIR, BUILD_DIR,
                 data_sep=":",
+                extra_collect_all=["sounddevice"],
             )
             log(f"Ejecutando: pyinstaller {' '.join(pyinstaller_args[2:])}")
             try:
