@@ -2,10 +2,28 @@
 
 Sistema de síntesis de voz (TTS) **100% local** con clonación de voz en **español latinoamericano**.
 
-- **Motor**: Chatterbox Multilingual V3 (MIT, 23+ idiomas)
+- **Motor**: Chatterbox Multilingual V3 ([modelo MIT](https://huggingface.co/ResembleAI/Chatterbox-Multilingual-es-mx-latam), 23+ idiomas)
 - **Clonación de voz**: Usa tu propia voz como referencia
-- **Multiplataforma**: Windows, Linux, macOS (x64 y ARM64)
+- **Multiplataforma**: Windows x64, Linux x64/ARM64, macOS ARM64 (Apple Silicon)
 - **Consumible via CLI**: Invocable desde cualquier lenguaje de programación
+
+## Uso ético y responsable
+
+`tts-sidecar` clona voces arbitrarias y **el audio que genera no lleva marca de
+agua** (el watermark de PerthNet está desactivado), por lo que no es distinguible
+por medios técnicos de una grabación real. Esto exige un uso responsable:
+
+- **Consentimiento**: clona únicamente voces para las que tengas permiso explícito
+  de la persona titular. No clones la voz de nadie sin su autorización.
+- **No suplantación**: no uses la herramienta para hacerte pasar por otra persona,
+  cometer fraude, difamar, ni producir contenido engañoso.
+- **Divulgación**: al publicar o compartir audio sintetizado, indícalo como tal.
+  Recuerda que el audio no contiene marca de agua que lo identifique.
+- **Reporte**: si detectas un uso indebido de este proyecto, repórtalo abriendo un
+  [Issue](https://github.com/CristianRojas-SoftwareEngineer/tts-sidecar/issues).
+
+El proyecto no impone barreras técnicas (fácilmente sorteables en software libre):
+la responsabilidad del uso legítimo recae en quien lo emplea.
 
 ## Características
 
@@ -19,21 +37,26 @@ Sistema de síntesis de voz (TTS) **100% local** con clonación de voz en **espa
 
 ### Opción 1: Descargar binario pre-compilado
 
-Descarga el ejecutable para tu plataforma desde [Releases](https://github.com/resemble-ai/tts-sidecar/releases):
+Descarga el ejecutable para tu plataforma desde [Releases](https://github.com/CristianRojas-SoftwareEngineer/tts-sidecar/releases):
 
 ```bash
-# Windows (instalador): ejecuta el .exe del instalador. Agrega tts-sidecar al PATH,
-# muestra una página informativa sobre el modelo y ofrece una casilla para
-# descargarlo (ejecuta 'tts-sidecar setup') al terminar.
+# Windows: ejecuta el instalador tts-sidecar-<versión>-x86_64-setup.exe.
+# Agrega tts-sidecar al PATH, muestra una página informativa sobre el modelo y
+# ofrece una casilla para descargarlo (ejecuta 'tts-sidecar setup') al terminar.
 
-# Linux: deja el binario accesible (p. ej. en el PATH) y provisiona el modelo
-chmod +x tts-sidecar-linux-x86_64
-./tts-sidecar-linux-x86_64 setup
+# Linux: descarga el AppImage de tu arquitectura, hazlo ejecutable y provisiona
+chmod +x tts-sidecar-<versión>-x86_64.AppImage    # o -aarch64.AppImage en ARM64
+./tts-sidecar-<versión>-x86_64.AppImage setup
+# → setup también crea el symlink ~/.local/bin/tts-sidecar para invocarlo por nombre
 
-# macOS: igual que Linux
-chmod +x tts-sidecar-macos-universal2
-./tts-sidecar-macos-universal2 setup
+# macOS (Apple Silicon): monta tts-sidecar-<versión>-arm64.dmg, arrastra el .app
+# a Aplicaciones y ejecuta el script "Instalar (PATH + modelo).command" incluido
+# en el volumen. El script pide tu contraseña de administrador (sudo) para crear
+# el symlink en /usr/local/bin y luego ofrece ejecutar 'setup' como tu usuario.
 ```
+
+> Mac Intel (x86_64) no está soportado: el toolchain actual (torch≥2.3) no
+> publica wheels macOS x86_64.
 
 ### Provisión del modelo (`setup`)
 
@@ -166,9 +189,14 @@ License v3 (ver [LICENSE](LICENSE)). Es software libre y de uso comercial permit
 condición copyleft de que los trabajos derivados que se distribuyan se liberen bajo la misma
 licencia.
 
-El **modelo de voz** Chatterbox Multilingual V3 y todas las **dependencias** empaquetadas
-conservan sus propias licencias permisivas (MIT/BSD/Apache 2.0), compatibles con GPLv3. El
-detalle de atribuciones está en [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
+El **modelo de voz** Chatterbox Multilingual V3 se distribuye bajo licencia
+[**MIT**](https://huggingface.co/ResembleAI/Chatterbox-Multilingual-es-mx-latam) (verificada
+en HuggingFace), al igual que el modelo base
+[`ResembleAI/chatterbox`](https://huggingface.co/ResembleAI/chatterbox). Las **dependencias**
+empaquetadas conservan sus propias licencias, en su mayoría permisivas (MIT/BSD/Apache 2.0),
+con algunas de copyleft compatible con GPLv3 (MPL-2.0, LGPL-2.1+, GPLv3+) y los runtimes
+propietarios redistribuibles de NVIDIA CUDA en el build de Linux. El detalle completo y
+verificado está en [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
 
 ## Documentación
 
@@ -177,3 +205,10 @@ detalle de atribuciones está en [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - Arquitectura del sistema
 - [docs/DAEMON-MODE.md](docs/DAEMON-MODE.md) - Daemon mode (servidor persistente)
 - [docs/BUILD.md](docs/BUILD.md) - Guía de compilación PyInstaller
+
+## Comunidad y soporte
+
+- [CHANGELOG.md](CHANGELOG.md) - Historial de cambios por versión
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Cómo contribuir (setup, tests, estilo, flujo de PR)
+- [SECURITY.md](SECURITY.md) - Política de seguridad y cómo reportar vulnerabilidades
+- [Issues](https://github.com/CristianRojas-SoftwareEngineer/tts-sidecar/issues) - Reporte de bugs y solicitudes de función

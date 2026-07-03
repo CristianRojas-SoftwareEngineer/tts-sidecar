@@ -1,13 +1,21 @@
 """Tests de la selección determinista de snapshot en la caché de HuggingFace.
 
-Cubre _resolve_cached_snapshot (refs/main con fallback a mtime) e
-is_model_cached sobre una caché sintética en tmp_path.
+Cubre _resolve_cached_snapshot (refs/main con fallback a mtime), la resolución
+de hub_cache_path (precedencia HF_HUB_CACHE/HF_HOME/default) e is_model_cached
+sobre una caché sintética en tmp_path.
 """
 
+import contextlib
+import importlib
 import os
 import time
+from pathlib import Path
 
-from chatterbox_tts.model_cache import _resolve_cached_snapshot, is_model_cached
+from chatterbox_tts.model_cache import (
+    _resolve_cached_snapshot,
+    hub_cache_path,
+    is_model_cached,
+)
 
 ES_MX_FOLDER = "models--ResembleAI--Chatterbox-Multilingual-es-mx-latam"
 
@@ -171,29 +179,94 @@ class TestParametrosUnificados:
         assert len(loads) == 2
 
 
+@contextlib.contextmanager
+def _hf_env(**env):
+    """Fija las variables de entorno de HF y recarga constants; restaura al salir.
+
+    huggingface_hub.constants computa HF_HUB_CACHE en tiempo de import, así que
+    cambiar el entorno exige recargar el módulo para que el cambio surta efecto
+    (y recargarlo de nuevo al salir para no contaminar otros tests).
+    """
+    from huggingface_hub import constants
+
+    keys = ("HF_HOME", "HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE", "XDG_CACHE_HOME")
+    saved = {k: os.environ.get(k) for k in keys}
+    try:
+        for k in keys:
+            os.environ.pop(k, None)
+        for k, v in env.items():
+            os.environ[k] = v
+        importlib.reload(constants)
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        importlib.reload(constants)
+
+
+class TestHubCachePath:
+    def test_hf_hub_cache_tiene_precedencia(self, tmp_path):
+        custom = tmp_path / "hub-custom"
+        with _hf_env(HF_HUB_CACHE=str(custom), HF_HOME=str(tmp_path / "hf-home")):
+            assert hub_cache_path() == custom
+
+    def test_hf_home_define_la_raiz(self, tmp_path):
+        home = tmp_path / "hf-home"
+        with _hf_env(HF_HOME=str(home)):
+            assert hub_cache_path() == home / "hub"
+
+    def test_fallback_al_default(self):
+        with _hf_env():
+            assert hub_cache_path() == Path("~/.cache/huggingface/hub").expanduser()
+
+
 class TestIsModelCached:
     def _fake_hub(self, tmp_path, monkeypatch):
-        """Redirige ~/.cache/huggingface/hub a una caché sintética."""
+        """Redirige la caché de HuggingFace a una caché sintética."""
         hub = tmp_path / "hub"
         hub.mkdir()
-        real_expanduser = os.path.expanduser
-        monkeypatch.setattr(
-            os.path,
-            "expanduser",
-            lambda p: str(hub) if p == "~/.cache/huggingface/hub" else real_expanduser(p),
-        )
+        from huggingface_hub import constants
+        monkeypatch.setattr(constants, "HF_HUB_CACHE", str(hub))
         return hub
 
     def test_sin_cache_devuelve_false(self, tmp_path, monkeypatch):
         self._fake_hub(tmp_path, monkeypatch)
         assert is_model_cached("es-mx-latam") is False
 
-    def test_snapshot_con_checkpoint_devuelve_true(self, tmp_path, monkeypatch):
+    def test_snapshot_con_checkpoint_y_ve_devuelve_true(self, tmp_path, monkeypatch):
         hub = self._fake_hub(tmp_path, monkeypatch)
         model_dir = hub / ES_MX_FOLDER
         snap = _make_snapshot(model_dir, "abc123")
         _set_ref_main(model_dir, "abc123")
         (snap / "t3_es_mx_latam.safetensors").write_bytes(b"\x00")
+        (snap / "ve.safetensors").write_bytes(b"\x00")
+        assert is_model_cached("es-mx-latam") is True
+
+    def test_t3_presente_sin_ve_devuelve_false(self, tmp_path, monkeypatch):
+        """El Voice Encoder es obligatorio: sin ve.safetensors resoluble, el
+        primer speak dispararía una descarga (fuga de la promesa offline)."""
+        hub = self._fake_hub(tmp_path, monkeypatch)
+        model_dir = hub / ES_MX_FOLDER
+        snap = _make_snapshot(model_dir, "abc123")
+        _set_ref_main(model_dir, "abc123")
+        (snap / "t3_es_mx_latam.safetensors").write_bytes(b"\x00")
+        assert is_model_cached("es-mx-latam") is False
+
+    def test_ve_en_el_modelo_base_tambien_cuenta(self, tmp_path, monkeypatch):
+        """ve.safetensors puede residir en la caché del modelo base."""
+        hub = self._fake_hub(tmp_path, monkeypatch)
+        model_dir = hub / ES_MX_FOLDER
+        snap = _make_snapshot(model_dir, "abc123")
+        _set_ref_main(model_dir, "abc123")
+        (snap / "t3_es_mx_latam.safetensors").write_bytes(b"\x00")
+
+        base_dir = hub / "models--ResembleAI--chatterbox"
+        base_snap = _make_snapshot(base_dir, "base01")
+        _set_ref_main(base_dir, "base01")
+        (base_snap / "ve.safetensors").write_bytes(b"\x00")
         assert is_model_cached("es-mx-latam") is True
 
     def test_valida_el_snapshot_de_refs_main_no_otro(self, tmp_path, monkeypatch):
@@ -203,6 +276,7 @@ class TestIsModelCached:
         now = time.time()
         stale = _make_snapshot(model_dir, "vieja", mtime=now)
         (stale / "t3_es_mx_latam.safetensors").write_bytes(b"\x00")
+        (stale / "ve.safetensors").write_bytes(b"\x00")
         _make_snapshot(model_dir, "actual", mtime=now - 1000)  # sin checkpoint
         _set_ref_main(model_dir, "actual")
         assert is_model_cached("es-mx-latam") is False

@@ -119,6 +119,46 @@ def remove_voice(name: str) -> bool:
     return False
 
 
+def register_voice_files(
+    name: str,
+    reference_audio: str,
+    speech_audio: str,
+    force: bool = False,
+) -> tuple[str, str]:
+    """Valida y copia los audios de una voz al registro de usuario, SIN el modelo.
+
+    Es el núcleo de `voice add`: validación de carga con librosa (audio ilegible
+    no debe dejar una voz rota que falle recién en la síntesis), colisión de
+    nombres con precedencia usuario→fábrica, y copia de los dos WAV. No importa
+    torch ni instancia el motor: la precomputación de conditionals se difiere al
+    primer `speak` con la voz.
+
+    Raises:
+        ValueError: si algún audio no es cargable, o si la voz ya existe
+                    (usuario o fábrica) y no se pasó force.
+    """
+    # Import local: librosa es pesada y solo la necesita este comando.
+    import librosa
+    for label, path in (("reference", reference_audio), ("speech", speech_audio)):
+        try:
+            librosa.load(path, sr=24000, duration=1.0)
+        except Exception as e:
+            raise ValueError(f"El audio de {label} ({path}) no es cargable: {e}")
+
+    # La colisión con una voz existente (usuario o fábrica homónima) exige --force
+    if not force and _resolve_voice_dir(name) is not None:
+        raise ValueError(f"La voz '{name}' ya existe. Usa --force para sobrescribirla.")
+
+    target = voice_dir(name)
+    os.makedirs(target, exist_ok=True)
+
+    ref_path = os.path.join(target, "reference.wav")
+    speech_path = os.path.join(target, "speech.wav")
+    shutil.copy2(reference_audio, ref_path)
+    shutil.copy2(speech_audio, speech_path)
+    return (ref_path, speech_path)
+
+
 def voice_paths(name: str) -> tuple[str, str]:
     """
     Resolver el nombre de una voz a sus rutas de audio (reference, speech).

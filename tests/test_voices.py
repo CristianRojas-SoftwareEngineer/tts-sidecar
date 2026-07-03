@@ -32,6 +32,70 @@ def _make_voice(root, name, reference=True, speech=True):
     return voice
 
 
+class TestRegisterVoiceFiles:
+    """R-01: el registro de voces valida y copia sin instanciar el motor."""
+
+    def _audios(self, tmp_path):
+        ref = tmp_path / "timbre.wav"
+        speech = tmp_path / "habla.wav"
+        ref.write_bytes(b"RIFF-ref")
+        speech.write_bytes(b"RIFF-speech")
+        return ref, speech
+
+    def _mock_librosa(self, monkeypatch, fail_on=None):
+        import types
+
+        def fake_load(path, sr=None, duration=None):
+            if fail_on and str(fail_on) in str(path):
+                raise RuntimeError("audio ilegible")
+            return ([0.0], sr)
+
+        monkeypatch.setitem(
+            __import__("sys").modules, "librosa", types.SimpleNamespace(load=fake_load)
+        )
+
+    def test_registra_sin_motor(self, voice_roots, tmp_path, monkeypatch):
+        user_root, _ = voice_roots
+        ref, speech = self._audios(tmp_path)
+        self._mock_librosa(monkeypatch)
+
+        ref_path, speech_path = voices.register_voice_files("nueva", str(ref), str(speech))
+
+        assert (user_root / "nueva" / "reference.wav").read_bytes() == b"RIFF-ref"
+        assert (user_root / "nueva" / "speech.wav").read_bytes() == b"RIFF-speech"
+        assert ref_path.endswith("reference.wav")
+        assert speech_path.endswith("speech.wav")
+
+    def test_audio_ilegible_no_deja_voz_rota(self, voice_roots, tmp_path, monkeypatch):
+        user_root, _ = voice_roots
+        ref, speech = self._audios(tmp_path)
+        self._mock_librosa(monkeypatch, fail_on="habla.wav")
+
+        with pytest.raises(ValueError, match="no es cargable"):
+            voices.register_voice_files("rota", str(ref), str(speech))
+
+        assert not (user_root / "rota").exists()
+
+    def test_colision_sin_force_se_rechaza(self, voice_roots, tmp_path, monkeypatch):
+        user_root, _ = voice_roots
+        _make_voice(user_root, "existente")
+        ref, speech = self._audios(tmp_path)
+        self._mock_librosa(monkeypatch)
+
+        with pytest.raises(ValueError, match="ya existe"):
+            voices.register_voice_files("existente", str(ref), str(speech))
+
+    def test_force_sobrescribe(self, voice_roots, tmp_path, monkeypatch):
+        user_root, _ = voice_roots
+        _make_voice(user_root, "existente")
+        ref, speech = self._audios(tmp_path)
+        self._mock_librosa(monkeypatch)
+
+        voices.register_voice_files("existente", str(ref), str(speech), force=True)
+
+        assert (user_root / "existente" / "reference.wav").read_bytes() == b"RIFF-ref"
+
+
 class TestResolveVoiceDir:
     def test_voz_completa_se_resuelve(self, voice_roots):
         user_root, _ = voice_roots
@@ -140,7 +204,9 @@ class TestCmdVoiceRemoveErroresDeIO:
         with pytest.raises(SystemExit) as exc_info:
             cli.cmd_voice_remove(self._args("no_existe"))
 
-        assert exc_info.value.code == 1
+        # Contrato de exit codes (T9/R-06): voz no encontrada → EXIT_NOT_FOUND (3),
+        # distinto del EXIT_ERROR (1) genérico del caso PermissionError de arriba.
+        assert exc_info.value.code == 3
         err = capsys.readouterr().err
         assert "no encontrada" in err
         assert "en uso" not in err

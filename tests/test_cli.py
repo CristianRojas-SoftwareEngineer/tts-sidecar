@@ -94,19 +94,32 @@ class TestCmdVoiceList:
 
 
 class TestCmdVoiceAdd:
-    @patch("chatterbox_tts.engine.ChatterboxEngine")
-    def test_cmd_voice_add_success(self, mock_engine_cls, capsys):
+    @patch("chatterbox_tts.model_cache.is_model_cached", return_value=True)
+    @patch("chatterbox_tts.voices.register_voice_files")
+    def test_cmd_voice_add_success_sin_motor(self, mock_register, _cached, capsys):
+        """R-01: voice add registra sin instanciar ChatterboxEngine."""
         from chatterbox_tts.cli import cmd_voice_add
 
-        mock_engine = MagicMock()
-        mock_engine.add_voice.return_value = ("/path/to/ref.wav", "/path/to/speech.wav")
-        mock_engine_cls.return_value = mock_engine
+        mock_register.return_value = ("/path/to/ref.wav", "/path/to/speech.wav")
 
-        cmd_voice_add(MockArgs(name="newvoice", reference="ref.wav", speech="speech.wav"))
+        with patch("chatterbox_tts.engine.ChatterboxEngine") as mock_engine_cls:
+            cmd_voice_add(MockArgs(name="newvoice", reference="ref.wav", speech="speech.wav"))
+            mock_engine_cls.assert_not_called()
 
         out = capsys.readouterr().out
         assert "Voz 'newvoice' registrada" in out
-        mock_engine.add_voice.assert_called_once()
+        mock_register.assert_called_once()
+
+    @patch("chatterbox_tts.model_cache.is_model_cached", return_value=False)
+    def test_cmd_voice_add_sin_modelo_remite_a_setup(self, _cached, capsys):
+        """R-01: sin modelo cacheado, voice add aborta remitiendo a setup."""
+        from chatterbox_tts.cli import cmd_voice_add
+
+        with pytest.raises(SystemExit):
+            cmd_voice_add(MockArgs(name="newvoice", reference="ref.wav", speech="speech.wav"))
+
+        err = capsys.readouterr().err
+        assert "setup" in err
 
 
 class TestCmdVoiceRemove:
@@ -297,8 +310,8 @@ class TestCmdSpeak:
         # engine.speak recibe el output_path y escribe el archivo directamente
         _, kwargs = engine.speak.call_args
         assert kwargs["output_path"] == "out.wav"
-        out = capsys.readouterr().out
-        assert "Audio guardado: out.wav" in out
+        err = capsys.readouterr().err
+        assert "Audio guardado: out.wav" in err
 
     @patch("chatterbox_tts.model_cache.is_model_cached", return_value=True)
     @patch("chatterbox_tts.audio.AudioPlayer")
@@ -437,7 +450,7 @@ class TestSetupLinuxPath:
         link = home / ".local" / "bin" / "tts-sidecar"
         assert link.is_symlink()
         assert link.resolve() == appimage.resolve()
-        assert "symlink creado" in capsys.readouterr().out
+        assert "symlink creado" in capsys.readouterr().err
 
     def test_actualiza_symlink_existente_idempotente(self, monkeypatch, tmp_path, capsys):
         if not _symlinks_supported(tmp_path):
@@ -480,7 +493,7 @@ class TestSetupLinuxPath:
 
         assert not link.is_symlink()
         assert link.read_text(encoding="utf-8") == "no soy un symlink"
-        assert "no se modifica" in capsys.readouterr().out
+        assert "no se modifica" in capsys.readouterr().err
 
     def test_remove_path_elimina_symlink(self, monkeypatch, tmp_path, capsys):
         if not _symlinks_supported(tmp_path):
@@ -495,7 +508,7 @@ class TestSetupLinuxPath:
         cmd_setup(MockArgs(remove_path=True))
 
         assert not link.exists()
-        assert "Symlink eliminado" in capsys.readouterr().out
+        assert "Symlink eliminado" in capsys.readouterr().err
 
     def test_remove_path_sin_symlink_informa(self, monkeypatch, tmp_path, capsys):
         from chatterbox_tts.cli import cmd_setup
@@ -504,7 +517,7 @@ class TestSetupLinuxPath:
 
         cmd_setup(MockArgs(remove_path=True))
 
-        assert "No hay nada que quitar" in capsys.readouterr().out
+        assert "No hay nada que quitar" in capsys.readouterr().err
 
     def test_remove_path_rechaza_archivo_regular(self, monkeypatch, tmp_path, capsys):
         from chatterbox_tts.cli import cmd_setup
@@ -534,7 +547,7 @@ class TestSetupLinuxPath:
 
         _integrate_linux_path()
 
-        out = capsys.readouterr().out
+        out = capsys.readouterr().err
         assert 'export PATH="$HOME/.local/bin:$PATH"' in out
         assert "~/.bashrc, ~/.zshrc" in out
         # La línea sugerida y los profiles nunca deben llevar backslashes
@@ -573,13 +586,13 @@ class TestSetupAudioAdvisory:
 
         monkeypatch.setattr(
             cli, "_environment_checks",
-            lambda: [("PASS", "Chatterbox TTS", "0.3.0"),
+            lambda: [("PASS", "Chatterbox TTS", "0.1.7"),
                      ("FAIL", "Audio library", "sin subsistema de sonido")],
         )
         with patch("chatterbox_tts.model_cache.is_model_cached", return_value=True):
             cli.cmd_setup(MockArgs(remove_path=False))  # no debe lanzar SystemExit
 
-        out = capsys.readouterr().out
+        out = capsys.readouterr().err
         assert "[WARN] Audio library" in out
         assert "speak --output" in out
         assert "Provisión completa" in out
@@ -609,6 +622,195 @@ class TestSetupAudioAdvisory:
 
         assert exc_info.value.code == 1
         assert "[FAIL] Audio library" in capsys.readouterr().out
+
+
+class TestManejoDeInterrupciones:
+    """R-02: Ctrl+C termina con código 130 y una línea a stderr, sin traceback."""
+
+    def test_ctrl_c_sale_130_sin_traceback(self, monkeypatch, capsys):
+        import chatterbox_tts.cli as cli
+
+        def _interrumpe(args):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(sys, "argv", ["tts-sidecar", "version"])
+        monkeypatch.setattr(cli, "cmd_version", _interrumpe)
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.main()
+
+        assert exc_info.value.code == 130
+        captured = capsys.readouterr()
+        assert "Interrumpido por el usuario." in captured.err
+        assert "Traceback" not in captured.err
+        assert "KeyboardInterrupt" not in captured.err
+
+
+class TestCodigosDeSalida:
+    """R-06: cada causa de error mapea a su código del contrato público congelado."""
+
+    def test_modelo_faltante_sale_2(self, capsys):
+        from chatterbox_tts.cli import _require_model_cached, EXIT_MODEL_MISSING
+
+        with patch("chatterbox_tts.model_cache.is_model_cached", return_value=False):
+            with pytest.raises(SystemExit) as exc:
+                _require_model_cached()
+        assert exc.value.code == EXIT_MODEL_MISSING
+        assert "setup" in capsys.readouterr().err
+
+    def test_texto_vacio_sale_4(self):
+        from chatterbox_tts.cli import cmd_speak, EXIT_INVALID_INPUT
+
+        with pytest.raises(SystemExit) as exc:
+            cmd_speak(MockArgs(text="   ", no_daemon=True))
+        assert exc.value.code == EXIT_INVALID_INPUT
+
+    def test_voz_inexistente_sale_3(self):
+        from chatterbox_tts.cli import cmd_speak, EXIT_NOT_FOUND
+
+        with patch("chatterbox_tts.model_cache.is_model_cached", return_value=True):
+            with pytest.raises(SystemExit) as exc:
+                cmd_speak(MockArgs(text="hola", voice="voz_inexistente", no_daemon=True))
+        assert exc.value.code == EXIT_NOT_FOUND
+
+    def test_daemon_inalcanzable_con_flag_sale_5(self):
+        from chatterbox_tts.cli import cmd_speak, EXIT_DAEMON_UNREACHABLE
+        from chatterbox_tts.daemon import DaemonIPCError
+
+        def _falla(args, va, sa):
+            raise DaemonIPCError("no se puede conectar al daemon")
+
+        with patch("chatterbox_tts.model_cache.is_model_cached", return_value=True), \
+                patch("chatterbox_tts.cli._synthesize_via_daemon", side_effect=_falla):
+            with pytest.raises(SystemExit) as exc:
+                cmd_speak(MockArgs(
+                    text="hola",
+                    voice_audio="/audio/voz.wav",
+                    speech_audio="/audio/habla.wav",
+                    daemon=True,
+                ))
+        assert exc.value.code == EXIT_DAEMON_UNREACHABLE
+
+    def test_error_generico_sale_1(self):
+        from chatterbox_tts.cli import cmd_devices, EXIT_ERROR
+
+        with patch("chatterbox_tts.audio.get_audio_devices", side_effect=RuntimeError("boom")):
+            with pytest.raises(SystemExit) as exc:
+                cmd_devices(MockArgs())
+        assert exc.value.code == EXIT_ERROR
+
+    def test_voice_add_colision_sale_4(self):
+        from chatterbox_tts.cli import cmd_voice_add, EXIT_INVALID_INPUT
+
+        with patch("chatterbox_tts.model_cache.is_model_cached", return_value=True), \
+                patch("chatterbox_tts.voices.register_voice_files",
+                      side_effect=ValueError("La voz 'dup' ya existe")):
+            with pytest.raises(SystemExit) as exc:
+                cmd_voice_add(MockArgs(name="dup"))
+        assert exc.value.code == EXIT_INVALID_INPUT
+
+    def test_daemon_start_fallido_sale_5(self):
+        import argparse
+        from chatterbox_tts.cli import cmd_daemon, EXIT_DAEMON_UNREACHABLE
+
+        args = argparse.Namespace(action="start", autorestart=False, max_retries=0, port=None)
+        manager = MagicMock()
+        manager.start.return_value = False
+
+        with patch("chatterbox_tts.model_cache.is_model_cached", return_value=True), \
+                patch("chatterbox_tts.daemon.DaemonManager", return_value=manager):
+            with pytest.raises(SystemExit) as exc:
+                cmd_daemon(args)
+        assert exc.value.code == EXIT_DAEMON_UNREACHABLE
+
+
+class TestCmdCleanup:
+    """El comando cleanup borra solo las rutas del proyecto, con confirmación."""
+
+    def _args(self, **kw):
+        import argparse
+        ns = argparse.Namespace(
+            model=kw.get("model", False),
+            voices=kw.get("voices", False),
+            all=kw.get("all", False),
+            dry_run=kw.get("dry_run", False),
+            cleanup_parser=MagicMock(),
+        )
+        return ns
+
+    def _fake_env(self, tmp_path, monkeypatch):
+        """Caché HF sintética con las dos carpetas del proyecto, una ajena,
+        y un directorio de voces de usuario."""
+        hub = tmp_path / "hub"
+        propio1 = hub / "models--ResembleAI--Chatterbox-Multilingual-es-mx-latam"
+        propio2 = hub / "models--ResembleAI--chatterbox"
+        ajeno = hub / "models--otro--proyecto"
+        for d in (propio1, propio2, ajeno):
+            d.mkdir(parents=True)
+        from huggingface_hub import constants
+        monkeypatch.setattr(constants, "HF_HUB_CACHE", str(hub))
+
+        voces = tmp_path / "voces"
+        (voces / "mi_voz").mkdir(parents=True)
+        monkeypatch.setattr("chatterbox_tts.voices.voices_root", lambda: str(voces))
+        return propio1, propio2, ajeno, voces
+
+    def test_dry_run_lista_sin_borrar(self, tmp_path, monkeypatch, capsys):
+        from chatterbox_tts.cli import cmd_cleanup
+
+        propio1, propio2, ajeno, voces = self._fake_env(tmp_path, monkeypatch)
+
+        cmd_cleanup(self._args(all=True, dry_run=True))
+
+        out = capsys.readouterr().out
+        assert "dry-run" in out
+        assert str(propio1) in out and str(propio2) in out and str(voces) in out
+        assert propio1.exists() and propio2.exists() and voces.exists()
+
+    def test_borrado_selectivo_de_modelo_con_confirmacion(self, tmp_path, monkeypatch, capsys):
+        from chatterbox_tts.cli import cmd_cleanup
+
+        propio1, propio2, ajeno, voces = self._fake_env(tmp_path, monkeypatch)
+        monkeypatch.setattr("builtins.input", lambda _: "s")
+
+        cmd_cleanup(self._args(model=True))
+
+        assert not propio1.exists() and not propio2.exists()
+        assert ajeno.exists(), "cleanup nunca toca carpetas ajenas de la caché HF"
+        assert voces.exists(), "--model no borra las voces de usuario"
+
+    def test_borrado_de_voces_no_toca_el_modelo(self, tmp_path, monkeypatch, capsys):
+        from chatterbox_tts.cli import cmd_cleanup
+
+        propio1, propio2, ajeno, voces = self._fake_env(tmp_path, monkeypatch)
+        monkeypatch.setattr("builtins.input", lambda _: "s")
+
+        cmd_cleanup(self._args(voices=True))
+
+        assert not voces.exists()
+        assert propio1.exists() and propio2.exists() and ajeno.exists()
+
+    def test_confirmacion_negativa_no_borra(self, tmp_path, monkeypatch, capsys):
+        from chatterbox_tts.cli import cmd_cleanup
+
+        propio1, propio2, ajeno, voces = self._fake_env(tmp_path, monkeypatch)
+        monkeypatch.setattr("builtins.input", lambda _: "n")
+
+        cmd_cleanup(self._args(all=True))
+
+        assert "Cancelado" in capsys.readouterr().out
+        assert propio1.exists() and propio2.exists() and voces.exists()
+
+    def test_sin_flags_muestra_ayuda_y_no_borra(self, tmp_path, monkeypatch, capsys):
+        from chatterbox_tts.cli import cmd_cleanup
+
+        propio1, propio2, ajeno, voces = self._fake_env(tmp_path, monkeypatch)
+        args = self._args()
+
+        cmd_cleanup(args)
+
+        args.cleanup_parser.print_help.assert_called_once()
+        assert propio1.exists() and voces.exists()
 
 
 class TestCmdSpeakTextVacio:

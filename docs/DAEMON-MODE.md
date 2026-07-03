@@ -51,7 +51,7 @@ El daemon es un servidor HTTP persistente que mantiene el modelo cargado:
                                 │                                   │
                                 │  - ChatterboxEngine (cacheado)    │
                                 │  - torch.compile (aplicado)      │
-                                │  - Puerto 8765 (TCP)            │
+                                │  - Puerto fijo 8765 (TCP)      │
                                 └───────────────────────────────────┘
 ```
 
@@ -125,6 +125,12 @@ tts-sidecar speak --text "Hola" --daemon
 tts-sidecar speak --text "Hola" --no-daemon
 ```
 
+> **Código de salida para integradores**: `speak --daemon` termina con código
+> **5** (daemon inalcanzable) si el daemon no responde, en lugar del código de
+> error genérico. Los comandos `daemon start/stop/restart` también devuelven `5`
+> cuando la operación de ciclo de vida falla. Ver la tabla completa de códigos en
+> `USAGE.md` (sección «Experiencia unificada entre sistemas operativos»).
+
 ## Parámetros Optimizados
 
 Los parámetros optimizados son configuración propia del engine
@@ -151,6 +157,7 @@ del watermark PerthNet y el timing por sub-etapa:
 | Aspecto | Decisión | Alternativa Considerada |
 |---------|----------|------------------------|
 | **IPC** | HTTP (FastAPI) | Named pipes, gRPC |
+| **Puerto** | Fijo 8765 en loopback (sin flag `--port`) | Puerto configurable |
 | **Fallback** | Automático a modo directo | Error si daemon no disponible |
 | **Lifecycle** | start/stop/restart/status | Solo auto-start |
 | **Resiliencia** | Retry + auto-restart flag | Ninguna |

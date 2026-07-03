@@ -189,8 +189,8 @@ python scripts/build_windows.py
 python scripts/build_linux.py --arch x86_64
 python scripts/build_linux.py --arch arm64
 
-# macOS
-python scripts/build_macos.py --arch universal2
+# macOS (Apple Silicon)
+python scripts/build_macos.py --arch arm64
 ```
 
 ## Extensibilidad

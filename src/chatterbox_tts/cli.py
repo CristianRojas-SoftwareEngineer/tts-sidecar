@@ -6,8 +6,15 @@ Contrato de salida (estable entre SO y lenguajes):
   - Los datos van a stdout; los diagnósticos y errores van a stderr.
   - Los comandos de lectura (voice list, devices, version, daemon status, doctor)
     aceptan --json para salida legible por máquina.
-  - Códigos de salida: 0 = éxito; distinto de 0 = error (doctor devuelve 1 cuando
-    falla un chequeo).
+  - Códigos de salida (contrato público congelado; un orquestador distingue la
+    causa sin parsear texto):
+      0   éxito
+      1   error genérico (incluye chequeos fallidos de doctor)
+      2   modelo no provisionado (ejecutar 'setup')
+      3   voz o archivo de audio no encontrado
+      4   entrada inválida (texto vacío, nombre de voz ilegal, colisión)
+      5   daemon inalcanzable o no gestionable
+      130 interrupción por el usuario (Ctrl+C)
   - stdout/stderr se fuerzan a UTF-8 para una codificación consistente en toda
     plataforma.
 """
@@ -22,6 +29,16 @@ import platform
 from pathlib import Path
 
 from .timing import timed_command, StageTimer, log
+
+# Mapa de códigos de salida del CLI — CONTRATO PÚBLICO CONGELADO (ver USAGE.md).
+# Un orquestador distingue causas sin parsear texto: no cambiar los valores.
+EXIT_OK = 0                   # éxito
+EXIT_ERROR = 1                # error genérico (incluye chequeos fallidos de doctor)
+EXIT_MODEL_MISSING = 2        # modelo no provisionado (ejecutar 'setup')
+EXIT_NOT_FOUND = 3            # voz o archivo de audio no encontrado
+EXIT_INVALID_INPUT = 4        # entrada inválida (texto vacío, nombre ilegal, colisión)
+EXIT_DAEMON_UNREACHABLE = 5   # daemon inalcanzable o no gestionable
+EXIT_INTERRUPTED = 130        # interrupción por el usuario (128 + SIGINT)
 
 # Imports perezosos (lazy): solo se cargan cuando se ejecutan los comandos.
 # Esto permite que --help funcione sin las dependencias instaladas.
@@ -99,7 +116,7 @@ def _require_model_cached(model: str = "es-mx-latam"):
             file=sys.stderr,
         )
         print("Ejecuta 'tts-sidecar setup' para descargarlo antes de continuar.", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(EXIT_MODEL_MISSING)
 
 
 @timed_command
@@ -109,7 +126,7 @@ def cmd_speak(args):
     try:
         if not args.text or not args.text.strip():
             print("Error: --text no puede estar vacío.", file=sys.stderr)
-            sys.exit(1)
+            sys.exit(EXIT_INVALID_INPUT)
 
         # Exige que el modelo esté en caché antes de sintetizar.
         # Las descargas son responsabilidad exclusiva de 'setup'.
@@ -157,20 +174,33 @@ def cmd_speak(args):
         from .model_cache import is_model_cached
         if not is_model_cached("es-mx-latam"):
             print("Ejecuta 'tts-sidecar setup' primero.", file=sys.stderr)
-        sys.exit(1)
+            sys.exit(EXIT_MODEL_MISSING)
+        sys.exit(EXIT_NOT_FOUND)
     except Exception as e:
+        # Un fallo del daemon (--daemon o sondeo automático) es inalcanzabilidad,
+        # no un error genérico de síntesis: se distingue con su propio código.
+        from .daemon import DaemonIPCError
+        if isinstance(e, DaemonIPCError):
+            print(f"Error: no se pudo sintetizar vía daemon: {e}", file=sys.stderr)
+            sys.exit(EXIT_DAEMON_UNREACHABLE)
         print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
 
 @timed_command
 def cmd_voice_add(args):
-    """Registra una voz clonada a partir de los audios de referencia."""
-    try:
-        from .engine import ChatterboxEngine
+    """Registra una voz clonada a partir de los audios de referencia.
 
-        engine = ChatterboxEngine(compute_backend=args.compute_backend)
-        ref_path, speech_path = engine.add_voice(
+    Registro ligero: valida y copia los audios sin instanciar el motor de
+    inferencia; la precomputación de conditionals se difiere al primer
+    `speak --voice <nombre>`. El gate de modelo se mantiene por coherencia con
+    `speak`/`daemon start`: las descargas son responsabilidad exclusiva de setup.
+    """
+    try:
+        _require_model_cached()
+
+        from . import voices
+        ref_path, speech_path = voices.register_voice_files(
             name=args.name,
             reference_audio=args.reference,
             speech_audio=args.speech,
@@ -180,9 +210,13 @@ def cmd_voice_add(args):
         print(f"  timbre (reference): {ref_path}")
         print(f"  habla (conditioning): {speech_path}")
 
+    except ValueError as e:
+        # Audio ilegible, nombre de voz inválido o colisión sin --force.
+        print(f"Error al registrar la voz: {e}", file=sys.stderr)
+        sys.exit(EXIT_INVALID_INPUT)
     except Exception as e:
         print(f"Error al registrar la voz: {e}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
 
 @timed_command
@@ -199,10 +233,10 @@ def cmd_voice_remove(args):
                 f"Voz '{args.name}' es una voz de fábrica (solo lectura) y no puede eliminarse.",
                 file=sys.stderr,
             )
-            sys.exit(1)
+            sys.exit(EXIT_INVALID_INPUT)
         else:
             print(f"Voz '{args.name}' no encontrada.", file=sys.stderr)
-            sys.exit(1)
+            sys.exit(EXIT_NOT_FOUND)
 
     except (PermissionError, OSError) as e:
         # WARNING-01: en Windows, shutil.rmtree falla con PermissionError si
@@ -215,10 +249,14 @@ def cmd_voice_remove(args):
             f"Ciérralo y vuelve a intentarlo. Detalle: {e}",
             file=sys.stderr,
         )
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
+    except ValueError as e:
+        # Nombre de voz inválido (escapes de ruta, caracteres no permitidos).
+        print(f"Error al eliminar la voz: {e}", file=sys.stderr)
+        sys.exit(EXIT_INVALID_INPUT)
     except Exception as e:
         print(f"Error al eliminar la voz: {e}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
 
 def cmd_voice_list(args):
@@ -244,10 +282,10 @@ def cmd_voice_list(args):
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         print("Ejecuta 'tts-sidecar setup' primero.", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(EXIT_NOT_FOUND)
     except Exception as e:
         print(f"Error al listar las voces: {e}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
 
 def cmd_devices(args):
@@ -258,7 +296,7 @@ def cmd_devices(args):
         devices = get_audio_devices()
     except Exception as e:
         print(f"Error al enumerar los dispositivos de audio: {e}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
     if getattr(args, "json", False):
         import json
@@ -362,7 +400,7 @@ def cmd_doctor(args):
             "failed": checks_failed,
         }))
         if checks_failed > 0:
-            sys.exit(1)
+            sys.exit(EXIT_ERROR)
         return
 
     print("=== Chatterbox TTS Doctor ===\n")
@@ -375,7 +413,7 @@ def cmd_doctor(args):
     print(f"Chequeos: {checks_passed} exitosos, {checks_failed} fallidos")
 
     if checks_failed > 0:
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
 
 def _linux_path_symlink() -> Path:
@@ -402,17 +440,17 @@ def _integrate_linux_path():
         link.unlink()
     elif link.exists():
         # Un archivo regular homónimo no es nuestro: no se sobrescribe.
-        print(f"\n[SKIP] PATH: {link} existe y no es un symlink; no se modifica.")
+        print(f"\n[SKIP] PATH: {link} existe y no es un symlink; no se modifica.", file=sys.stderr)
         return
     link.symlink_to(appimage)
-    print(f"\n[PASS] PATH: symlink creado {link} -> {appimage}")
-    print("El comando 'tts-sidecar' queda disponible por nombre en la terminal.")
-    print("Para revertirlo: tts-sidecar setup --remove-path")
+    print(f"\n[PASS] PATH: symlink creado {link} -> {appimage}", file=sys.stderr)
+    print("El comando 'tts-sidecar' queda disponible por nombre en la terminal.", file=sys.stderr)
+    print("Para revertirlo: tts-sidecar setup --remove-path", file=sys.stderr)
 
     if str(link.parent) not in os.environ.get("PATH", "").split(os.pathsep):
-        print(f"[WARN] {link.parent} no está en el PATH de esta sesión.")
-        print('Añade esta línea a tu shell profile (~/.bashrc, ~/.zshrc, ...):')
-        print('    export PATH="$HOME/.local/bin:$PATH"')
+        print(f"[WARN] {link.parent} no está en el PATH de esta sesión.", file=sys.stderr)
+        print('Añade esta línea a tu shell profile (~/.bashrc, ~/.zshrc, ...):', file=sys.stderr)
+        print('    export PATH="$HOME/.local/bin:$PATH"', file=sys.stderr)
 
 
 def _remove_linux_path():
@@ -420,15 +458,15 @@ def _remove_linux_path():
     link = _linux_path_symlink()
     if link.is_symlink():
         link.unlink()
-        print(f"Symlink eliminado: {link}")
+        print(f"Symlink eliminado: {link}", file=sys.stderr)
     elif link.exists():
         print(
             f"Error: {link} existe pero no es un symlink; no se elimina.",
             file=sys.stderr,
         )
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
     else:
-        print(f"No hay nada que quitar: {link} no existe.")
+        print(f"No hay nada que quitar: {link} no existe.", file=sys.stderr)
 
 
 def cmd_setup(args):
@@ -448,7 +486,7 @@ def cmd_setup(args):
         _remove_linux_path()
         return
 
-    print("=== Chatterbox TTS Setup ===\n")
+    print("=== Chatterbox TTS Setup ===\n", file=sys.stderr)
 
     # 1. Integración de PATH (solo Linux desde AppImage; no-op en el resto).
     # Va antes de los chequeos para que un host degradado (p. ej. sin audio)
@@ -463,39 +501,109 @@ def cmd_setup(args):
     for status, name, detail in _environment_checks():
         if status == "FAIL":
             if name == "Audio library":
-                print(f"[WARN] {name}: {detail}")
+                print(f"[WARN] {name}: {detail}", file=sys.stderr)
                 print("[WARN] La reproducción de audio no estará disponible; "
-                      "la síntesis a archivo (speak --output) funciona igual.")
+                      "la síntesis a archivo (speak --output) funciona igual.", file=sys.stderr)
                 continue
             print(f"[FAIL] {name}: {detail}", file=sys.stderr)
-            sys.exit(1)
-        print(f"[{status}] {name}: {detail}")
+            sys.exit(EXIT_ERROR)
+        print(f"[{status}] {name}: {detail}", file=sys.stderr)
 
     # 3. Provisión del modelo (idempotente): descarga solo si no está ya en caché.
     # El modelo se descarga a la caché de HuggingFace (ver engine._download_model),
-    # estable tanto desde fuente como en el ejecutable onedir.
-    model_dir = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+    # estable tanto desde fuente como en el ejecutable onedir. La ruta efectiva
+    # respeta HF_HUB_CACHE/HF_HOME (misma resolución que el descargador).
+    from .model_cache import hub_cache_path
+    model_dir = str(hub_cache_path())
 
     try:
         from .model_cache import is_model_cached
 
         if is_model_cached("es-mx-latam"):
-            print(f"\n[PASS] El modelo 'es-mx-latam' ya está en caché en: {model_dir}")
-            print("Provisión completa. No hay nada que descargar.")
+            print(f"\n[PASS] El modelo 'es-mx-latam' ya está en caché en: {model_dir}", file=sys.stderr)
+            print("Provisión completa. No hay nada que descargar.", file=sys.stderr)
             return
 
-        print("\nDescargando el modelo es-mx-latam...")
-        print("(Puede tardar varios minutos en la primera ejecución)\n")
+        print("\nDescargando el modelo es-mx-latam...", file=sys.stderr)
+        print("(Puede tardar varios minutos en la primera ejecución)\n", file=sys.stderr)
 
         from .engine import ChatterboxEngine
         ChatterboxEngine.get_instance(model="es-mx-latam", compute_backend="auto")
 
-        print("\n[PASS] ¡Modelo descargado correctamente!")
-        print(f"  Ubicación: {model_dir}")
+        # El language pack no incluye ve.safetensors (Voice Encoder): se comparte
+        # con el modelo base. Se provisiona aquí explícitamente para que ningún
+        # 'speak' posterior necesite red tras un setup exitoso.
+        from .model_cache import is_ve_cached, BASE_MODEL_REPO
+        if not is_ve_cached():
+            print("\nDescargando el Voice Encoder (ve.safetensors)...", file=sys.stderr)
+            from huggingface_hub import hf_hub_download
+            hf_hub_download(
+                repo_id=BASE_MODEL_REPO,
+                filename="ve.safetensors",
+                token=os.getenv("HF_TOKEN"),
+            )
+            print("[PASS] Voice Encoder descargado.", file=sys.stderr)
+
+        print("\n[PASS] ¡Modelo descargado correctamente!", file=sys.stderr)
+        print(f"  Ubicación: {model_dir}", file=sys.stderr)
 
     except Exception as e:
         print(f"[FAIL] La provisión falló: {e}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
+
+
+def cmd_cleanup(args):
+    """Desaprovisiona los datos del proyecto: modelo en caché y/o voces de usuario.
+
+    Borrado quirúrgico: solo las carpetas de los dos repos HF del proyecto
+    (model_cache_dirs) y el directorio de voces de usuario; nunca la caché de
+    HuggingFace completa ni datos de otros proyectos.
+    """
+    import shutil
+
+    do_model = getattr(args, "model", False) or getattr(args, "all", False)
+    do_voices = getattr(args, "voices", False) or getattr(args, "all", False)
+
+    if not do_model and not do_voices:
+        # Sin flags no se borra nada: se muestra la ayuda del comando.
+        args.cleanup_parser.print_help()
+        return
+
+    targets = []
+    if do_model:
+        from .model_cache import model_cache_dirs
+        for p in model_cache_dirs():
+            # Defensa en profundidad: solo carpetas de modelos del proyecto.
+            if not p.name.startswith("models--ResembleAI--"):
+                raise RuntimeError(f"Ruta inesperada fuera del proyecto: {p}")
+            targets.append((p, "modelo"))
+    if do_voices:
+        from . import voices
+        targets.append((Path(voices.voices_root()), "voces de usuario"))
+
+    existing = [(p, kind) for p, kind in targets if p.exists()]
+
+    if not existing:
+        print("No hay nada que limpiar: ninguna de las rutas del proyecto existe.")
+        return
+
+    print("Rutas a eliminar:")
+    for p, kind in existing:
+        print(f"  [{kind}] {p}")
+
+    if getattr(args, "dry_run", False):
+        print("\n(dry-run) No se borró nada.")
+        return
+
+    respuesta = input("\n¿Eliminar estas rutas? (s/n): ").strip().lower()
+    if respuesta not in ("s", "si", "sí", "y", "yes"):
+        print("Cancelado: no se borró nada.")
+        return
+
+    for p, _kind in existing:
+        shutil.rmtree(p)
+        print(f"Eliminado: {p}")
+    print("Limpieza completa. 'tts-sidecar setup' reprovisiona el modelo cuando lo necesites.")
 
 
 def cmd_daemon(args):
@@ -505,7 +613,6 @@ def cmd_daemon(args):
         # el daemon (el .exe no puede ejecutar `python -m ...`).
         from .daemon.run import serve
         serve(
-            port=args.port,
             auto_restart=getattr(args, "auto_restart", False),
             max_retries=getattr(args, "max_retries", 0) or 0,
         )
@@ -513,7 +620,7 @@ def cmd_daemon(args):
 
     from .daemon import DaemonManager
 
-    manager = DaemonManager(port=getattr(args, "port", None))
+    manager = DaemonManager()
 
     if args.action == "start":
         # Exige que el modelo esté en caché antes de lanzar el servidor.
@@ -528,21 +635,21 @@ def cmd_daemon(args):
             print("Daemon iniciado correctamente")
         else:
             print("No se pudo iniciar el daemon", file=sys.stderr)
-            sys.exit(1)
+            sys.exit(EXIT_DAEMON_UNREACHABLE)
 
     elif args.action == "stop":
         if manager.stop():
             print("Daemon detenido")
         else:
             print("No se pudo detener el daemon", file=sys.stderr)
-            sys.exit(1)
+            sys.exit(EXIT_DAEMON_UNREACHABLE)
 
     elif args.action == "restart":
         if manager.restart():
             print("Daemon reiniciado")
         else:
             print("No se pudo reiniciar el daemon", file=sys.stderr)
-            sys.exit(1)
+            sys.exit(EXIT_DAEMON_UNREACHABLE)
 
     elif args.action == "status":
         status = manager.status()
@@ -641,12 +748,27 @@ def main():
                                    "y termina sin correr chequeos ni descargas")
     setup_parser.set_defaults(func=cmd_setup)
 
+    # comando cleanup
+    cleanup_parser = subparsers.add_parser(
+        "cleanup",
+        help="Desaprovisiona los datos del proyecto (modelo descargado y/o voces de usuario)",
+    )
+    cleanup_parser.add_argument("--model", action="store_true",
+                                help="Elimina el modelo descargado (solo las carpetas de este proyecto "
+                                     "dentro de la caché de HuggingFace)")
+    cleanup_parser.add_argument("--voices", action="store_true",
+                                help="Elimina las voces de usuario registradas con 'voice add'")
+    cleanup_parser.add_argument("--all", action="store_true",
+                                help="Elimina el modelo y las voces de usuario")
+    cleanup_parser.add_argument("--dry-run", action="store_true",
+                                help="Lista lo que se borraría sin borrar nada")
+    cleanup_parser.set_defaults(func=cmd_cleanup, cleanup_parser=cleanup_parser)
+
     # comando daemon
     daemon_parser = subparsers.add_parser("daemon", help="Gestión del ciclo de vida del daemon")
     daemon_subparsers = daemon_parser.add_subparsers(dest="action", help="Acciones del daemon")
 
     daemon_start = daemon_subparsers.add_parser("start", help="Inicia el daemon")
-    daemon_start.add_argument("--port", type=int, default=8765, help="Puerto TCP donde escuchar (default: 8765)")
     daemon_start.add_argument("--autorestart", action="store_true", help="Auto-reinicio en caso de crash")
     daemon_start.add_argument("--max-retries", type=int, help="Máximo de intentos de reinicio")
     daemon_start.set_defaults(func=cmd_daemon)
@@ -662,7 +784,6 @@ def main():
     daemon_status.set_defaults(func=cmd_daemon)
 
     daemon_serve = daemon_subparsers.add_parser("serve", help="Ejecuta el servidor del daemon en primer plano")
-    daemon_serve.add_argument("--port", type=int, default=8765, help="Puerto TCP donde escuchar (default: 8765)")
     daemon_serve.add_argument("--auto-restart", action="store_true", help="Auto-reinicio en caso de crash")
     daemon_serve.add_argument("--max-retries", type=int, default=0, help="Máximo de intentos de reinicio (0 = infinito)")
     daemon_serve.set_defaults(func=cmd_daemon)
@@ -676,14 +797,22 @@ def main():
 
     if not args.command:
         parser.print_help()
-        sys.exit(0)
+        sys.exit(EXIT_OK)
 
     # Los grupos de comandos (voice, daemon) sin sub-acción no tienen func: mostrar ayuda.
     if not hasattr(args, "func"):
         subparsers.choices[args.command].print_help()
-        sys.exit(0)
+        sys.exit(EXIT_OK)
 
-    args.func(args)
+    try:
+        args.func(args)
+    except KeyboardInterrupt:
+        # Cierre limpio ante Ctrl+C: sin traceback, mensaje de una línea a stderr
+        # y el código 130 convencional (128 + SIGINT). Solo actúa si la excepción
+        # escapa hasta aquí: el shutdown graceful de uvicorn en 'daemon serve'
+        # la maneja antes y no pasa por esta rama.
+        print("Interrumpido por el usuario.", file=sys.stderr)
+        sys.exit(EXIT_INTERRUPTED)
 
 
 if __name__ == "__main__":

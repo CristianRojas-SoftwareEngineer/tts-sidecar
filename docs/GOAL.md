@@ -113,7 +113,7 @@ cada SO no es verificable desde el repo, por eso quedan pendientes. -->
 
 1. [ ] El instalador de Windows (.exe) funciona en Windows 10/11 sin dependencias (validación por SO pendiente)
 2. [ ] El instalador de Linux funciona en distribuciones principales (validación por SO pendiente)
-3. [ ] El instalador de macOS funciona en macOS 12+ (validación por SO pendiente)
+3. [ ] El instalador de macOS funciona en macOS 12+ (Apple Silicon; Mac Intel no soportado) (validación por SO pendiente)
 4. [x] `tts-sidecar speak --text "Hola mundo"` reproduce audio en español
 5. [x] `tts-sidecar voice add --name test --reference ref.wav --speech speech.wav` clona la voz
 6. [x] El audio generado suena en español con las características de la voz de referencia
@@ -137,7 +137,7 @@ La implementación está completa únicamente cuando:
 - [x] **docs/DESIGN.md** corresponde al estado implementado
 - [x] El daemon mode está implementado y funciona correctamente
 - [x] Los logs están normalizados con estructura consistente
-- [x] Los tests pytest pasan (95/95)
+- [x] Los tests pytest pasan (162/162)
 
 ---
 
@@ -148,10 +148,10 @@ instaladores por SO queda pendiente, ver Criterios de Aceptación):
 - Motor Chatterbox Multilingual V3 implementado (Python)
 - Sistema de audio playback nativo por SO (pycaw/winsound/sounddevice/afplay)
 - Daemon mode con IPC HTTP (FastAPI, puerto 8765)
-- Optimizaciones de síntesis (n_cfm=4, max_new_tokens=500, watermark bypass)
-- Watermark bypass para mayor velocidad
+- Optimizaciones de síntesis (n_cfm=4, max_new_tokens=500)
+- Bypass del watermark PerthNet: el audio generado no lleva marca de agua (ver «Uso ético y responsable» en README/USAGE)
 - Scripts de build PyInstaller por SO (Windows/Linux/macOS)
 - Descarga automática del modelo Chatterbox desde HuggingFace
 - CLI completa con todos los comandos
-- Tests pytest (95 tests: timing, protocolo, daemon, CLI, voces, caché de modelo, audio y utilidades de build)
+- Tests pytest (162 tests: timing, protocolo, daemon, CLI, voces, caché de modelo, audio y utilidades de build)
 - Documentación sincronizada

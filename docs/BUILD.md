@@ -50,7 +50,12 @@ primer arranque del AppImage en cualquier distro.
 | Windows x64 | `python scripts/build_windows.py` | `dist/tts-sidecar-0.1.0-x86_64-setup.exe` (instalador) |
 | Linux x64 | `python scripts/build_linux.py --arch x86_64` | `dist/tts-sidecar-0.1.0-x86_64.AppImage` |
 | Linux ARM64 | `python scripts/build_linux.py --arch arm64` | `dist/tts-sidecar-0.1.0-aarch64.AppImage` |
-| macOS universal2 | `python scripts/build_macos.py --arch universal2` | `dist/tts-sidecar-0.1.0-universal2.dmg` |
+| macOS arm64 (Apple Silicon) | `python scripts/build_macos.py --arch arm64` | `dist/tts-sidecar-0.1.0-arm64.dmg` |
+
+> Mac Intel (x86_64) **no está soportado**: torch≥2.3 no publica wheels macOS
+> x86_64, por lo que no es posible construir un binario Intel con el toolchain actual.
+> Los campos `os`/`cpu` de `package.json` no expresan la matriz por SO (el esquema
+> no lo permite): `x64` aplica a Windows/Linux y `arm64` a Linux/macOS.
 
 > Los scripts de build también generan la carpeta `--onedir` en `dist/tts-sidecar/` (o
 > `dist/tts-sidecar.app/` en macOS) con el ejecutable y todas las dependencias,
@@ -82,7 +87,7 @@ python scripts/build_windows.py
 python scripts/build_linux.py --arch x86_64
 
 # macOS (requiere create-dmg)
-python scripts/build_macos.py --arch universal2
+python scripts/build_macos.py --arch arm64
 ```
 
 Los scripts (`scripts/build_*.py`) ejecutan PyInstaller con `--onedir` y luego llaman
@@ -112,11 +117,21 @@ nativas o imports lazy que no siguen automáticamente. Los flags de metadata (`-
 
 ### Verificación post-build
 
+El **smoke test del binario congelado está automatizado en CI**: cada uno de los
+4 jobs de build ejecuta `tts-sidecar version` sobre el ejecutable recién
+construido (exit 0 obligatorio) antes de publicar el artefacto, de modo que un
+empaquetado roto (metadata faltante, `--collect-all` incompleto) hace fallar el
+job en lugar de publicarse «verde». `version` no carga el modelo, así que el
+chequeo es de segundos.
+
+Queda **manual** (requiere modelo, audio real y hardware por SO): `doctor`,
+`setup` y una síntesis real (`speak`).
+
 ```bash
 # Tests
 pytest tests/ -v
 
-# Ejecutable directo (carpeta onedir)
+# Ejecutable directo (carpeta onedir) — 'version' es el que corre en CI
 dist/tts-sidecar/tts-sidecar.exe version
 dist/tts-sidecar/tts-sidecar.exe doctor
 
@@ -138,6 +153,7 @@ guiada + desinstalación limpia):
 | PATH | Automático: el instalador agrega `{app}` al PATH del sistema | `tts-sidecar setup` crea el symlink `~/.local/bin/tts-sidecar → $APPIMAGE` | Opt-in: `Instalar (PATH + modelo).command` del `.dmg` (symlink en `/usr/local/bin`, con sudo) |
 | Guía hacia `setup` | Página informativa + casilla post-instalación que lo ejecuta en contexto de usuario | `setup` es el punto único de provisión (modelo + PATH) | El script de instalación ofrece ejecutar `setup` (sin sudo) tras enlazar |
 | Desinstalación | Desinstalador de Inno Setup (revierte PATH y registro) | `tts-sidecar setup --remove-path` + borrar el `.AppImage` | `Desinstalar (quitar del PATH).command` del `.dmg` + arrastrar el `.app` a la Papelera |
+| Datos provisionados | `tts-sidecar cleanup --all` (paso previo recomendado en los tres SO: elimina modelo y voces de usuario antes de desinstalar el binario) | Ídem | Ídem |
 | Dependencias de build | Política interactiva común (`ensure_build_dependency`) | Ídem | Ídem |
 
 > El modelo `es-mx-latam` se descarga a `~/.cache/huggingface/hub` y no se
@@ -158,34 +174,43 @@ alcance actual del pipeline.
 ## 4. CI/CD con CircleCI
 
 El pipeline de CircleCI ejecuta los tests y, si pasan, compila el proyecto para todas las
-plataformas automáticamente. El job `test` actúa como **puerta**: cada build depende de él
-(`requires: [test]`).
+plataformas automáticamente. Los jobs `test-linux`, `test-windows` y `test-macos` actúan
+como **triple puerta simétrica**: cada build depende de los tres
+(`requires: [test-linux, test-windows, test-macos]`), de modo que la suite se ejercita en
+los tres SO nativos antes de compilar. Así, un bug específico de plataforma —Windows
+(pycaw/COM, winsound, generación del `.iss`) o macOS (afplay/sounddevice, rutas y señales
+POSIX)— se detecta en el gate en lugar de llegar al usuario. La cobertura es equivalente
+para los tres SO: el mismo `pytest tests/` corre en cada uno.
 
 ### Arquitectura del Pipeline
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                         test                                 │
-│              (pytest tests/ — puerta previa)                 │
-└───────┬───────────────┬───────────────┬───────────────┬─────┘
-        │               │               │               │
+┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐
+│     test-linux     │  │    test-windows    │  │     test-macos     │
+│ (pytest — Linux)   │  │ (pytest — Windows) │  │  (pytest — macOS)  │
+└─────────┬──────────┘  └─────────┬──────────┘  └─────────┬──────────┘
+          └──────────────────────┬┴───────────────────────┘
+        ┌───────────────┬────────┴──────┬───────────────┐
         ▼               ▼               ▼               ▼
 ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌──────────────────┐
 │build-windows│ │build-linux- │ │build-linux- │ │ build-darwin-    │
-│  + Inno     │ │    x64      │ │   arm64     │ │   universal2     │
+│  + Inno     │ │    x64      │ │   arm64     │ │     arm64        │
 │  Setup      │ │ + AppImage  │ │ + AppImage  │ │  + create-dmg    │
 └─────────────┘ └─────────────┘ └─────────────┘ └──────────────────┘
+     (cada build corre además un smoke test `version` del binario congelado)
 ```
 
 ### Jobs
 
 | Job | Plataforma | Executor | Notas |
 |-----|------------|----------|-------|
-| `test` | — | docker `cimg/python:3.13` | `pytest tests/` (puerta previa) |
+| `test-linux` | Linux x64 | docker `cimg/python:3.13` | `pytest tests/` en Linux (puerta previa) |
+| `test-windows` | Windows x64 | `win/server-2022` | `pytest tests/` en Windows nativo (puerta previa) |
+| `test-macos` | macOS arm64 (Apple Silicon) | macos `m4pro.medium` (Xcode 26.4.0) | `pytest tests/` en macOS nativo (puerta previa) |
 | `build-windows` | Windows x64 | `win/server-2022` | PyInstaller onedir + Inno Setup |
 | `build-linux-x64` | Linux x64 | docker `cimg/python:3.13` | PyInstaller onedir + AppImage |
 | `build-linux-arm64` | Linux ARM64 | machine `arm.medium` | PyInstaller onedir + AppImage |
-| `build-darwin-universal2` | macOS universal2 | macos `m4pro.medium` (Xcode 26.4.0) | PyInstaller onedir + .app + .dmg |
+| `build-darwin-arm64` | macOS arm64 (Apple Silicon) | macos `m4pro.medium` (Xcode 26.4.0) | PyInstaller onedir + .app + .dmg |
 
 El archivo de configuración completo está en `.circleci/config.yml`.
 
@@ -201,8 +226,8 @@ dist/
 ├── tts-sidecar/                          # Windows onedir (carpeta)
 ├── tts-sidecar-0.1.0-x86_64.AppImage    # Linux x64
 ├── tts-sidecar-0.1.0-aarch64.AppImage   # Linux ARM64
-├── tts-sidecar-0.1.0-universal2.dmg     # macOS
-└── tts-sidecar-universal2.app/           # macOS .app bundle (nombre estable: se arrastra a /Applications)
+├── tts-sidecar-0.1.0-arm64.dmg          # macOS (Apple Silicon)
+└── tts-sidecar-arm64.app/                # macOS .app bundle (nombre estable: se arrastra a /Applications)
 ```
 
 ---
@@ -219,6 +244,35 @@ Los siguientes paquetes no se usan en runtime y están excluidos del bundle:
 ---
 
 ## 7. Notas de dependencias
+
+### Lockfile de dependencias (`requirements-lock.txt`)
+
+El CI y los builds **no** instalan desde `requirements.txt` (límites `>=` de
+desarrollo), sino desde `requirements-lock.txt`: un **lock universal con hashes**
+que fija la versión exacta de cada dependencia de runtime (directa y transitiva)
+para builds reproducibles e íntegros. Los 7 jobs de CI lo instalan con
+`pip install -r requirements-lock.txt --require-hashes`, que rechaza cualquier
+paquete cuyo contenido no coincida con el hash fijado (barrera de supply-chain).
+
+El lock es **universal**: un solo archivo cubre Windows, Linux y macOS mediante
+marcadores de entorno (`sys_platform`, etc.), imprescindible porque el grafo de
+`torch` diverge por plataforma (wheels NVIDIA/CUDA solo en Linux). Se genera con
+[uv](https://github.com/astral-sh/uv), cuyo resolver universal produce esa matriz
+en un único archivo (pip-tools resuelve solo para la plataforma donde corre, y no
+puede hacerlo).
+
+**Regeneración deliberada** (tras cambiar dependencias en `pyproject.toml`):
+
+```bash
+pip install uv   # si no está disponible
+uv pip compile --universal --generate-hashes --python-version 3.13 \
+    pyproject.toml -o requirements-lock.txt
+```
+
+Actualizar el lock es una acción **consciente**, no automática: revisar el diff
+antes de commitear para auditar qué versiones y hashes cambian. Las herramientas
+de build (`pyinstaller`, `pytest`) se instalan aparte con su pin exacto (`==`),
+en invocaciones de pip separadas del lock.
 
 ### `chatterbox-tts` metadata
 

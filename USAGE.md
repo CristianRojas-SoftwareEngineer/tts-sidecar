@@ -41,7 +41,9 @@ comportamiento es el mismo.
 ## Primer uso: provisionar el modelo (`setup`)
 
 El modelo de voz `es-mx-latam` (varios cientos de MB) no viene incluido: se
-descarga una sola vez a `~/.cache/huggingface/hub` mediante el comando `setup`.
+descarga una sola vez a la caché de HuggingFace (`~/.cache/huggingface/hub` por
+defecto; si defines `HF_HOME` o `HF_HUB_CACHE`, se respeta esa ubicación)
+mediante el comando `setup`.
 
 ```bash
 tts-sidecar setup
@@ -297,6 +299,13 @@ Finished in 0.4s
 A partir de ese momento la voz aparece en `voice list` y puede usarse con
 `speak --voice mi_voz`.
 
+El registro es **casi instantáneo** (< 1 s): no carga el motor de inferencia,
+solo valida y copia los audios. La preparación de la voz (cómputo de
+conditionals) la absorbe la primera síntesis con `speak --voice mi_voz`, que
+por eso puede tardar unos segundos más que las siguientes. Como el resto de
+comandos de escritura, `voice add` requiere el modelo provisionado
+(`tts-sidecar setup`).
+
 **Opciones:**
 - `--name, -n` (requerido): Nombre para la voz
 - `--reference, -r` (requerido): Audio para timbre (cualquier largo — el audio completo se usa para el embedding)
@@ -359,6 +368,46 @@ eliminarse; el comando lo indica y termina con error si lo intentas.
 
 ---
 
+### `cleanup`
+
+Desaprovisiona los datos del proyecto: el modelo descargado y/o las voces de
+usuario. Es la contraparte de `setup` y completa el ciclo de vida
+instalación→desinstalación.
+
+```bash
+tts-sidecar cleanup --model      # elimina el modelo descargado
+tts-sidecar cleanup --voices     # elimina las voces de usuario
+tts-sidecar cleanup --all        # ambos
+tts-sidecar cleanup --all --dry-run   # lista lo que se borraría, sin borrar
+```
+
+**Qué esperar:** el comando lista las rutas exactas a eliminar y pide
+confirmación (`s/n`) antes de borrar; con `--dry-run` solo lista. Sin flags
+muestra la ayuda y no borra nada.
+
+El borrado es **quirúrgico**: dentro de la caché de HuggingFace solo se
+eliminan las carpetas de los dos repos que usa el proyecto
+(`Chatterbox-Multilingual-es-mx-latam` y `chatterbox` de ResembleAI), nunca
+modelos de otros proyectos; `--voices` elimina únicamente el directorio de
+voces de usuario. Todo es recuperable: `setup` reprovisiona el modelo y
+`voice add` vuelve a registrar voces.
+
+---
+
+## Desinstalación completa
+
+1. Ejecuta `tts-sidecar cleanup --all` para eliminar el modelo y las voces de
+   usuario (los datos que la desinstalación del binario no toca).
+2. Desinstala el binario según tu SO:
+   - **Windows**: desinstalador de Inno Setup (Panel de control → Aplicaciones);
+     revierte PATH y registro.
+   - **Linux**: `tts-sidecar setup --remove-path` (quita el symlink) y borra el
+     `.AppImage`.
+   - **macOS**: `Desinstalar (quitar del PATH).command` del `.dmg` y arrastra el
+     `.app` a la Papelera.
+
+---
+
 ## Modo Daemon
 
 El daemon mantiene el modelo cargado en memoria, evitando el tiempo de carga en
@@ -368,7 +417,7 @@ sintetizar varias veces seguidas.
 ### Gestión del daemon
 
 ```bash
-# Iniciar daemon (background; puerto por defecto: 8765)
+# Iniciar daemon (background; puerto fijo: 8765 en loopback, no configurable)
 tts-sidecar daemon start
 
 # Ver estado
@@ -477,9 +526,21 @@ desde el binario como desde el código fuente. En concreto:
 
 - **Sintaxis idéntica**: no hay flags ni subcomandos exclusivos de una plataforma.
 - **Contrato de salida estable**: los datos van a stdout y los diagnósticos y
-  errores a stderr, siempre en UTF-8; código de salida 0 en éxito y distinto de 0
-  en error. Esto hace a `tts-sidecar` consumible por scripts de forma idéntica en
-  los tres SO.
+  errores a stderr, siempre en UTF-8. Esto hace a `tts-sidecar` consumible por
+  scripts de forma idéntica en los tres SO.
+- **Códigos de salida (contrato público congelado)**: un orquestador distingue la
+  causa del fallo sin parsear texto en español. Los valores son estables entre SO
+  y versiones:
+
+  | Código | Significado | Ejemplo |
+  |--------|-------------|---------|
+  | `0` | Éxito | Síntesis o comando completado |
+  | `1` | Error genérico | Fallo inesperado; `doctor` con algún chequeo fallido |
+  | `2` | Modelo no provisionado | `speak`/`daemon start` sin ejecutar `setup` |
+  | `3` | Voz o audio no encontrado | `--voice inexistente`; `voice remove` de una voz ausente |
+  | `4` | Entrada inválida | `--text` vacío; nombre de voz ilegal; colisión en `voice add` sin `--force` |
+  | `5` | Daemon inalcanzable | `speak --daemon` sin daemon; `daemon start/stop/restart` fallido |
+  | `130` | Interrupción del usuario | Ctrl+C (128 + SIGINT) durante cualquier comando |
 - **La voz `default` y el modelo** son los mismos en todas las plataformas: el
   audio generado para un mismo texto y voz es equivalente en cualquier SO.
 - **El motor auto-detecta el mejor backend de cómputo disponible** (CUDA en
@@ -496,6 +557,10 @@ Las únicas diferencias son internas y no cambian la forma de usar la aplicació
 | Enumeración de dispositivos | pycaw | sounddevice | sounddevice |
 | Voces de usuario (binario) | `%LOCALAPPDATA%\tts-sidecar\voices` | `~/.local/share/tts-sidecar/voices` | `~/Library/Application Support/tts-sidecar/voices` |
 | Caché del modelo | `~/.cache/huggingface/hub` | `~/.cache/huggingface/hub` | `~/.cache/huggingface/hub` |
+
+> La caché del modelo respeta las variables de entorno `HF_HUB_CACHE` y `HF_HOME`
+> si están definidas (misma resolución que usa HuggingFace Hub); la ruta de la
+> tabla es el valor por defecto.
 
 ---
 
@@ -573,7 +638,7 @@ apertura puede ser bloqueada por el sistema:
   terminal:
 
   ```bash
-  xattr -d com.apple.quarantine /Applications/tts-sidecar-universal2.app
+  xattr -d com.apple.quarantine /Applications/tts-sidecar-arm64.app
   ```
 
 - **Windows (SmartScreen)**: si aparece «Windows protegió tu PC» al ejecutar el
@@ -581,6 +646,35 @@ apertura puede ser bloqueada por el sistema:
 
 Esto solo ocurre en el primer arranque; las ejecuciones posteriores no vuelven a
 pedir confirmación.
+
+## Uso ético y responsable
+
+`tts-sidecar` permite clonar voces arbitrarias a partir de unos segundos de audio.
+Por diseño, **el audio generado no contiene marca de agua**: el watermark de
+PerthNet está desactivado en el motor (tanto en modo directo como en el daemon),
+de modo que la salida no es distinguible por medios técnicos de una grabación
+real. Esta capacidad exige diligencia por parte de quien la usa:
+
+- **Consentimiento explícito**: registra y clona únicamente voces para las que
+  cuentes con el permiso de la persona titular. Clonar la voz de alguien sin su
+  autorización puede ser ilegal en tu jurisdicción y es, en todo caso, una falta
+  de respeto a su identidad.
+- **Prohibición de suplantación**: no emplees la herramienta para hacerte pasar
+  por otra persona, cometer fraude, eludir sistemas de verificación por voz,
+  difamar, acosar ni generar desinformación.
+- **Divulgación del contenido sintético**: cuando publiques o compartas audio
+  generado, decláralo como sintético. Dado que **no lleva marca de agua**, la
+  transparencia depende enteramente de ti; no existe un mecanismo automático que
+  identifique la salida como generada por IA.
+- **Canal de reporte**: si detectas un uso indebido de este proyecto o de
+  material producido con él, abre un
+  [Issue](https://github.com/CristianRojas-SoftwareEngineer/tts-sidecar/issues)
+  describiendo la situación.
+
+`tts-sidecar` es software libre y no impone barreras técnicas al uso (serían
+triviales de sortear); establece, en cambio, la diligencia debida esperada en la
+comunidad de IA de código abierto. La responsabilidad del uso legítimo recae en
+la persona que ejecuta la herramienta.
 
 ## Licencia
 

@@ -20,6 +20,9 @@ python bin/tts-sidecar <comando>
 # Compilar binario Windows con PyInstaller
 npm run build-windows
 
+# Regenerar el lockfile de dependencias (universal, con hashes) tras editar pyproject.toml
+uv pip compile --universal --generate-hashes --python-version 3.13 pyproject.toml -o requirements-lock.txt
+
 # Ejecutar tests
 pytest tests/ -v
 
@@ -149,6 +152,12 @@ modelo Chatterbox y todas las dependencias empaquetadas conservan sus licencias 
 tts-sidecar setup
 tts-sidecar setup --remove-path   # revierte el symlink de PATH (Linux)
 
+# Desaprovisionamiento (borrado quirúrgico: solo las carpetas del proyecto)
+tts-sidecar cleanup --model       # elimina el modelo descargado
+tts-sidecar cleanup --voices      # elimina las voces de usuario
+tts-sidecar cleanup --all         # ambos
+tts-sidecar cleanup --all --dry-run   # lista sin borrar
+
 # Daemon mode
 tts-sidecar daemon start              # Iniciar daemon
 tts-sidecar daemon stop                 # Detener daemon
@@ -194,7 +203,7 @@ assets/                  # Material fuente (audios de la voz default, logo)
 src/chatterbox_tts/      # Código fuente Python
 └── daemon/              # Daemon mode
 
-tests/                   # Tests pytest (95 tests)
+tests/                   # Tests pytest (162 tests)
 ├── conftest.py
 ├── test_audio.py
 ├── test_build_utils.py

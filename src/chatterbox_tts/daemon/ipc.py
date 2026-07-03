@@ -7,6 +7,11 @@ from typing import Optional
 
 import requests
 
+# Puerto fijo del daemon (loopback 127.0.0.1). Fuente única importada por
+# daemon.py y run.py: no existe flag --port. Correr dos daemons o convivir con
+# otro servicio en este puerto no está soportado por diseño (ver DAEMON-MODE.md).
+DEFAULT_PORT = 8765
+
 
 class DaemonIPCError(Exception):
     """Error de comunicación IPC con el daemon."""
@@ -21,12 +26,11 @@ class DaemonIPCClient:
     con Windows, Linux y macOS sin depender de Unix sockets ni named pipes.
     """
 
-    DEFAULT_PORT = 8765
     TIMEOUT = 5.0          # Timeout de conexión
     REQUEST_TIMEOUT = 300.0  # Timeout de síntesis (5 min para audio largo)
 
-    def __init__(self, port: int = None):
-        self.port = port or self.DEFAULT_PORT
+    def __init__(self):
+        self.port = DEFAULT_PORT
         self.base_url = f"http://127.0.0.1:{self.port}"
 
     def is_running(self) -> bool:

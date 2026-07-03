@@ -1,11 +1,10 @@
 version: 2.1
 
 orbs:
-  python: circleci/python@2.1.1
   windows: circleci/windows@5.0
 
 jobs:
-  test:
+  test-linux:
     docker:
       - image: cimg/python:3.13
     steps:
@@ -15,9 +14,11 @@ jobs:
           command: |
             sudo apt-get update
             sudo apt-get install -y libasound2-dev
-      - python/install-packages:
-          package-manager: pip
-          pip-dependency-file: requirements.txt
+      - run:
+          # Instalación reproducible desde el lock universal con hashes
+          # (--require-hashes rechaza cualquier paquete sin hash o no fijado).
+          name: Install runtime dependencies (locked)
+          command: pip install -r requirements-lock.txt --require-hashes
       - run:
           name: Install pytest
           command: pip install pytest==9.1.1
@@ -30,6 +31,61 @@ jobs:
       - run:
           name: Run tests
           command: pytest tests/ -v
+
+  test-windows:
+    # R-22: la suite corría solo en Linux; todo el código específico de Windows
+    # (pycaw/COM, winsound, generación del .iss) se ejercitaba solo con mocks.
+    # Este job corre la suite completa en Windows nativo y actúa como puerta de
+    # los builds junto a `test-linux` y `test-macos` (triple puerta simétrica).
+    executor: win/server-2022
+    steps:
+      - checkout
+      - run:
+          # Pin de Chocolatey (espejo de build-windows): un release nuevo no debe
+          # romper el job sin cambios en el repo.
+          name: Install Python 3.13
+          command: choco install python313 -y --version=3.13.14
+      - run:
+          name: Install runtime dependencies (locked)
+          command: |
+            python --version
+            python -m pip install --upgrade pip
+            python -m pip install -r requirements-lock.txt --require-hashes
+      - run:
+          name: Install pytest
+          command: python -m pip install pytest==9.1.1
+      - run:
+          name: Run tests
+          command: python -m pytest tests/ -v
+
+  test-macos:
+    # Equivalencia de cobertura con test-linux/test-windows: sin un Mac físico
+    # disponible, el gate en CI es la única validación de la plataforma macOS
+    # (playback vía afplay/sounddevice, rutas y señales POSIX del user-data-dir)
+    # antes de que un usuario real la pruebe. Corre la suite completa en macOS
+    # nativo y actúa como puerta de los builds (triple puerta simétrica).
+    macos:
+      xcode: "26.4.0"
+    resource_class: m4pro.medium
+    steps:
+      - checkout
+      - run:
+          # Pin de Python 3.13 vía pyenv (espejo de build-darwin-arm64): no usar
+          # el python3 del sistema sin fijar, para testear sobre la misma versión
+          # que empaqueta el build.
+          name: Set up Python 3.13
+          command: |
+            pyenv install -s 3.13
+            pyenv global 3.13
+            python --version
+            python -m pip install --upgrade pip
+            python -m pip install -r requirements-lock.txt --require-hashes
+      - run:
+          name: Install pytest
+          command: python -m pip install pytest==9.1.1
+      - run:
+          name: Run tests
+          command: python -m pytest tests/ -v
 
   build-windows:
     executor: win/server-2022
@@ -46,12 +102,20 @@ jobs:
           command: |
             python --version
             python -m pip install --upgrade pip
-            python -m pip install -r requirements.txt
+            python -m pip install -r requirements-lock.txt --require-hashes
             python -m pip install pyinstaller==6.21.0
             choco install innosetup -y --version=6.3.3
       - run:
           name: Build Windows
           command: python scripts/build_windows.py
+      - run:
+          # Ejecuta el binario congelado recién construido para detectar
+          # empaquetados rotos (metadata faltante, --collect-all incompleto)
+          # antes de publicar. `version` no carga el modelo; exit 0 obligatorio.
+          name: Smoke test frozen binary
+          command: |
+            dist/tts-sidecar/tts-sidecar.exe version
+            if ($LASTEXITCODE -ne 0) { throw "Smoke test falló (exit $LASTEXITCODE)" }
       - run:
           # store_artifacts no expande globs: se copia el instalador (cuyo nombre
           # incluye la versión) a un nombre estable, independiente de __version__.
@@ -74,9 +138,9 @@ jobs:
           command: |
             sudo apt-get update
             sudo apt-get install -y patchelf libasound2-dev
-      - python/install-packages:
-          package-manager: pip
-          pip-dependency-file: requirements.txt
+      - run:
+          name: Install runtime dependencies (locked)
+          command: pip install -r requirements-lock.txt --require-hashes
       - run:
           name: Install PyInstaller
           command: |
@@ -84,6 +148,11 @@ jobs:
       - run:
           name: Build Linux x64
           command: python scripts/build_linux.py --arch x86_64
+      - run:
+          # Ejecuta el binario congelado onedir para detectar empaquetados rotos
+          # antes de publicar. `version` no carga el modelo; exit 0 obligatorio.
+          name: Smoke test frozen binary
+          command: dist/tts-sidecar/tts-sidecar version
       - run:
           # store_artifacts no expande globs: se copia el AppImage (cuyo nombre
           # incluye la versión) a un nombre estable, independiente de __version__.
@@ -117,11 +186,16 @@ jobs:
           name: Install dependencies
           command: |
             python -m pip install --upgrade pip
-            python -m pip install -r requirements.txt
+            python -m pip install -r requirements-lock.txt --require-hashes
             python -m pip install pyinstaller==6.21.0
       - run:
           name: Build Linux ARM64
           command: python scripts/build_linux.py --arch arm64
+      - run:
+          # Ejecuta el binario congelado onedir para detectar empaquetados rotos
+          # antes de publicar. `version` no carga el modelo; exit 0 obligatorio.
+          name: Smoke test frozen binary
+          command: dist/tts-sidecar/tts-sidecar version
       - run:
           # store_artifacts no expande globs: se copia el AppImage (cuyo nombre
           # incluye la versión) a un nombre estable, independiente de __version__.
@@ -134,22 +208,27 @@ jobs:
           path: dist/tts-sidecar
           destination: tts-sidecar-linux-aarch64/
 
-  build-darwin-universal2:
+  build-darwin-arm64:
     macos:
       xcode: "26.4.0"
     resource_class: m4pro.medium
     steps:
       - checkout
       - run:
-          name: Set up Python
+          # Pin de Python 3.13 vía pyenv (espejo del job build-linux-arm64):
+          # el runner de macOS no debe usar su python3 del sistema sin fijar,
+          # o el build empaquetaría una versión no controlada.
+          name: Set up Python 3.13
           command: |
-            python3 --version
-            python3 -m pip install --upgrade pip
-            pip3 install -r requirements.txt
+            pyenv install -s 3.13
+            pyenv global 3.13
+            python --version
+            python -m pip install --upgrade pip
+            python -m pip install -r requirements-lock.txt --require-hashes
       - run:
           name: Install PyInstaller
           command: |
-            pip3 install pyinstaller==6.21.0
+            python -m pip install pyinstaller==6.21.0
       - run:
           # create-dmg es un script de shell distribuido por Homebrew, no un
           # paquete de PyPI: `pip3 install create-dmg` fallaba siempre
@@ -160,33 +239,49 @@ jobs:
           command: |
             brew install create-dmg
       - run:
-          name: Build macOS universal2
-          command: python3 scripts/build_macos.py --arch universal2
+          name: Build macOS arm64
+          command: python3 scripts/build_macos.py --arch arm64
+      - run:
+          # Ejecuta el binario congelado dentro del .app para detectar
+          # empaquetados rotos antes de publicar. `version` no carga el modelo;
+          # exit 0 obligatorio.
+          name: Smoke test frozen binary
+          command: dist/tts-sidecar-arm64.app/Contents/MacOS/tts-sidecar version
       - run:
           # store_artifacts no expande globs: se copia el .dmg (cuyo nombre
           # incluye la versión) a un nombre estable, independiente de __version__.
           name: Stage DMG artifact
-          command: cp dist/tts-sidecar-*-universal2.dmg dist/tts-sidecar-universal2.dmg
+          command: cp dist/tts-sidecar-*-arm64.dmg dist/tts-sidecar-arm64.dmg
       - store_artifacts:
-          path: dist/tts-sidecar-universal2.dmg
-          destination: tts-sidecar-darwin-universal2.dmg
+          path: dist/tts-sidecar-arm64.dmg
+          destination: tts-sidecar-darwin-arm64.dmg
       - store_artifacts:
-          path: dist/tts-sidecar-universal2.app
-          destination: tts-sidecar-darwin-universal2.app/
+          path: dist/tts-sidecar-arm64.app
+          destination: tts-sidecar-darwin-arm64.app/
 
 workflows:
   build-all:
     jobs:
-      - test
+      - test-linux
+      - test-windows
+      - test-macos
       - build-windows:
           requires:
-            - test
+            - test-linux
+            - test-windows
+            - test-macos
       - build-linux-x64:
           requires:
-            - test
+            - test-linux
+            - test-windows
+            - test-macos
       - build-linux-arm64:
           requires:
-            - test
-      - build-darwin-universal2:
+            - test-linux
+            - test-windows
+            - test-macos
+      - build-darwin-arm64:
           requires:
-            - test
+            - test-linux
+            - test-windows
+            - test-macos

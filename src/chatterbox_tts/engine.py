@@ -9,7 +9,10 @@ y en el daemon por igual):
   - max_new_tokens=500  (tope de output del T3; el default es 1000)
   - n_cfm_timesteps=4  (pasos de flow matching; el default es 10)
   - exaggeration=0.75   (expresividad emocional; el default es 0.5)
-  - bypass del watermark PerthNet (post-procesado innecesario en uso local)
+  - bypass del watermark PerthNet: el audio generado NO lleva marca de agua.
+    Esto implica que no es distinguible técnicamente de una grabación real y
+    traslada al usuario la responsabilidad del uso legítimo (ver «Uso ético y
+    responsable» en README.md/USAGE.md).
 
 Optimizaciones multiplataforma para Windows, Linux y Mac.
 """
@@ -269,6 +272,12 @@ class ChatterboxEngine:
 
         tts.s3gen.inference = timed_s3gen
 
+        # El audio generado NO lleva la marca de agua de PerthNet: este reemplazo
+        # neutraliza `apply_watermark`. En consecuencia, el audio producido no es
+        # distinguible por medios técnicos de una grabación real, lo que traslada
+        # al usuario la responsabilidad del uso legítimo (consentimiento para
+        # clonar voces, no suplantación). Ver la sección «Uso ético y responsable»
+        # en README.md/USAGE.md. No es una mera optimización de velocidad.
         def noop_watermark(wav, sample_rate=None, **kwargs):
             return wav
 
@@ -344,7 +353,12 @@ class ChatterboxEngine:
             if base_snapshot is not None:
                 ve_path = base_snapshot / "ve.safetensors"
         if not ve_path.exists():
-            # Descarga solo el voice encoder
+            # Red de seguridad: 'setup' provisiona ve.safetensors explícitamente,
+            # así que llegar aquí indica una caché podada tras la provisión.
+            log(
+                "[VE] ve.safetensors no está en la caché local; descargándolo ahora. "
+                "Ejecuta 'tts-sidecar setup' para reprovisionar la caché completa"
+            )
             from huggingface_hub import hf_hub_download
             ve_path = Path(hf_hub_download(
                 repo_id="ResembleAI/chatterbox",
@@ -633,35 +647,19 @@ class ChatterboxEngine:
             ValueError: si algún audio no es cargable, o si la voz ya existe
                         (usuario o fábrica) y no se pasó force.
         """
-        # Valida ANTES de copiar: un WAV ilegible no debe dejar una voz rota
-        # que falle recién en la síntesis.
-        import librosa
-        for label, path in (("reference", reference_audio), ("speech", speech_audio)):
-            try:
-                librosa.load(path, sr=24000, duration=1.0)
-            except Exception as e:
-                raise ValueError(f"El audio de {label} ({path}) no es cargable: {e}")
-
-        # La colisión con una voz existente (usuario o fábrica homónima) exige --force
-        if not force and voices._resolve_voice_dir(name) is not None:
-            raise ValueError(
-                f"La voz '{name}' ya existe. Usa --force para sobrescribirla."
-            )
-
-        voices_dir = voices.voice_dir(name)
-        Path(voices_dir).mkdir(parents=True, exist_ok=True)
-
-        ref_path = os.path.join(voices_dir, "reference.wav")
-        speech_path = os.path.join(voices_dir, "speech.wav")
-
-        # Copia ambos archivos de audio al directorio de voces
-        import shutil
-        shutil.copy2(reference_audio, ref_path)
-        shutil.copy2(speech_audio, speech_path)
+        # Validación y copia sin modelo: núcleo compartido con `voice add`,
+        # que registra voces sin instanciar el motor (voices.register_voice_files).
+        ref_path, speech_path = voices.register_voice_files(
+            name=name,
+            reference_audio=reference_audio,
+            speech_audio=speech_audio,
+            force=force,
+        )
 
         # Precomputa los conditionals y los guarda a disco para una carga más rápida
         if precompute:
             try:
+                voices_dir = os.path.dirname(ref_path)
                 self._precompute_and_save_conditionals(voices_dir, ref_path, speech_path)
                 log(f"Conditionals precomputados para la voz '{name}'")
             except Exception as e:

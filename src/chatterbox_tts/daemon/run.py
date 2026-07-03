@@ -2,7 +2,7 @@
 Entry point del daemon de tts-sidecar.
 
 Uso:
-    python -m chatterbox_tts.daemon.run --port 8765
+    python -m chatterbox_tts.daemon.run
 """
 
 # Supresión de warnings antes de cualquier otro import
@@ -56,10 +56,11 @@ import time
 import uvicorn
 
 from .server import app, set_engine, set_start_time, set_server
+from .ipc import DEFAULT_PORT
 from ..timing import StageTimer, log
 
 
-def serve(port: int = 8765, auto_restart: bool = False, max_retries: int = 0):
+def serve(port: int = DEFAULT_PORT, auto_restart: bool = False, max_retries: int = 0):
     """
     Arranca el servidor del daemon en primer plano (bloqueante).
 
@@ -166,15 +167,11 @@ def main():
     Punto de entrada CLI del daemon.
 
     Parsea argumentos y delega en serve(). Se invoca como:
-        python -m chatterbox_tts.daemon.run [--port N] [--auto-restart] [--max-retries N]
+        python -m chatterbox_tts.daemon.run [--auto-restart] [--max-retries N]
+
+    El puerto es fijo (DEFAULT_PORT = 8765 en loopback); no hay flag --port.
     """
     parser = argparse.ArgumentParser(description="tts-sidecar daemon")
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=8765,
-        help="Puerto TCP en el que escuchar (default: 8765)"
-    )
     parser.add_argument(
         "--auto-restart",
         action="store_true",
@@ -189,7 +186,6 @@ def main():
     args = parser.parse_args()
 
     serve(
-        port=args.port,
         auto_restart=args.auto_restart,
         max_retries=args.max_retries,
     )

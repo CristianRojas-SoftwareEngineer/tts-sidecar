@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-Build script for macOS x64 and ARM64 apps using PyInstaller --onedir.
+Build script for macOS ARM64 (Apple Silicon) apps using PyInstaller --onedir.
 Produces a .app bundle (macOS application) inside the --onedir folder.
+
+Mac Intel (x86_64) no está soportado: torch>=2.3 no publica wheels macOS
+x86_64, por lo que un binario Intel no puede construirse con el toolchain
+actual. El artefacto se nombra por su arquitectura real (arm64).
 
 macOS plays audio with afplay (built-in), but device enumeration
 (doctor/setup/devices) uses sounddevice, so the bundle must collect it
@@ -61,10 +65,10 @@ def check_dependencies():
             log("Instalación manual: brew install create-dmg (requiere Homebrew)")
 
 
-def build_macos(target_arch="universal2"):
+def build_macos(target_arch="arm64"):
     """Build macOS .app bundle with PyInstaller --onedir."""
-    arch_options = {"x86_64": "x86_64", "arm64": "arm64", "universal2": "universal2"}
-    arch_flag = arch_options.get(target_arch, "universal2")
+    arch_options = {"arm64": "arm64"}
+    arch_flag = arch_options.get(target_arch, "arm64")
 
     with BuildTimer():
         with StageTimer("Setup", "Preparando entorno de build"):
@@ -292,7 +296,7 @@ def _info_plist_content(version, icon_name=None):
     <key>CFBundleIconFile</key>
     <string>{icon_value}</string>
     <key>LSMinimumSystemVersion</key>
-    <string>10.13</string>
+    <string>12.0</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>NSHumanReadableCopyright</key>
@@ -308,9 +312,9 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Build macOS .app bundle")
     parser.add_argument(
-        "--arch", default="universal2",
-        choices=["x86_64", "arm64", "universal2"],
-        help="Target architecture (default: universal2)",
+        "--arch", default="arm64",
+        choices=["arm64"],
+        help="Target architecture (default: arm64; Mac Intel no está soportado)",
     )
     args = parser.parse_args()
     check_dependencies()

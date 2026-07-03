@@ -16,6 +16,7 @@ from typing import Optional
 import requests
 
 from .. import paths
+from .ipc import DEFAULT_PORT
 
 
 class DaemonManager:
@@ -25,12 +26,11 @@ class DaemonManager:
     Maneja start/stop/restart/status. Funciona en Windows, Linux y macOS.
     """
 
-    DEFAULT_PORT = 8765
     START_TIMEOUT = 120.0  # La carga del modelo + compilación tarda 30-90s
 
-    def __init__(self, port: int = None):
+    def __init__(self):
         self.system = platform.system()
-        self.port = port or self.DEFAULT_PORT
+        self.port = DEFAULT_PORT
         self.base_url = f"http://127.0.0.1:{self.port}"
 
     def start(
@@ -58,12 +58,11 @@ class DaemonManager:
         # En modo congelado el ejecutable no acepta `-m módulo`,
         # así que se auto-invoca mediante su subcomando `daemon serve`.
         if paths.is_frozen():
-            cmd = [sys.executable, "daemon", "serve", "--port", str(self.port)]
+            cmd = [sys.executable, "daemon", "serve"]
         else:
             cmd = [
                 sys.executable,
                 "-m", "chatterbox_tts.daemon.run",
-                "--port", str(self.port),
             ]
 
         if auto_restart:
@@ -183,7 +182,7 @@ class DaemonManager:
         """
         from .ipc import DaemonIPCClient
 
-        return DaemonIPCClient(port=self.port).is_running()
+        return DaemonIPCClient().is_running()
 
     def _wait_for_ready(self, timeout: float = None) -> bool:
         """Espera hasta que el daemon esté listo para aceptar conexiones."""

@@ -190,7 +190,7 @@ class TestKillPidVerificado:
         from chatterbox_tts.daemon.daemon import DaemonManager
 
         psutil_mock, proc = self._fake_psutil(
-            ["python", "-m", "chatterbox_tts.daemon.run", "--port", "8765"]
+            ["python", "-m", "chatterbox_tts.daemon.run"]
         )
         with patch.dict(sys.modules, {"psutil": psutil_mock}):
             DaemonManager()._kill_pid(1234)
