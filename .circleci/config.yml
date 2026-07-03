@@ -84,6 +84,11 @@ jobs:
       - run:
           name: Build Linux x64
           command: python scripts/build_linux.py --arch x86_64
+      - run:
+          # store_artifacts no expande globs: se copia el AppImage (cuyo nombre
+          # incluye la versión) a un nombre estable, independiente de __version__.
+          name: Stage AppImage artifact
+          command: cp dist/tts-sidecar-*-x86_64.AppImage dist/tts-sidecar-x86_64.AppImage
       - store_artifacts:
           path: dist/tts-sidecar-x86_64.AppImage
           destination: tts-sidecar-linux-x86_64.AppImage
@@ -117,12 +122,17 @@ jobs:
       - run:
           name: Build Linux ARM64
           command: python scripts/build_linux.py --arch arm64
+      - run:
+          # store_artifacts no expande globs: se copia el AppImage (cuyo nombre
+          # incluye la versión) a un nombre estable, independiente de __version__.
+          name: Stage AppImage artifact
+          command: cp dist/tts-sidecar-*-aarch64.AppImage dist/tts-sidecar-aarch64.AppImage
       - store_artifacts:
           path: dist/tts-sidecar-aarch64.AppImage
-          destination: tts-sidecar-linux-arm64.AppImage
+          destination: tts-sidecar-linux-aarch64.AppImage
       - store_artifacts:
           path: dist/tts-sidecar
-          destination: tts-sidecar-linux-arm64/
+          destination: tts-sidecar-linux-aarch64/
 
   build-darwin-universal2:
     macos:
@@ -152,6 +162,11 @@ jobs:
       - run:
           name: Build macOS universal2
           command: python3 scripts/build_macos.py --arch universal2
+      - run:
+          # store_artifacts no expande globs: se copia el .dmg (cuyo nombre
+          # incluye la versión) a un nombre estable, independiente de __version__.
+          name: Stage DMG artifact
+          command: cp dist/tts-sidecar-*-universal2.dmg dist/tts-sidecar-universal2.dmg
       - store_artifacts:
           path: dist/tts-sidecar-universal2.dmg
           destination: tts-sidecar-darwin-universal2.dmg

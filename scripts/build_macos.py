@@ -29,7 +29,7 @@ def check_dependencies():
     """Check required dependencies are installed."""
     check_pyinstaller()
 
-    with StageTimer("CheckDeps", "Checking dependencies"):
+    with StageTimer("CheckDeps", "Verificando dependencias"):
         # create-dmg es un script de shell (Homebrew), no un paquete de
         # PyPI: se invoca como binario vía subprocess, no se importa como
         # módulo Python. Es herramienta del empaquetador (opcional): sin
@@ -53,41 +53,41 @@ def build_macos(target_arch="universal2"):
     arch_flag = arch_options.get(target_arch, "universal2")
 
     with BuildTimer():
-        with StageTimer("Setup", "Setting up build environment"):
-            log(f"Platform: macOS {arch_flag}")
+        with StageTimer("Setup", "Preparando entorno de build"):
+            log(f"Plataforma: macOS {arch_flag}")
             DIST_DIR.mkdir(parents=True, exist_ok=True)
             BUILD_DIR.mkdir(parents=True, exist_ok=True)
             entry_point = PROJECT_ROOT / "bin" / "tts-sidecar"
 
-        with StageTimer("PyInstaller", "Compiling with PyInstaller (9-15 min)"):
+        with StageTimer("PyInstaller", "Compilando con PyInstaller (9-15 min)"):
             # No sounddevice, no pycaw — afplay (built-in) es el player de macOS.
             pyinstaller_args = common_pyinstaller_args(
                 entry_point, PROJECT_ROOT, DIST_DIR, BUILD_DIR,
                 data_sep=":",
             )
-            log(f"Running: pyinstaller {' '.join(pyinstaller_args[2:])}")
+            log(f"Ejecutando: pyinstaller {' '.join(pyinstaller_args[2:])}")
             try:
                 returncode = subprocess.run(
                     pyinstaller_args,
                     timeout=PYINSTALLER_TIMEOUT,
                 ).returncode
             except KeyboardInterrupt:
-                log("\n[CANCEL] Build cancelled by user.")
+                log("\n[CANCEL] Build cancelado por el usuario.")
                 sys.exit(130)
             except subprocess.TimeoutExpired:
                 log(f"\n[TIMEOUT] PyInstaller excedió {PYINSTALLER_TIMEOUT}s.")
                 sys.exit(1)
 
         if returncode != 0:
-            log("PyInstaller failed", returncode)
+            log("PyInstaller falló", returncode)
             sys.exit(1)
 
         onedir = DIST_DIR / "tts-sidecar"
-        with StageTimer("Size", "Checking bundle size"):
+        with StageTimer("Size", "Verificando tamaño del bundle"):
             if onedir.exists():
-                log(f"Bundle size: {bundle_size_mb(onedir):.1f} MB ({onedir})")
+                log(f"Tamaño del bundle: {bundle_size_mb(onedir):.1f} MB ({onedir})")
 
-        with StageTimer("AppBundle", "Structuring as .app bundle"):
+        with StageTimer("AppBundle", "Estructurando como bundle .app"):
             # Convert: dist/tts-sidecar/ → dist/tts-sidecar.app/Contents/MacOS/
             app_bundle = DIST_DIR / f"tts-sidecar-{arch_flag}.app"
             macos_dir = app_bundle / "Contents" / "MacOS"
@@ -119,8 +119,8 @@ def build_macos(target_arch="universal2"):
             copy_license_files(app_bundle / "Contents" / "Resources")
             log(f".app bundle: {app_bundle}")
 
-        with StageTimer("DMG", "Creating .dmg"):
-            dmg_path = DIST_DIR / f"tts-sidecar-{arch_flag}.dmg"
+        with StageTimer("DMG", "Creando .dmg"):
+            dmg_path = DIST_DIR / f"tts-sidecar-{get_version()}-{arch_flag}.dmg"
 
             # Staging del contenido del volumen: el .app + scripts de instalación y
             # desinstalación. Cada SO integra el PATH con un mecanismo distinto:
@@ -164,10 +164,10 @@ def build_macos(target_arch="universal2"):
                 timeout=BUILD_SUBPROCESS_TIMEOUT,
             )
             if result.returncode != 0:
-                log("dmg creation failed (create-dmg may need brew install create-dmg)",)
-                log("WARNING: .dmg not created — .app bundle is still in dist/")
+                log("La creación del .dmg falló (create-dmg puede requerir brew install create-dmg)")
+                log("WARNING: .dmg no creado — el bundle .app sigue en dist/")
             else:
-                log(f".dmg created: {dmg_path}")
+                log(f".dmg creado: {dmg_path}")
 
 
 def _path_install_script(app_name: str) -> str:

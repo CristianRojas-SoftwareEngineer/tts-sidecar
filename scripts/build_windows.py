@@ -61,7 +61,7 @@ def build_windows():
                 sys.exit(1)
 
         if returncode != 0:
-            log("PyInstaller failed", returncode)
+            log("PyInstaller falló", returncode)
             sys.exit(1)
 
         with StageTimer("Size", "Verificando tamaño del bundle"):

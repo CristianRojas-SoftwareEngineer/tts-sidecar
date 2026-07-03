@@ -520,6 +520,48 @@ class TestSetupLinuxPath:
         assert link.exists()
         assert "no es un symlink" in capsys.readouterr().err
 
+    def test_advertencia_de_path_usa_rutas_posix(self, monkeypatch, tmp_path, capsys):
+        # L-01: la línea sugerida debe ser bash válido (forward slashes),
+        # nunca rutas con backslashes que romperían el shell profile.
+        if not _symlinks_supported(tmp_path):
+            pytest.skip("el entorno no permite crear symlinks")
+        from chatterbox_tts.cli import _integrate_linux_path
+
+        self._fake_home(monkeypatch, tmp_path)
+        self._linux_appimage_env(monkeypatch, tmp_path)
+        # Garantiza que ~/.local/bin no esté en el PATH de la sesión.
+        monkeypatch.setenv("PATH", "/usr/bin")
+
+        _integrate_linux_path()
+
+        out = capsys.readouterr().out
+        assert 'export PATH="$HOME/.local/bin:$PATH"' in out
+        assert "~/.bashrc, ~/.zshrc" in out
+        # La línea sugerida y los profiles nunca deben llevar backslashes
+        # (las rutas absolutas del symlink sí pueden, si el test corre en Windows).
+        assert "$HOME\\.local" not in out and "~\\.bashrc" not in out
+
+    def test_setup_integra_path_antes_de_chequeos_fallidos(self, monkeypatch, tmp_path, capsys):
+        # L-02: un host degradado (chequeo FAIL) debe obtener igualmente el
+        # comando en el PATH, en paridad con Windows y macOS.
+        if not _symlinks_supported(tmp_path):
+            pytest.skip("el entorno no permite crear symlinks")
+        import chatterbox_tts.cli as cli
+
+        home = self._fake_home(monkeypatch, tmp_path)
+        appimage = self._linux_appimage_env(monkeypatch, tmp_path)
+        monkeypatch.setattr(
+            cli, "_environment_checks",
+            lambda: [("FAIL", "Audio", "sin subsistema de audio")],
+        )
+
+        with pytest.raises(SystemExit):
+            cli.cmd_setup(MockArgs(remove_path=False))
+
+        link = home / ".local" / "bin" / "tts-sidecar"
+        assert link.is_symlink()
+        assert link.resolve() == appimage.resolve()
+
 
 class TestCmdSpeakTextVacio:
     def test_text_vacio_se_rechaza(self, capsys):

@@ -5,7 +5,7 @@
 # incluye su propio Python y todas las dependencias) y un AppRun que delega en
 # el ejecutable. build_linux.py invoca:
 #   appimage-builder --recipe scripts/tts-sidecar.yml --skip-test
-# y renombra el resultado a dist/tts-sidecar-<arch>.AppImage.
+# y renombra el resultado a dist/tts-sidecar-<version>-<arch>.AppImage.
 version: 1
 
 script:

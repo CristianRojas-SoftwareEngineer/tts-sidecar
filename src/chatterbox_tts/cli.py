@@ -444,15 +444,18 @@ def cmd_setup(args):
 
     print("=== Chatterbox TTS Setup ===\n")
 
-    # 1. Chequeos de entorno (implementación compartida con doctor).
+    # 1. Integración de PATH (solo Linux desde AppImage; no-op en el resto).
+    # Va antes de los chequeos para que un host degradado (p. ej. sin audio)
+    # obtenga igualmente el comando en el PATH, en paridad con Windows y macOS;
+    # el symlink es inocuo y reversible con --remove-path.
+    _integrate_linux_path()
+
+    # 2. Chequeos de entorno (implementación compartida con doctor).
     for status, name, detail in _environment_checks():
         if status == "FAIL":
             print(f"[FAIL] {name}: {detail}", file=sys.stderr)
             sys.exit(1)
         print(f"[{status}] {name}: {detail}")
-
-    # 2. Integración de PATH (solo Linux desde AppImage; no-op en el resto).
-    _integrate_linux_path()
 
     # 3. Provisión del modelo (idempotente): descarga solo si no está ya en caché.
     # El modelo se descarga a la caché de HuggingFace (ver engine._download_model),

@@ -28,7 +28,7 @@ def check_dependencies():
     """Check required dependencies are installed."""
     check_pyinstaller()
 
-    with StageTimer("CheckDeps", "Checking dependencies"):
+    with StageTimer("CheckDeps", "Verificando dependencias"):
         # sounddevice es dependencia del producto (sin ella el bundle saldría
         # sin audio): required. Sin pin: es dependencia de runtime gobernada
         # por requirements.txt, no una herramienta de build.
@@ -58,58 +58,59 @@ def build_linux(target_arch="x86_64"):
     appimage_arch = arch_suffix  # mismo mapeo; alias para mayor claridad en la sección AppImage
 
     with BuildTimer():
-        with StageTimer("Setup", "Setting up build environment"):
-            log(f"Platform: Linux {arch_suffix}")
+        with StageTimer("Setup", "Preparando entorno de build"):
+            log(f"Plataforma: Linux {arch_suffix}")
             DIST_DIR.mkdir(parents=True, exist_ok=True)
             BUILD_DIR.mkdir(parents=True, exist_ok=True)
             entry_point = PROJECT_ROOT / "bin" / "tts-sidecar"
 
-        with StageTimer("PyInstaller", "Compiling with PyInstaller (9-15 min)"):
+        with StageTimer("PyInstaller", "Compilando con PyInstaller (9-15 min)"):
             pyinstaller_args = common_pyinstaller_args(
                 entry_point, PROJECT_ROOT, DIST_DIR, BUILD_DIR,
                 data_sep=":",
                 extra_collect_all=["sounddevice"],
             )
-            log(f"Running: pyinstaller {' '.join(pyinstaller_args[2:])}")
+            log(f"Ejecutando: pyinstaller {' '.join(pyinstaller_args[2:])}")
             try:
                 returncode = subprocess.run(
                     pyinstaller_args,
                     timeout=PYINSTALLER_TIMEOUT,
                 ).returncode
             except KeyboardInterrupt:
-                log("\n[CANCEL] Build cancelled by user.")
+                log("\n[CANCEL] Build cancelado por el usuario.")
                 sys.exit(130)
             except subprocess.TimeoutExpired:
                 log(f"\n[TIMEOUT] PyInstaller excedió {PYINSTALLER_TIMEOUT}s.")
                 sys.exit(1)
 
         if returncode != 0:
-            log("PyInstaller failed", returncode)
+            log("PyInstaller falló", returncode)
             sys.exit(1)
 
         onedir = DIST_DIR / "tts-sidecar"
-        with StageTimer("Size", "Checking bundle size"):
+        with StageTimer("Size", "Verificando tamaño del bundle"):
             if onedir.exists():
-                log(f"Bundle size: {bundle_size_mb(onedir):.1f} MB ({onedir})")
+                log(f"Tamaño del bundle: {bundle_size_mb(onedir):.1f} MB ({onedir})")
 
         with StageTimer("Licenses", "Empaquetando avisos de licencia"):
             copy_license_files(onedir)
 
-        with StageTimer("AppImage", "Building AppImage"):
+        with StageTimer("AppImage", "Generando AppImage"):
             appimageyml = PROJECT_ROOT / "scripts" / "tts-sidecar.yml"
             if not appimageyml.exists():
-                log("WARNING: tts-sidecar.yml not found — AppImage not generated.")
-                log(f"Create {appimageyml} with appimage-builder config.")
+                log("WARNING: tts-sidecar.yml no encontrado — AppImage no generado.")
+                log(f"Crea {appimageyml} con la configuración de appimage-builder.")
                 return
 
             if not shutil.which("appimage-builder"):
-                log("WARNING: appimage-builder not available — AppImage not generated; "
-                    "the onedir bundle is still in dist/")
+                log("WARNING: appimage-builder no disponible — AppImage no generado; "
+                    "el bundle onedir sigue en dist/")
                 return
 
             # El spec toma la versión y la arquitectura del entorno.
+            version = get_version()
             env = os.environ.copy()
-            env["APP_VERSION"] = get_version()
+            env["APP_VERSION"] = version
             env["TARGET_ARCH"] = appimage_arch
 
             # appimage-builder requiere un icono presente en el AppDir; materializa
@@ -124,26 +125,26 @@ def build_linux(target_arch="x86_64"):
                 timeout=BUILD_SUBPROCESS_TIMEOUT,
             )
             if result.returncode != 0:
-                log(f"AppImage build failed (rc={result.returncode})")
+                log(f"La generación del AppImage falló (rc={result.returncode})")
                 print(result.stdout)
                 print(result.stderr, file=sys.stderr)
-                log("WARNING: AppImage failed — onedir bundle is still in dist/")
+                log("WARNING: AppImage falló — el bundle onedir sigue en dist/")
                 return
 
             # appimage-builder deja el .AppImage en el cwd (PROJECT_ROOT); localizarlo
-            # y moverlo a dist/ con el nombre canónico por arquitectura.
-            generated = DIST_DIR / f"tts-sidecar-{appimage_arch}.AppImage"
+            # y moverlo a dist/ con el nombre canónico versión + arquitectura.
+            generated = DIST_DIR / f"tts-sidecar-{version}-{appimage_arch}.AppImage"
             candidates = sorted(PROJECT_ROOT.glob("*.AppImage")) + sorted(DIST_DIR.glob("*.AppImage"))
             src = next((c for c in candidates if c != generated), None)
             if src and src.exists():
                 if generated.exists():
                     generated.unlink()
                 src.rename(generated)
-                log(f"AppImage created: {generated}")
+                log(f"AppImage creado: {generated}")
             elif generated.exists():
-                log(f"AppImage created: {generated}")
+                log(f"AppImage creado: {generated}")
             else:
-                log("WARNING: appimage-builder ran but no .AppImage was found")
+                log("WARNING: appimage-builder corrió pero no se encontró ningún .AppImage")
 
 
 if __name__ == "__main__":

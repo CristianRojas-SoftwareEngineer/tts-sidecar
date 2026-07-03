@@ -42,9 +42,9 @@ mismo artefacto que el CI.
 | Plataforma | Comando | Artefacto |
 |------------|---------|-----------|
 | Windows x64 | `python scripts/build_windows.py` | `dist/tts-sidecar-0.1.0-x64-setup.exe` (instalador) |
-| Linux x64 | `python scripts/build_linux.py --arch x86_64` | `dist/tts-sidecar-x86_64.AppImage` |
-| Linux ARM64 | `python scripts/build_linux.py --arch arm64` | `dist/tts-sidecar-aarch64.AppImage` |
-| macOS universal2 | `python scripts/build_macos.py --arch universal2` | `dist/tts-sidecar-universal2.dmg` |
+| Linux x64 | `python scripts/build_linux.py --arch x86_64` | `dist/tts-sidecar-0.1.0-x86_64.AppImage` |
+| Linux ARM64 | `python scripts/build_linux.py --arch arm64` | `dist/tts-sidecar-0.1.0-aarch64.AppImage` |
+| macOS universal2 | `python scripts/build_macos.py --arch universal2` | `dist/tts-sidecar-0.1.0-universal2.dmg` |
 
 > Los scripts de build también generan la carpeta `--onedir` en `dist/tts-sidecar/` (o
 > `dist/tts-sidecar.app/` en macOS) con el ejecutable y todas las dependencias,
@@ -191,12 +191,12 @@ Los artefactos publicados por CI se almacenan en `dist/`:
 
 ```
 dist/
-├── tts-sidecar-0.1.0-x64-setup.exe # Windows (instalador Inno Setup)
-├── tts-sidecar/                     # Windows onedir (carpeta)
-├── tts-sidecar-x86_64.AppImage     # Linux x64
-├── tts-sidecar-aarch64.AppImage    # Linux ARM64
-├── tts-sidecar-universal2.dmg      # macOS
-└── tts-sidecar-universal2.app/     # macOS .app bundle
+├── tts-sidecar-0.1.0-x64-setup.exe      # Windows (instalador Inno Setup)
+├── tts-sidecar/                          # Windows onedir (carpeta)
+├── tts-sidecar-0.1.0-x86_64.AppImage    # Linux x64
+├── tts-sidecar-0.1.0-aarch64.AppImage   # Linux ARM64
+├── tts-sidecar-0.1.0-universal2.dmg     # macOS
+└── tts-sidecar-universal2.app/           # macOS .app bundle (nombre estable: se arrastra a /Applications)
 ```
 
 ---

@@ -82,8 +82,8 @@ Provisión completa. No hay nada que descargar.
 
   ```bash
   # Primer uso con el AppImage descargado
-  chmod +x tts-sidecar-x86_64.AppImage
-  ./tts-sidecar-x86_64.AppImage setup
+  chmod +x tts-sidecar-0.1.0-x86_64.AppImage
+  ./tts-sidecar-0.1.0-x86_64.AppImage setup
   # → chequeos + symlink en ~/.local/bin + descarga del modelo
 
   # Desde entonces, en una terminal nueva:
