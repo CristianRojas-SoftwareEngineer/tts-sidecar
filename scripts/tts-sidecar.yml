@@ -14,7 +14,8 @@ script:
   - mkdir -p AppDir/usr/bin
   # Copia el ejecutable y su _internal/ (bundle autocontenido de PyInstaller).
   - cp -r dist/tts-sidecar/. AppDir/usr/bin/
-  # Icono mínimo requerido por appimage-builder (placeholder generado por build_linux.py).
+  # Icono del AppImage: el logo oficial del proyecto, materializado por build_linux.py
+  # en tts-sidecar.png (cae a un placeholder 1×1 solo si la fuente del logo faltara).
   - mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
   - mkdir -p AppDir/usr/share/applications
   - cp tts-sidecar.png AppDir/usr/share/icons/hicolor/256x256/apps/tts-sidecar.png

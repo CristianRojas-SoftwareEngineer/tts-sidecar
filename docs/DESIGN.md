@@ -64,13 +64,16 @@ tts-sidecar/
 │   └── build_macos.py            # Build PyInstaller para macOS
 │                                  # (provisión del modelo: `tts-sidecar setup`)
 ├── voices/                       # Voces de FÁBRICA (commiteadas, empaquetadas, solo lectura)
-│   └── default/                  # Voz por defecto (derivada de assets/)
+│   └── default/                  # Voz por defecto (derivada de assets/audios/)
 │       ├── reference.wav         # Timbre de voz (cualquier largo)
 │       └── speech.wav            # Conditioning (10s+)
 │   # Las voces de USUARIO viven en el user-data-dir por SO, no en el repo
-├── assets/                       # Audios de prueba
-│   ├── Voice Sampler.wav
-│   └── Speech Sampler.wav
+├── assets/                       # Material fuente (audios, logo)
+│   ├── audios/                   # Audios fuente (voz default) y de prueba
+│   │   ├── Voice Sampler.wav
+│   │   └── Speech Sampler.wav
+│   └── images/                   # Logo del proyecto (fuente de los iconos de build)
+│       └── TTS Sidecar - Logo.png
 ├── tests/                        # Pytest test suite
 ├── requirements.txt               # Python dependencies
 ├── pyproject.toml                # Python project config
@@ -125,7 +128,7 @@ Las voces se separan en dos orígenes y se resuelven por nombre con precedencia
 - **Fábrica**: `voices/` en la raíz del repo, versionadas y empaquetadas en el
   ejecutable vía `--add-data`; de solo lectura. Se resuelven en
   `paths.bundled_voices_dir()` (raíz del repo en modo fuente, `sys._MEIPASS`
-  congelado). Incluye la voz `default`, derivada de `assets/`.
+  congelado). Incluye la voz `default`, derivada de `assets/audios/`.
 - **Usuario**: `data_root()/voices` (user-data-dir por SO congelado; escribible),
   registradas con `voice add`. Una voz de usuario homónima sobrescribe a la de
   fábrica.
