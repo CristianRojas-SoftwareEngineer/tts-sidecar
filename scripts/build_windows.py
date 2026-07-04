@@ -23,9 +23,32 @@ from build_utils import (
 )
 
 
+def ensure_runtime_dependencies():
+    """Instala las dependencias runtime desde el lockfile (requerido para builds reproducibles)."""
+    lockfile = PROJECT_ROOT / "requirements-lock.txt"
+    if not lockfile.exists():
+        log(f"ERROR: No se encontró {lockfile}; instala primero con: pip install -r requirements-lock.txt --require-hashes")
+        sys.exit(1)
+
+    log("Instalando dependencias runtime desde lockfile...")
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-r", str(lockfile), "--require-hashes"],
+            check=True,
+            timeout=BUILD_SUBPROCESS_TIMEOUT,
+        )
+    except subprocess.CalledProcessError as exc:
+        log(f"ERROR: Falló la instalación del lockfile (rc={exc.returncode})")
+        sys.exit(1)
+    except subprocess.TimeoutExpired:
+        log(f"ERROR: La instalación del lockfile excedió {BUILD_SUBPROCESS_TIMEOUT}s")
+        sys.exit(1)
+
+
 def check_dependencies():
     """Verifica que las dependencias requeridas estén instaladas."""
     check_pyinstaller()
+    ensure_runtime_dependencies()
 
 
 def build_windows(target_arch="x86_64"):

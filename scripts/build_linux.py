@@ -89,9 +89,41 @@ def _desktop_entry() -> str:
     )
 
 
+def ensure_runtime_dependencies(target_arch="x86_64"):
+    """Instala las dependencias runtime desde el lockfile (requerido para builds reproducibles).
+
+    En x86_64 usa requirements-lock-linux-cpu.txt (CPU-only, sin paquetes nvidia-*).
+    En arm64 usa requirements-lock.txt (universal, los wheels CPU-only se resuelven
+    automáticamente por platform_machine == 'arm64' en el lockfile).
+    """
+    if target_arch == "x86_64":
+        lockfile = PROJECT_ROOT / "requirements-lock-linux-cpu.txt"
+    else:
+        lockfile = PROJECT_ROOT / "requirements-lock.txt"
+
+    if not lockfile.exists():
+        log(f"ERROR: No se encontró {lockfile}; instala primero con: pip install -r {lockfile.name} --require-hashes")
+        sys.exit(1)
+
+    log(f"Instalando dependencias runtime desde {lockfile.name}...")
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-r", str(lockfile), "--require-hashes"],
+            check=True,
+            timeout=BUILD_SUBPROCESS_TIMEOUT,
+        )
+    except subprocess.CalledProcessError as exc:
+        log(f"ERROR: Falló la instalación del lockfile (rc={exc.returncode})")
+        sys.exit(1)
+    except subprocess.TimeoutExpired:
+        log(f"ERROR: La instalación del lockfile excedió {BUILD_SUBPROCESS_TIMEOUT}s")
+        sys.exit(1)
+
+
 def check_dependencies(target_arch="x86_64"):
     """Check required dependencies are installed."""
     check_pyinstaller()
+    ensure_runtime_dependencies(target_arch)
 
     with StageTimer("CheckDeps", "Verificando dependencias"):
         # sounddevice es dependencia del producto (sin ella el bundle saldría

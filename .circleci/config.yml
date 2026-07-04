@@ -435,18 +435,26 @@ workflows:
           filters:
             tags:
               only: /^v.*/
+            branches:
+              ignore: /.*/
       - test-windows:
           filters:
             tags:
               only: /^v.*/
+            branches:
+              ignore: /.*/
       - test-macos:
           filters:
             tags:
               only: /^v.*/
+            branches:
+              ignore: /.*/
       - build-windows-x64:
           filters:
             tags:
               only: /^v.*/
+            branches:
+              ignore: /.*/
           requires:
             - test-linux
             - test-windows
@@ -455,6 +463,8 @@ workflows:
           filters:
             tags:
               only: /^v.*/
+            branches:
+              ignore: /.*/
           requires:
             - test-linux
             - test-windows
@@ -463,6 +473,8 @@ workflows:
           filters:
             tags:
               only: /^v.*/
+            branches:
+              ignore: /.*/
           requires:
             - test-linux
             - test-windows
@@ -471,6 +483,8 @@ workflows:
           filters:
             tags:
               only: /^v.*/
+            branches:
+              ignore: /.*/
           requires:
             - test-linux
             - test-windows
