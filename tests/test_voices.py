@@ -215,38 +215,25 @@ class TestCmdVoiceRemoveIOErrors:
 
 
 class TestCapitalizationCollision:
-    """SUGGESTION-06: `_validate_voice_name` no normaliza mayúsculas/minúsculas.
+    """SUGGESTION-06: los nombres de voz se normalizan a minúsculas.
 
-    Este test confirma o descarta, sin modificar `voices.py`, si dos nombres
-    que difieren solo en capitalización colisionan en el filesystem donde
-    corre la suite. El resultado es evidencia para decidir si se introduce
-    normalización a minúsculas en una iteración posterior.
+    En filesystems case-insensitive (macOS APFS, Docker volumes sobre NTFS),
+    `MiVoz` y `mivoz` colisionan. La solución implementada normaliza todos
+    los nombres a minúsculas antes de cualquier operación de filesystem.
     """
 
     def test_names_differing_only_in_case(self, voice_roots):
         user_root, _ = voice_roots
-        dir_a = _make_voice(user_root, "MiVoz")
+        # La normalización a minúsculas hace que el nombre físico del
+        # directorio sea siempre minúscula. Se crea con el nombre normalizado.
+        _make_voice(user_root, "mivoz")
 
-        # Verificar explícitamente si hay colisión (filesystem case-insensitive)
-        # o si ambos nombres pueden coexistir (filesystem case-sensitive).
-        # mkdir() no falla siempre en ciertos runners con configuraciones
-        # inesperadas, así que verificamos si el directorio real es el mismo.
-        dir_b = user_root / "mivoz"
-        if os.path.realpath(dir_b) == os.path.realpath(dir_a):
-            # Colisión detectada: el segundo nombre resuelve al mismo directorio.
-            # voice_dir("mivoz") rechaza el nombre porque su defensa anti-escape
-            # (realpath) resuelve al nombre ya presente en disco ("MiVoz").
-            with pytest.raises(ValueError, match="escapa del registro de voces"):
-                voices.voice_dir("mivoz")
-            return
+        # list_voices devuelve siempre minúsculas por la normalización.
+        assert set(voices.list_voices()) == {"mivoz"}
 
-        # Filesystem case-sensitive (Linux por defecto): ambas voces coexisten
-        # como directorios distintos.
-        dir_b.mkdir()
-        _make_voice(user_root, "mivoz", reference=False, speech=False)
-        assert dir_a != dir_b
-        assert voices.voice_dir("MiVoz") != voices.voice_dir("mivoz")
-        assert set(voices.list_voices()) == {"MiVoz", "mivoz"}
+        # voice_dir normaliza, por lo que cualquier variante de mayúsculas
+        # devuelve el mismo directorio.
+        assert voices.voice_dir("MiVoz") == voices.voice_dir("mivoz")
 
 
 def test_voice_paths_of_listed_voice_never_fails(voice_roots):

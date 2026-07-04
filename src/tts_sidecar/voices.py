@@ -31,13 +31,17 @@ def _validate_voice_name(name: str) -> str:
     Rechaza nombres vacíos, con separadores de ruta, rutas absolutas o `..`,
     eliminando la clase de escapes de ruta (p. ej. `voice remove --name ..`
     resolvería al padre del registro y lo borraría).
+
+    SUGGESTION-06: Normaliza a minúsculas para evitar colisiones en filesystems
+    case-insensitive (macOS APFS, Docker volumes sobre NTFS, etc.). La defensa
+    anti-escape usa realpath así que el directorio real siempre queda dentro del registro.
     """
     if not name or not _VOICE_NAME_RE.match(name) or ".." in name or name == ".":
         raise ValueError(
             f"Nombre de voz inválido: {name!r}. "
             "Usa solo letras, números, punto, guion y guion bajo (sin '..' ni separadores de ruta)."
         )
-    return name
+    return name.lower()
 
 
 def voices_root() -> str:
@@ -64,7 +68,7 @@ def allowed_audio_dirs() -> list[str]:
 
 def voice_dir(name: str) -> str:
     """Directorio de una voz de usuario concreta (destino de escritura)."""
-    _validate_voice_name(name)
+    name = _validate_voice_name(name)  # Normaliza a minúsculas
     root = voices_root()
     target = os.path.join(root, name)
     # Defensa en profundidad: la ruta resuelta debe quedar dentro del registro.
