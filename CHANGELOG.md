@@ -7,33 +7,6 @@ y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
-### Añadido
-
-- **Progreso real en vivo durante `speak`**: el motor expone un `progress_callback`
-  en `speak()` que emite eventos de etapa (conditionals → T3 → S3Gen → encoding →
-  guardado) y el conteo de tokens del T3 en vivo (shim best-effort del `tqdm`
-  interno de Chatterbox, con degradación a solo etapas si el layout cambia). El CLI
-  alimenta con esos eventos un indicador de progreso sobre stderr que muestra la
-  etapa y el avance (p. ej. «Generando voz · 210 tokens»), en modo directo y daemon.
-
-### Cambiado
-
-- **Salidas de usuario consistentes en español**: los mensajes de progreso e
-  instrumentación que el CLI emite a stderr (banners de `timed_command`, etapas
-  del motor y marcadores de sub-etapa) pasaron de inglés a español; p. ej.
-  `Starting speak…`/`Finished in…` → `Iniciando speak…`/`Finalizado en…`,
-  `Stage 2/4: Generating audio` → `Etapa 2/4: Generando audio`, `[Stage 2a]` →
-  `[Etapa 2a]`. La implementación (identificadores, nombres propios de
-  arquitectura como T3/S3Gen/conditionals) permanece en inglés.
-- **Protocolo de `/synthesize` (daemon→cliente)**: la respuesta pasó de un cuerpo
-  binario WAV (con headers `X-T3-Time`/`X-S3Gen-Time`) a un **stream NDJSON**: N
-  líneas `progress` (etapa + tokens) seguidas de una línea `result` con el WAV en
-  base64 y los tiempos por sub-etapa, o una línea `error`. El servidor sintetiza en
-  un hilo worker y drena los eventos por una cola; el cliente los consume con
-  `iter_lines()`. Cambio interno del transporte (no del contrato del CLI): daemon y
-  cliente viajan siempre en la misma versión. Modelos `ProgressEvent`/`ResultEvent`/
-  `ErrorEvent` en `daemon/protocol.py` como fuente única del esquema.
-
 ## [0.1.0] — 2026-07-03
 
 Primer release del gate de preparación para producción. Motor TTS offline con
@@ -42,6 +15,12 @@ clonación de voz en español latinoamericano (Chatterbox Multilingual, alias
 
 ### Añadido
 
+- **Progreso real en vivo durante `speak`**: el motor expone un `progress_callback`
+  en `speak()` que emite eventos de etapa (conditionals → T3 → S3Gen → encoding →
+  guardado) y el conteo de tokens del T3 en vivo (shim best-effort del `tqdm`
+  interno de Chatterbox, con degradación a solo etapas si el layout cambia). El CLI
+  alimenta con esos eventos un indicador de progreso sobre stderr que muestra la
+  etapa y el avance (p. ej. «Generando voz · 210 tokens»), en modo directo y daemon.
 - Motor de síntesis offline con voz por defecto empaquetada y clonación de voz
   vía `voice add` (modelo dual-audio: `reference.wav` + `speech.wav`).
 - CLI con los comandos `speak`, `voice`, `daemon`, `devices`, `doctor`, `setup`,
@@ -90,6 +69,21 @@ clonación de voz en español latinoamericano (Chatterbox Multilingual, alias
 
 ### Cambiado
 
+- **Salidas de usuario consistentes en español**: los mensajes de progreso e
+  instrumentación que el CLI emite a stderr (banners de `timed_command`, etapas
+  del motor y marcadores de sub-etapa) pasaron de inglés a español; p. ej.
+  `Starting speak…`/`Finished in…` → `Iniciando speak…`/`Finalizado en…`,
+  `Stage 2/4: Generating audio` → `Etapa 2/4: Generando audio`, `[Stage 2a]` →
+  `[Etapa 2a]`. La implementación (identificadores, nombres propios de
+  arquitectura como T3/S3Gen/conditionals) permanece en inglés.
+- **Protocolo de `/synthesize` (daemon→cliente)**: la respuesta pasó de un cuerpo
+  binario WAV (con headers `X-T3-Time`/`X-S3Gen-Time`) a un **stream NDJSON**: N
+  líneas `progress` (etapa + tokens) seguidas de una línea `result` con el WAV en
+  base64 y los tiempos por sub-etapa, o una línea `error`. El servidor sintetiza en
+  un hilo worker y drena los eventos por una cola; el cliente los consume con
+  `iter_lines()`. Cambio interno del transporte (no del contrato del CLI): daemon y
+  cliente viajan siempre en la misma versión. Modelos `ProgressEvent`/`ResultEvent`/
+  `ErrorEvent` en `daemon/protocol.py` como fuente única del esquema.
 - **Puerto del daemon fijo en 8765** (loopback): se eliminó el flag `--port` por
   completo. **Breaking**: ya no es posible configurar el puerto ni correr dos
   daemons simultáneos.
@@ -118,7 +112,7 @@ clonación de voz en español latinoamericano (Chatterbox Multilingual, alias
   verificadas (MIT), declaración de libsndfile (LGPL-2.1+), `soxr` (LGPL),
   `pykakasi` (GPLv3+) y los runtimes NVIDIA CUDA; se retiraron `simpleaudio` y
   `pyalsaaudio` (no usados).
-- Conteo de tests actualizado a **199** en `docs/GOAL.md` y `CLAUDE.md`.
+- Conteo de tests actualizado a **233** en `docs/GOAL.md` y `CLAUDE.md`.
 
 ### Corregido
 

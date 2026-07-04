@@ -153,5 +153,5 @@ instaladores por SO queda pendiente, ver Criterios de Aceptación):
 - Scripts de build PyInstaller por SO (Windows/Linux/macOS)
 - Descarga automática del modelo Chatterbox desde HuggingFace
 - CLI completa con todos los comandos
-- Tests pytest (199 tests: timing, protocolo, daemon, CLI, voces, caché de modelo, audio y utilidades de build)
+- Tests pytest (233 tests: timing, protocolo, daemon, CLI, voces, caché de modelo, audio y utilidades de build)
 - Documentación sincronizada

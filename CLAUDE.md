@@ -210,7 +210,7 @@ assets/                  # Material fuente (audios de la voz default, logo)
 src/tts_sidecar/      # Código fuente Python
 └── daemon/              # Daemon mode
 
-tests/                   # Tests pytest (199 tests)
+tests/                   # Tests pytest (233 tests)
 ├── conftest.py
 ├── test_audio.py
 ├── test_build_utils.py
