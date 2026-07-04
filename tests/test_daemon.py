@@ -255,25 +255,158 @@ class TestDaemonManager:
 
     @patch("requests.post")
     def test_synthesize_success(self, mock_post):
+        """El cliente reconstruye el WAV desde el frame `result` (base64) y
+        reenvía cada frame `progress` a on_progress."""
+        import base64
+        import json
         from tts_sidecar.daemon import DaemonIPCClient
+
+        audio = b"RIFF" + b"\x00" * 40
+        lines = [
+            json.dumps({"event": "progress", "stage": "conditionals"}).encode(),
+            json.dumps({"event": "progress", "stage": "t3", "tokens": 20}).encode(),
+            json.dumps({
+                "event": "result",
+                "audio_b64": base64.b64encode(audio).decode("ascii"),
+                "t3_time": 9.7,
+                "s3gen_time": 7.0,
+            }).encode(),
+        ]
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.content = b"RIFF" + b"\x00" * 40
-        mock_resp.headers = {"X-T3-Time": "9.7", "X-S3Gen-Time": "7.0"}
+        mock_resp.iter_lines.return_value = iter(lines)
         mock_post.return_value = mock_resp
 
+        progreso = []
         client = DaemonIPCClient()
-        audio = client.synthesize(text="hola")
-        assert audio == b"RIFF" + b"\x00" * 40
+        audio_out = client.synthesize(text="hola", on_progress=progreso.append)
+        assert audio_out == audio
+        assert progreso == [
+            {"event": "progress", "stage": "conditionals"},
+            {"event": "progress", "stage": "t3", "tokens": 20},
+        ]
 
     @patch("requests.post")
-    def test_synthesize_error(self, mock_post):
+    def test_synthesize_error_frame(self, mock_post):
+        """Un frame `error` del stream se convierte en DaemonIPCError."""
+        import json
         from tts_sidecar.daemon import DaemonIPCClient, DaemonIPCError
+
+        lines = [json.dumps({"event": "error", "detail": "internal error"}).encode()]
         mock_resp = MagicMock()
-        mock_resp.status_code = 500
-        mock_resp.json.return_value = {"detail": "internal error"}
+        mock_resp.status_code = 200
+        mock_resp.iter_lines.return_value = iter(lines)
         mock_post.return_value = mock_resp
 
         client = DaemonIPCClient()
         with pytest.raises(DaemonIPCError, match="Error del daemon: internal error"):
             client.synthesize(text="hola")
+
+    @patch("requests.post")
+    def test_synthesize_http_error_inmediato(self, mock_post):
+        """Un 400/503 de validación (respuesta inmediata, no stream) → DaemonIPCError."""
+        from tts_sidecar.daemon import DaemonIPCClient, DaemonIPCError
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 400
+        mock_resp.json.return_value = {"detail": "ruta no permitida"}
+        mock_post.return_value = mock_resp
+
+        client = DaemonIPCClient()
+        with pytest.raises(DaemonIPCError, match="Error del daemon: ruta no permitida"):
+            client.synthesize(text="hola")
+
+    @patch("requests.post")
+    def test_synthesize_sin_frame_result_falla(self, mock_post):
+        """Un stream que termina sin `result` ni `error` rompe el contrato → error."""
+        import json
+        from tts_sidecar.daemon import DaemonIPCClient, DaemonIPCError
+
+        lines = [json.dumps({"event": "progress", "stage": "t3", "tokens": 10}).encode()]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.iter_lines.return_value = iter(lines)
+        mock_post.return_value = mock_resp
+
+        client = DaemonIPCClient()
+        with pytest.raises(DaemonIPCError, match="no devolvió audio"):
+            client.synthesize(text="hola")
+
+
+class TestSynthesizeStreaming:
+    """El endpoint /synthesize emite NDJSON: N×progress → result, o error."""
+
+    def _allowed_wav(self, tmp_path, monkeypatch):
+        from tts_sidecar import voices
+
+        allowed_root = tmp_path / "voices_permitido"
+        allowed_root.mkdir()
+        wav = allowed_root / "voz.wav"
+        wav.write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
+        monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(allowed_root)])
+        return wav
+
+    def test_orden_progress_luego_result(self, tmp_path, monkeypatch):
+        import base64
+        import json
+        from fastapi.testclient import TestClient
+        from tts_sidecar.daemon import server
+
+        wav = self._allowed_wav(tmp_path, monkeypatch)
+        audio = b"RIFF" + b"\x00" * 40
+
+        class FakeEngine:
+            _synthesis_timing = {"t3": 1.5, "s3gen": 2.5}
+
+            def speak(self, progress_callback=None, **kwargs):
+                progress_callback({"event": "progress", "stage": "conditionals"})
+                progress_callback({"event": "progress", "stage": "t3", "tokens": 10})
+                return audio
+
+        old_engine = server._engine
+        server.set_engine(FakeEngine())
+        try:
+            with TestClient(server.app) as client:
+                resp = client.post(
+                    "/synthesize", json={"text": "hola", "speech_audio": str(wav)}
+                )
+                assert resp.status_code == 200
+                assert resp.headers["content-type"].startswith("application/x-ndjson")
+                lines = [json.loads(l) for l in resp.text.splitlines() if l.strip()]
+                assert [l["event"] for l in lines] == ["progress", "progress", "result"]
+                assert lines[0]["stage"] == "conditionals"
+                assert lines[1]["tokens"] == 10
+                assert base64.b64decode(lines[-1]["audio_b64"]) == audio
+                assert lines[-1]["t3_time"] == 1.5
+                assert lines[-1]["s3gen_time"] == 2.5
+        finally:
+            server.set_engine(old_engine)
+
+    def test_error_de_sintesis_emite_frame_error(self, tmp_path, monkeypatch):
+        import json
+        from fastapi.testclient import TestClient
+        from tts_sidecar.daemon import server
+
+        wav = self._allowed_wav(tmp_path, monkeypatch)
+
+        class FakeEngine:
+            _synthesis_timing = {}
+
+            def speak(self, progress_callback=None, **kwargs):
+                raise RuntimeError("boom interno con /ruta/secreta")
+
+        old_engine = server._engine
+        server.set_engine(FakeEngine())
+        try:
+            with TestClient(server.app) as client:
+                resp = client.post(
+                    "/synthesize", json={"text": "hola", "speech_audio": str(wav)}
+                )
+                assert resp.status_code == 200
+                lines = [json.loads(l) for l in resp.text.splitlines() if l.strip()]
+                assert lines[-1]["event"] == "error"
+                # El detalle no filtra el mensaje/ruta interno real.
+                assert lines[-1]["detail"] == "Error interno de síntesis"
+                assert "secreta" not in resp.text
+        finally:
+            server.set_engine(old_engine)

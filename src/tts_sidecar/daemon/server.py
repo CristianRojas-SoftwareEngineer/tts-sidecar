@@ -3,17 +3,23 @@ Servidor FastAPI del daemon de tts-sidecar.
 Expone endpoints HTTP para síntesis TTS con el modelo persistente en memoria.
 """
 
+import base64
 import logging
 import os
+import queue
 import threading
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 
 from .. import voices
 from .protocol import (
     SynthesizeRequest,
     HealthResponse,
     VoicesResponse,
+    ProgressEvent,
+    ResultEvent,
+    ErrorEvent,
 )
 
 
@@ -66,13 +72,22 @@ _synthesis_lock = threading.Lock()
 
 
 @app.post("/synthesize")
-def synthesize(req: SynthesizeRequest) -> Response:
+def synthesize(req: SynthesizeRequest) -> StreamingResponse:
     """
     Sintetiza texto a audio usando el modelo cacheado en memoria.
 
     Endpoint síncrono (def): FastAPI lo despacha a su threadpool, de modo que
     una síntesis larga no bloquea el event loop y /health sigue respondiendo.
-    Devuelve el audio como binario WAV.
+
+    Devuelve un flujo NDJSON (application/x-ndjson): N líneas `progress` con el
+    avance de la síntesis (etapa y conteo de tokens del T3 en vivo) seguidas de
+    una línea `result` con el WAV en base64 y los tiempos por sub-etapa; si la
+    síntesis falla en el hilo worker, se emite una línea `error`. El esquema de
+    cada línea lo define protocol.py (ProgressEvent/ResultEvent/ErrorEvent).
+
+    La validación de rutas de audio ocurre ANTES de arrancar la síntesis: un
+    400/503 de validación sigue siendo una respuesta de error inmediata (no un
+    frame del stream).
     """
     if not _engine:
         raise HTTPException(status_code=503, detail="Modelo no cargado")
@@ -116,35 +131,68 @@ def synthesize(req: SynthesizeRequest) -> Response:
             )
         real_paths[field] = real_path
 
-    try:
-        with _synthesis_lock:
-            audio_bytes = _engine.speak(
-                text=req.text,
-                voice_audio=real_paths.get("voice_audio"),
-                speech_audio=real_paths.get("speech_audio"),
-                verbose=True,
-            )
+    # Patrón productor/consumidor: la síntesis (CPU-bound y bloqueante) corre en
+    # un hilo worker que empuja eventos a una cola; el generador de la respuesta
+    # los drena como líneas NDJSON hasta un centinela. Así el progreso viaja al
+    # cliente mientras el T3/S3Gen siguen trabajando, sin bloquear el event loop.
+    def event_stream():
+        q: queue.Queue = queue.Queue()
+        SENTINEL = object()
 
-        timing = getattr(_engine, '_synthesis_timing', {})
-        headers = {
-            "Content-Disposition": "attachment; filename=synth.wav",
-            "X-T3-Time": f"{timing.get('t3', 0):.1f}",
-            "X-S3Gen-Time": f"{timing.get('s3gen', 0):.1f}",
-        }
+        def worker():
+            try:
+                # La síntesis sigue serializada (una a la vez): engine.speak muta
+                # estado global del modelo (tts.conds) y dos síntesis concurrentes
+                # cruzarían voces. /health responde igual (endpoint aparte).
+                with _synthesis_lock:
+                    def push(ev: dict):
+                        q.put(("progress", ev))
 
-        return Response(
-            content=audio_bytes,
-            media_type="audio/wav",
-            headers=headers,
-        )
+                    audio_bytes = _engine.speak(
+                        text=req.text,
+                        voice_audio=real_paths.get("voice_audio"),
+                        speech_audio=real_paths.get("speech_audio"),
+                        verbose=True,
+                        progress_callback=push,
+                    )
+                    timing = getattr(_engine, "_synthesis_timing", {})
+                    q.put((
+                        "result",
+                        {
+                            "audio_b64": base64.b64encode(audio_bytes).decode("ascii"),
+                            "t3_time": float(timing.get("t3", 0.0) or 0.0),
+                            "s3gen_time": float(timing.get("s3gen", 0.0) or 0.0),
+                        },
+                    ))
+            except FileNotFoundError as e:
+                # El detalle real (con rutas) queda solo en el log del servidor.
+                logging.getLogger(__name__).warning("synthesize: recurso no encontrado: %s", e)
+                q.put(("error", {"detail": "Recurso de voz no encontrado"}))
+            except Exception as e:
+                logging.getLogger(__name__).error("synthesize: error interno: %s", e)
+                q.put(("error", {"detail": "Error interno de síntesis"}))
+            finally:
+                q.put((SENTINEL, None))
 
-    except FileNotFoundError as e:
-        # El detalle real (con rutas) queda solo en el log del servidor.
-        logging.getLogger(__name__).warning("synthesize: recurso no encontrado: %s", e)
-        raise HTTPException(status_code=404, detail="Recurso de voz no encontrado")
-    except Exception as e:
-        logging.getLogger(__name__).error("synthesize: error interno: %s", e)
-        raise HTTPException(status_code=500, detail="Error interno de síntesis")
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+
+        while True:
+            kind, payload = q.get()
+            if kind is SENTINEL:
+                break
+            if kind == "progress":
+                yield ProgressEvent(
+                    stage=payload.get("stage"),
+                    tokens=payload.get("tokens"),
+                    elapsed=payload.get("elapsed"),
+                ).model_dump_json() + "\n"
+            elif kind == "result":
+                yield ResultEvent(**payload).model_dump_json() + "\n"
+            elif kind == "error":
+                yield ErrorEvent(**payload).model_dump_json() + "\n"
+
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
 
 @app.get("/voices", response_model=VoicesResponse)

@@ -216,7 +216,9 @@ tts-sidecar speak --text "Hola mundo" --output output.wav
 **Qué esperar:** el comando reporta su progreso por etapas con timestamps. En
 modo directo (sin daemon), la primera etapa es la carga del modelo (~15–30 s) y
 luego la síntesis; al final, el audio suena por los altavoces (o se anuncia el
-archivo guardado):
+archivo guardado). En una terminal interactiva verás además un indicador de
+progreso en vivo (etapa y avance de tokens del T3) sobre stderr; ver «Progreso en
+vivo» más abajo. El siguiente ejemplo es la salida capturada (sin TTY):
 
 ```
 Starting speak...
@@ -526,13 +528,15 @@ tts-sidecar speak --text "Hola" --voice mi_voz --no-daemon
 ```
 
 **Qué esperar** con el daemon activo: `speak` omite la etapa de carga del modelo
-y la síntesis empieza de inmediato:
+y la síntesis empieza de inmediato. Aunque la síntesis ocurre en el proceso del
+daemon, su **progreso real** viaja al cliente por el stream de `/synthesize`
+(etapa actual y conteo de tokens del T3 en vivo):
 
 ```
 Starting speak...
 [10:05:01] [Daemon] Enviando solicitud de síntesis...
-   [Stage 2a] T3 autoregresivo: 12.0s
-   [Stage 2b] S3Gen vocoder:   6.0s
+[10:05:19]    [Stage 2a] T3 autoregresivo: 12.0s...
+[10:05:19]    [Stage 2b] S3Gen vocoder:   6.0s...
 [10:05:19] [Daemon] Síntesis completada (18.0s)...
 [10:05:19] [Playback] Reproduciendo audio...
 [10:05:22] [Playback] Reproducción finalizada
@@ -540,7 +544,17 @@ Finished in 21.3s
 ```
 
 Los tiempos de `[Stage 2a]` (generación de tokens) y `[Stage 2b]` (vocoder) se
-muestran en ambos modos, para que puedas comparar el rendimiento.
+muestran con el **mismo formato en ambos modos** (directo y daemon), para que
+puedas comparar el rendimiento.
+
+**Progreso en vivo (solo en terminal interactiva):** en una TTY, mientras dura la
+síntesis `speak` muestra sobre **stderr** un indicador giratorio que se actualiza
+con la etapa y el avance de tokens del T3 (p. ej. `Generando voz · 210 tokens`,
+subiendo), tanto en modo daemon como directo. Es un indicador de etapa y avance,
+**no un porcentaje** del total. Si la salida está redirigida a un archivo o pipe,
+o corre en CI, el indicador se desactiva por completo y stdout queda intacto
+(contrato del CLI: stdout = datos, stderr = progreso). Ver `docs/DAEMON-MODE.md`
+para el detalle del protocolo NDJSON que transporta estos eventos.
 
 ### Requisitos de hardware
 

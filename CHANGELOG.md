@@ -7,7 +7,25 @@ y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
-Sin cambios pendientes de publicar.
+### Añadido
+
+- **Progreso real en vivo durante `speak`**: el motor expone un `progress_callback`
+  en `speak()` que emite eventos de etapa (conditionals → T3 → S3Gen → encoding →
+  guardado) y el conteo de tokens del T3 en vivo (shim best-effort del `tqdm`
+  interno de Chatterbox, con degradación a solo etapas si el layout cambia). El CLI
+  alimenta con esos eventos un indicador de progreso sobre stderr que muestra la
+  etapa y el avance (p. ej. «Generando voz · 210 tokens»), en modo directo y daemon.
+
+### Cambiado
+
+- **Protocolo de `/synthesize` (daemon→cliente)**: la respuesta pasó de un cuerpo
+  binario WAV (con headers `X-T3-Time`/`X-S3Gen-Time`) a un **stream NDJSON**: N
+  líneas `progress` (etapa + tokens) seguidas de una línea `result` con el WAV en
+  base64 y los tiempos por sub-etapa, o una línea `error`. El servidor sintetiza en
+  un hilo worker y drena los eventos por una cola; el cliente los consume con
+  `iter_lines()`. Cambio interno del transporte (no del contrato del CLI): daemon y
+  cliente viajan siempre en la misma versión. Modelos `ProgressEvent`/`ResultEvent`/
+  `ErrorEvent` en `daemon/protocol.py` como fuente única del esquema.
 
 ## [0.1.0] — 2026-07-03
 

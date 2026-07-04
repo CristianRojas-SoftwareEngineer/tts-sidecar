@@ -28,7 +28,7 @@ import os
 import platform
 from pathlib import Path
 
-from .timing import timed_command, StageTimer, Spinner, log
+from .timing import timed_command, StageTimer, Spinner, log, format_progress_event
 
 # Mapa de códigos de salida del CLI — CONTRATO PÚBLICO CONGELADO (ver USAGE.md).
 # Un orquestador distingue causas sin parsear texto: no cambiar los valores.
@@ -158,14 +158,15 @@ def _synthesize_via_daemon(args, voice_audio, speech_audio):
     synth_start = time.time()
     log("[Daemon] Enviando solicitud de síntesis...")
     client = DaemonIPCClient()
-    # El POST bloquea mientras el daemon sintetiza (su progreso vive en el stderr
-    # del daemon, invisible aquí); el spinner de liveness prueba que no está
-    # colgado. En no-TTY es un no-op y la salida es idéntica a antes.
-    with Spinner("Sintetizando vía daemon…"):
+    # El daemon transmite su progreso real por el stream NDJSON; on_progress
+    # actualiza la etiqueta del spinner en vivo (etapa y tokens del T3). En
+    # no-TTY el spinner es un no-op y la salida es idéntica a antes.
+    with Spinner("Sintetizando vía daemon…") as sp:
         audio_bytes = client.synthesize(
             text=args.text,
             voice_audio=voice_audio,
             speech_audio=speech_audio,
+            on_progress=lambda ev: sp.update(format_progress_event(ev)),
         )
     elapsed = time.time() - synth_start
     log(f"[Daemon] Síntesis completada ({elapsed:.1f}s)")
@@ -269,11 +270,14 @@ def cmd_speak(args):
         with Spinner("Cargando modelo…") as _sp:
             engine = ChatterboxEngine.get_instance(compute_backend=args.compute_backend)
             _sp.update("Sintetizando voz…")
+            # Mismo formateador de progreso que el modo daemon: los eventos del
+            # motor (etapa y tokens del T3) actualizan la etiqueta del spinner.
             audio_bytes = engine.speak(
                 text=args.text,
                 output_path=args.output,
                 voice_audio=voice_audio,
                 speech_audio=speech_audio,
+                progress_callback=lambda ev: _sp.update(format_progress_event(ev)),
             )
 
         if args.output:

@@ -91,11 +91,35 @@ fijado al arrancar, con el backend de cómputo resuelto una sola vez (auto-detec
 deben existir y ser `.wav` (validación previa a la síntesis).
 
 **Response** (Daemon → CLI):
+
+La respuesta es un **stream NDJSON** (`Content-Type: application/x-ndjson`): una
+línea JSON por evento. El daemon emite N líneas `progress` con el avance real de
+la síntesis (etapa actual y conteo de tokens del T3 en vivo) y cierra con una
+línea `result` que lleva el WAV completo codificado en base64 y los tiempos por
+sub-etapa. Si la síntesis falla en el hilo worker, se emite una línea `error` en
+lugar de `result` (el cliente la convierte en un fallo con código de salida 5).
+
 ```
 HTTP/1.1 200 OK
-Content-Type: audio/wav
-<binary WAV data>
+Content-Type: application/x-ndjson
+
+{"event":"progress","stage":"conditionals","tokens":null,"elapsed":null}
+{"event":"progress","stage":"t3","tokens":10,"elapsed":null}
+{"event":"progress","stage":"t3","tokens":210,"elapsed":null}
+{"event":"progress","stage":"s3gen","tokens":null,"elapsed":null}
+{"event":"result","audio_b64":"<WAV en base64>","t3_time":9.7,"s3gen_time":7.0}
 ```
+
+El orden garantizado es N×`progress` → 1×`result`, o bien 1×`error`. El esquema de
+cada línea lo define `daemon/protocol.py` (`ProgressEvent` / `ResultEvent` /
+`ErrorEvent`), fuente única consumida por `server.py` (productor) e `ipc.py`
+(consumidor). El cliente reenvía cada `progress` al spinner de `speak` para
+mostrar progreso real (p. ej. «Generando voz · 210 tokens»); ver más abajo.
+
+> **Errores de validación**: los rechazos de ruta de audio inválida (sandbox de
+> directorios permitidos) o de modelo no cargado siguen siendo respuestas HTTP de
+> error inmediatas (`400`/`503` con cuerpo JSON `{"detail": ...}`), **no** frames
+> del stream: se validan antes de arrancar la síntesis.
 
 ## Comandos del Daemon
 
@@ -143,16 +167,17 @@ tts-sidecar speak --text "Hola" --no-daemon
 > lance `daemon start` en background debe esperar su confirmación (o sondear
 > `/health`) antes de asumir que el daemon está listo.
 
-> **Indicador de progreso durante `speak`**: como la síntesis ocurre en el
-> proceso del daemon, su instrumentación de progreso vive en el stderr del
-> daemon, no en la terminal que ejecutó `speak`. Para que el cliente no parezca
-> colgado durante la espera, `speak` muestra un **spinner de liveness** (símbolo
-> girando + tiempo transcurrido) sobre **stderr** mientras dura la síntesis —
-> tanto en modo daemon (esperando la respuesta) como en modo directo (carga del
-> modelo + síntesis). Es un indicador de actividad, **no un porcentaje**. Solo
-> aparece en terminales interactivas (TTY): si la salida está redirigida a un
-> archivo o pipe, o corre en CI, el spinner se desactiva por completo y stdout
-> queda intacto (contrato del CLI: stdout = datos, stderr = progreso).
+> **Indicador de progreso durante `speak`**: aunque la síntesis ocurre en el
+> proceso del daemon, su progreso **real** viaja al cliente por el stream NDJSON
+> de `/synthesize` (etapa actual + conteo de tokens del T3 en vivo). `speak`
+> alimenta con esos eventos un **spinner** sobre **stderr** que muestra la etapa
+> y el avance (p. ej. «Generando voz · 210 tokens», subiendo) — tanto en modo
+> daemon (eventos del stream) como en modo directo (mismo `progress_callback` del
+> motor, sin HTTP). Es un indicador de etapa y avance de tokens, **no un
+> porcentaje** del total. Solo aparece en terminales interactivas (TTY): si la
+> salida está redirigida a un archivo o pipe, o corre en CI, el spinner se
+> desactiva por completo y stdout queda intacto (contrato del CLI: stdout =
+> datos, stderr = progreso).
 
 ## Seguridad: directorios de audio permitidos
 
@@ -202,9 +227,15 @@ del watermark PerthNet y el timing por sub-etapa:
 | **Resiliencia** | Retry + auto-restart flag | Ninguna |
 | **torch.compile** | Compartido via proceso daemon | Memory-mapped files |
 
-## Compatibilidad hacia atrás
+## Compatibilidad
 
-- **100% compatible hacia atrás**
-- Ningún comando existente cambia su comportamiento
-- Si daemon no está corriendo, el CLI funciona exactamente igual que antes
-- Flag `--no-daemon` permite forzar modo legacy
+- El **contrato del CLI** (comandos, flags, códigos de salida, stdout = datos /
+  stderr = progreso) no cambia: `speak`, `--daemon`, `--no-daemon` y el resto se
+  comportan igual desde el punto de vista del integrador.
+- El **protocolo interno daemon→cliente** de `/synthesize` sí cambió: pasó de un
+  cuerpo binario WAV a un stream NDJSON (progreso + `result` con audio base64).
+  Daemon y cliente viajan siempre en la misma versión (no hay usuarios externos
+  desplegados), así que no se conserva la variante binaria ni se negocia
+  capacidad; si actualizas el binario, actualiza ambos lados a la vez.
+- Si el daemon no está corriendo, el CLI degrada a modo directo exactamente como
+  antes; `--no-daemon` fuerza ese modo directo.

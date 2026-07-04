@@ -12,7 +12,29 @@ from io import StringIO
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from tts_sidecar import timing
-from tts_sidecar.timing import log, timed_command, timed, StageTimer, Spinner
+from tts_sidecar.timing import (
+    log, timed_command, timed, StageTimer, Spinner, format_progress_event,
+)
+
+
+class TestFormatProgressEvent:
+    def test_t3_con_tokens(self):
+        assert format_progress_event(
+            {"event": "progress", "stage": "t3", "tokens": 210}
+        ) == "Generando voz · 210 tokens"
+
+    def test_t3_sin_tokens(self):
+        assert format_progress_event({"event": "progress", "stage": "t3"}) == "Generando voz…"
+
+    def test_etapas_conocidas(self):
+        assert format_progress_event({"stage": "conditionals"}) == "Preparando la voz…"
+        assert format_progress_event({"stage": "s3gen"}).startswith("Sintetizando audio")
+        assert format_progress_event({"stage": "encoding"}) == "Codificando audio…"
+        assert format_progress_event({"stage": "saving"}) == "Guardando…"
+
+    def test_etapa_desconocida_cae_al_default(self):
+        assert format_progress_event({"stage": "otra"}) == "Sintetizando…"
+        assert format_progress_event({}) == "Sintetizando…"
 
 
 class FakeTTY(StringIO):

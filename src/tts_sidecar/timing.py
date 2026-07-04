@@ -44,6 +44,33 @@ def log(msg: str, duration: Optional[float] = None):
         print(line, file=sys.stderr)
 
 
+def format_progress_event(ev: dict) -> str:
+    """Formatea un evento de progreso del motor a una etiqueta humana única.
+
+    Fuente única evento→etiqueta compartida por el modo daemon (eventos que
+    llegan por el stream NDJSON) y el modo directo (progress_callback del motor),
+    de modo que ambos actualicen el Spinner con el mismo texto. Incluye el
+    conteo de tokens del T3 cuando está presente (p. ej. «Generando voz · 210
+    tokens»).
+    """
+    stage = ev.get("stage")
+    tokens = ev.get("tokens")
+
+    if stage == "t3":
+        if tokens:
+            return f"Generando voz · {tokens} tokens"
+        return "Generando voz…"
+
+    labels = {
+        "conditionals": "Preparando la voz…",
+        "tts": "Generando voz…",
+        "s3gen": "Sintetizando audio (vocoder)…",
+        "encoding": "Codificando audio…",
+        "saving": "Guardando…",
+    }
+    return labels.get(stage, "Sintetizando…")
+
+
 def timed_command(func):
     """Decorador que añade información de tiempo a funciones de comando CLI.
 

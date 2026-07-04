@@ -11,6 +11,9 @@ from .protocol import (
     SynthesizeRequest,
     HealthResponse,
     VoicesResponse,
+    ProgressEvent,
+    ResultEvent,
+    ErrorEvent,
 )
 from .server import app
 
@@ -22,5 +25,8 @@ __all__ = [
     "SynthesizeRequest",
     "HealthResponse",
     "VoicesResponse",
+    "ProgressEvent",
+    "ResultEvent",
+    "ErrorEvent",
     "app",
 ]

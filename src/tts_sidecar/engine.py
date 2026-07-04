@@ -30,7 +30,7 @@ import platform
 import threading
 import wave
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 import torch
@@ -233,8 +233,29 @@ class ChatterboxEngine:
         # (voice_dir, mtime de conditionals.pt) de la última carga exitosa.
         self._conds_cache_key = None
 
+        # Callback de progreso activo por síntesis (Fase 2): speak() lo fija al
+        # entrar y lo limpia en finally. El shim de tokens del T3 y los wrappers
+        # timed_t3/timed_s3gen lo consultan para emitir eventos de sub-etapa.
+        # La síntesis está serializada (una a la vez) por el llamador —el daemon
+        # con su _synthesis_lock, el modo directo por ser mono-hilo—, así que un
+        # único slot es suficiente y no cruza callbacks entre invocaciones.
+        self._active_progress_cb: Optional[Callable[[dict], None]] = None
+
         # Aplica los parámetros de síntesis optimizados y el timing por sub-etapa
         self._apply_synthesis_optimizations()
+
+    def _emit_progress(self, **fields) -> None:
+        """Emite un evento de progreso al callback activo, si lo hay (best-effort).
+
+        Un callback que lance no debe abortar la síntesis: se traga la excepción.
+        """
+        cb = getattr(self, "_active_progress_cb", None)
+        if cb is None:
+            return
+        try:
+            cb({"event": "progress", **fields})
+        except Exception:
+            pass
 
     def _apply_synthesis_optimizations(self):
         """
@@ -246,7 +267,10 @@ class ChatterboxEngine:
         - bypass del watermarker PerthNet (segunda red neuronal de post-procesado)
 
         El timing queda en self._synthesis_timing ({'t3': s, 's3gen': s}), que el
-        daemon expone en los headers HTTP X-T3-Time / X-S3Gen-Time.
+        daemon incluye en el frame `result` del stream NDJSON de /synthesize
+        (campos t3_time / s3gen_time). Las sub-etapas t3/s3gen (y el conteo de
+        tokens del T3, vía el shim de tqdm) también se emiten al progress_callback
+        activo desde estos wrappers.
         """
         import functools
         import time as time_mod
@@ -259,6 +283,10 @@ class ChatterboxEngine:
         @functools.wraps(_orig_t3)
         def timed_t3(*args, **kwargs):
             kwargs['max_new_tokens'] = self.MAX_NEW_TOKENS
+            # Sub-etapa T3: el conteo de tokens ascendente lo emite el shim de
+            # tqdm (ver _install_token_progress_shim); aquí solo marcamos la
+            # transición de etapa para el caso en que el shim haya degradado.
+            self._emit_progress(stage="t3")
             t0 = time_mod.time()
             result = _orig_t3(*args, **kwargs)
             self._synthesis_timing['t3'] = time_mod.time() - t0
@@ -272,6 +300,8 @@ class ChatterboxEngine:
         @functools.wraps(_orig_s3gen)
         def timed_s3gen(*args, **kwargs):
             kwargs['n_cfm_timesteps'] = self.N_CFM_TIMESTEPS
+            # Sub-etapa S3Gen (vocoder): transición tras completar el T3.
+            self._emit_progress(stage="s3gen")
             t0 = time_mod.time()
             result = _orig_s3gen(*args, **kwargs)
             self._synthesis_timing['s3gen'] = time_mod.time() - t0
@@ -290,6 +320,68 @@ class ChatterboxEngine:
             return wav
 
         tts.watermarker.apply_watermark = noop_watermark
+
+        # Shim de progreso de tokens del T3 (Fase 2b), best-effort.
+        self._install_token_progress_shim()
+
+    def _install_token_progress_shim(self):
+        """Envuelve el símbolo `tqdm` de `chatterbox.models.t3.t3` para reportar
+        el conteo de tokens del bucle 'Sampling' del T3 al callback activo.
+
+        Es un acoplamiento a un detalle interno de Chatterbox (el bucle
+        `for i in tqdm(range(max_new_tokens), desc="Sampling", ...)`), del mismo
+        tipo que los monkeypatches que este engine ya aplica sobre t3/s3gen. Se
+        implementa **best-effort**: si el símbolo no está donde se espera (layout
+        distinto tras una actualización del paquete), degrada en silencio a solo
+        eventos de etapa —la síntesis nunca se rompe por esto—.
+        """
+        try:
+            from chatterbox.models.t3 import t3 as _t3_mod
+            real_tqdm = _t3_mod.tqdm
+            # Idempotencia: si ya instalamos el shim (p. ej. un segundo engine en
+            # otra cache key), no lo envolvemos de nuevo.
+            if getattr(real_tqdm, "_is_tts_sidecar_shim", False):
+                return
+
+            engine = self
+
+            def progress_tqdm(iterable=None, *args, **kwargs):
+                cb = getattr(engine, "_active_progress_cb", None)
+                # Solo interceptamos el bucle de sampling del T3 con callback activo;
+                # cualquier otro uso de tqdm delega en el real (tqdm ya está
+                # deshabilitado vía TQDM_DISABLE, así que no dibuja nada).
+                if cb is None or kwargs.get("desc") != "Sampling" or iterable is None:
+                    return real_tqdm(iterable, *args, **kwargs)
+                return engine._token_counting_iter(iterable, cb)
+
+            progress_tqdm._is_tts_sidecar_shim = True
+            _t3_mod.tqdm = progress_tqdm
+        except Exception:
+            # Layout inesperado: degradar a solo eventos de etapa.
+            pass
+
+    @staticmethod
+    def _token_counting_iter(iterable, cb):
+        """Itera reportando el conteo de tokens al callback, con throttle.
+
+        Emite un evento como mucho cada ~10 tokens y a un máximo de ~10 eventos/s,
+        para acotar el volumen del stream. Un callback que lance no interrumpe la
+        generación.
+        """
+        import time as _t
+
+        last_emit = 0.0
+        count = 0
+        for item in iterable:
+            count += 1
+            now = _t.time()
+            if count % 10 == 0 and (now - last_emit) >= 0.1:
+                last_emit = now
+                try:
+                    cb({"event": "progress", "stage": "t3", "tokens": count})
+                except Exception:
+                    pass
+            yield item
 
     def _download_model(self, model_name: str, models_dir: Optional[str] = None) -> Path:
         """Descarga el modelo desde HuggingFace o lo obtiene de la caché local."""
@@ -427,6 +519,7 @@ class ChatterboxEngine:
         speech_audio: Optional[str] = None,
         output_path: Optional[str] = None,
         verbose: bool = True,
+        progress_callback: Optional[Callable[[dict], None]] = None,
     ) -> bytes:
         """
         Genera y opcionalmente guarda audio a partir de texto.
@@ -438,6 +531,13 @@ class ChatterboxEngine:
                          Si es None pero se da voice_audio, se usa voice_audio para ambos.
             output_path: Ruta opcional para guardar el archivo WAV
             verbose: Si es True, imprime info de timing por etapa (default True)
+            progress_callback: Callback opcional que recibe dicts de progreso
+                (`{"event":"progress","stage":...,"tokens":...}`) en cada
+                transición de etapa (conditionals → t3 → s3gen → encoding →
+                saving) y con el conteo de tokens del T3 en vivo. Es la fuente
+                única de progreso, compartida por el modo directo (CLI) y el
+                daemon (que la reenvía por el stream NDJSON). Best-effort: una
+                excepción del callback no aborta la síntesis.
 
         Returns:
             Datos de audio como bytes WAV
@@ -455,7 +555,24 @@ class ChatterboxEngine:
         if voice_audio and not speech_audio:
             speech_audio = voice_audio
 
+        # Fija el callback activo por la duración de esta síntesis (limpiado en
+        # finally). El shim de tokens y los wrappers timed_t3/timed_s3gen lo leen.
+        self._active_progress_cb = progress_callback
+        try:
+            return self._speak_impl(text, voice_audio, speech_audio, output_path)
+        finally:
+            self._active_progress_cb = None
+
+    def _speak_impl(
+        self,
+        text: str,
+        voice_audio: Optional[str],
+        speech_audio: Optional[str],
+        output_path: Optional[str],
+    ) -> bytes:
+        """Cuerpo de la síntesis (con el callback de progreso ya fijado)."""
         # Stage 1: Carga de conditionals
+        self._emit_progress(stage="conditionals")
         with StageTimer("1-Speak", "Stage 1/4: Loading conditionals"):
             voice_dir = None
             if speech_audio:
@@ -497,16 +614,21 @@ class ChatterboxEngine:
 
         # Stage 2: Generación TTS con los parámetros optimizados del engine.
         # max_new_tokens y n_cfm_timesteps se inyectan en t3/s3gen.inference
-        # vía _apply_synthesis_optimizations; exaggeration se pasa aquí.
+        # vía _apply_synthesis_optimizations; exaggeration se pasa aquí. Las
+        # sub-etapas t3/s3gen (y el conteo de tokens) las emiten los wrappers
+        # timed_t3/timed_s3gen y el shim de tqdm desde dentro de generate().
+        self._emit_progress(stage="tts")
         with StageTimer("2-Speak", "Stage 2/4: Generating audio (TTS)"):
             wav = self._tts.generate(text, language_id="es", exaggeration=self.EXAGGERATION)
 
         # Stage 3: Conversión a WAV
+        self._emit_progress(stage="encoding")
         with StageTimer("3-Speak", "Stage 3/4: Converting to WAV"):
             wav_bytes = self._audio_to_wav(wav)
 
         # Stage 4: Guardado a archivo (opcional)
         if output_path:
+            self._emit_progress(stage="saving")
             with StageTimer("4-Speak", "Stage 4/4: Saving to file"):
                 self._save_wav(wav_bytes, output_path)
                 log("   -> File saved")

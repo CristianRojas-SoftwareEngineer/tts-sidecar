@@ -305,6 +305,57 @@ class TestCmdSpeakDaemonDispatch:
         engine.speak.assert_called_once()
 
 
+class TestCmdSpeakProgresoEnVivo:
+    """El progreso se cablea desde la fuente de eventos hasta el Spinner en
+    ambos modos: on_progress (daemon) y progress_callback (directo)."""
+
+    def _args(self, **kw):
+        kw.setdefault("voice_audio", "v.wav")
+        kw.setdefault("speech_audio", "s.wav")
+        return MockArgs(**kw)
+
+    @patch("tts_sidecar.cli._paths_allowed_by_daemon", return_value=True)
+    @patch("tts_sidecar.model_cache.is_model_cached", return_value=True)
+    @patch("tts_sidecar.daemon.DaemonIPCClient")
+    @patch("tts_sidecar.daemon.is_daemon_running", return_value=True)
+    def test_daemon_pasa_on_progress_formateado(
+        self, mock_running, mock_client_cls, _cached, _allowed, tmp_path
+    ):
+        from tts_sidecar.cli import cmd_speak
+
+        client = MagicMock()
+        client.synthesize.return_value = b"RIFF"
+        mock_client_cls.return_value = client
+
+        cmd_speak(self._args(daemon=True, output=str(tmp_path / "out.wav")))
+
+        _, kwargs = client.synthesize.call_args
+        on_progress = kwargs.get("on_progress")
+        assert callable(on_progress), "el daemon debe recibir un on_progress cableado"
+        # El callback formatea el evento y actualiza el spinner sin lanzar
+        # (en no-TTY el spinner es un no-op, pero la ruta debe ser segura).
+        on_progress({"event": "progress", "stage": "t3", "tokens": 42})
+
+    @patch("tts_sidecar.model_cache.is_model_cached", return_value=True)
+    @patch("tts_sidecar.engine.ChatterboxEngine")
+    @patch("tts_sidecar.daemon.is_daemon_running", return_value=False)
+    def test_directo_pasa_progress_callback_formateado(
+        self, mock_running, mock_engine_cls, _cached, tmp_path
+    ):
+        from tts_sidecar.cli import cmd_speak
+
+        engine = MagicMock()
+        engine.speak.return_value = b"RIFF"
+        mock_engine_cls.get_instance.return_value = engine
+
+        cmd_speak(self._args(no_daemon=True, output=str(tmp_path / "out.wav")))
+
+        _, kwargs = engine.speak.call_args
+        progress_callback = kwargs.get("progress_callback")
+        assert callable(progress_callback), "el modo directo debe cablear progress_callback"
+        progress_callback({"event": "progress", "stage": "s3gen"})
+
+
 class TestCmdSpeakVoiceAudioDaemonSandbox:
     """N-02: --voice-audio/--speech-audio fuera de la sandbox del daemon."""
 

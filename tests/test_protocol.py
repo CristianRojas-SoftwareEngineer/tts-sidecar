@@ -11,6 +11,9 @@ from tts_sidecar.daemon.protocol import (
     SynthesizeRequest,
     HealthResponse,
     VoicesResponse,
+    ProgressEvent,
+    ResultEvent,
+    ErrorEvent,
 )
 
 
@@ -84,3 +87,55 @@ class TestVoicesResponse:
     def test_empty_voices(self):
         resp = VoicesResponse(voices=[])
         assert resp.voices == []
+
+
+class TestStreamEvents:
+    """Esquema NDJSON de /synthesize: progress / result / error."""
+
+    def test_progress_event_defaults(self):
+        ev = ProgressEvent()
+        assert ev.event == "progress"
+        assert ev.stage is None and ev.tokens is None and ev.elapsed is None
+
+    def test_progress_event_con_tokens(self):
+        ev = ProgressEvent(stage="t3", tokens=210)
+        assert ev.event == "progress"
+        assert ev.stage == "t3"
+        assert ev.tokens == 210
+
+    def test_progress_event_literal_fijo(self):
+        """El discriminador `event` es un literal: no admite otros valores."""
+        with pytest.raises(ValueError):
+            ProgressEvent(event="result")
+
+    def test_result_event(self):
+        ev = ResultEvent(audio_b64="QUJD", t3_time=9.7, s3gen_time=7.0)
+        assert ev.event == "result"
+        assert ev.audio_b64 == "QUJD"
+        assert ev.t3_time == 9.7
+        assert ev.s3gen_time == 7.0
+
+    def test_result_event_tiempos_por_defecto(self):
+        ev = ResultEvent(audio_b64="QUJD")
+        assert ev.t3_time == 0.0 and ev.s3gen_time == 0.0
+
+    def test_result_event_requiere_audio(self):
+        with pytest.raises(ValueError):
+            ResultEvent()
+
+    def test_error_event(self):
+        ev = ErrorEvent(detail="Error interno de síntesis")
+        assert ev.event == "error"
+        assert ev.detail == "Error interno de síntesis"
+
+    def test_error_event_requiere_detail(self):
+        with pytest.raises(ValueError):
+            ErrorEvent()
+
+    def test_serializacion_json_incluye_event(self):
+        """Cada línea NDJSON lleva el discriminador `event` para el parseo del cliente."""
+        import json
+
+        assert json.loads(ProgressEvent(stage="t3", tokens=10).model_dump_json())["event"] == "progress"
+        assert json.loads(ResultEvent(audio_b64="QUJD").model_dump_json())["event"] == "result"
+        assert json.loads(ErrorEvent(detail="x").model_dump_json())["event"] == "error"
