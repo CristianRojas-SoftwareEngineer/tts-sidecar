@@ -106,10 +106,13 @@ def build_macos(target_arch="arm64"):
             # afplay (built-in) es el player de macOS, pero la enumeración de
             # dispositivos (doctor/setup/devices) usa sounddevice: se recolecta
             # completo para que el binario de PortAudio viaje en el bundle.
+            # Python 3.13 requiere --collect-binaries python para incluir
+            # libpython3.13.dylib (PYI-20036 fix).
             pyinstaller_args = common_pyinstaller_args(
                 entry_point, PROJECT_ROOT, DIST_DIR, BUILD_DIR,
                 data_sep=":",
                 extra_collect_all=["sounddevice"],
+                extra_collect_binaries=["python"],
             )
             log(f"Ejecutando: pyinstaller {' '.join(pyinstaller_args[2:])}")
             try:

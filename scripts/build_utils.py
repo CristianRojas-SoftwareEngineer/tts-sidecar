@@ -195,13 +195,16 @@ def common_pyinstaller_args(
     build_dir: Path,
     data_sep: str,
     extra_collect_all=(),
+    extra_collect_binaries=(),
 ) -> list:
     """Flags de PyInstaller compartidas por los tres scripts de build (SUGGESTION-04).
 
     `data_sep` es el separador de `--add-data` según el SO: ';' en Windows,
     ':' en Linux/macOS. `extra_collect_all` añade paquetes `--collect-all`
     específicos de la plataforma (p. ej. pycaw en Windows, sounddevice en
-    Linux y macOS).
+    Linux y macOS). `extra_collect_binaries` añade `--collect-binaries` para
+    paquetes que requieren bibliotecas compartidas del intérprete (p. ej.
+    python en macOS para incluir libpython3.13.dylib).
     """
     return [
         sys.executable, "-m", "PyInstaller",
@@ -228,6 +231,8 @@ def common_pyinstaller_args(
         "--collect-all", "pandas",
         "--collect-all", "onnx",
         *[flag for pkg in extra_collect_all for flag in ("--collect-all", pkg)],
+        # Bibliotecas compartidas del intérprete (macOS requiere python para libpython3.x.dylib)
+        *[flag for pkg in extra_collect_binaries for flag in ("--collect-binaries", pkg)],
         # Data files
         "--collect-data", "soundfile",
         "--collect-data", "certifi",
