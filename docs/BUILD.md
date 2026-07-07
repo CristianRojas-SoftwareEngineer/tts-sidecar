@@ -315,7 +315,11 @@ tipos de cache, con claves independientes:
   la versión de Xcode (`-xcode26.4`) porque el CPython compilado depende del SDK
   del runner. Con el cache restaurado, `pyenv install -s` salta la compilación
   en segundos. Separar esta clave de la del venv evita que un cambio de lockfile
-  fuerce recompilar Python.
+  fuerce recompilar Python. Antes de instalar, los jobs macOS corren
+  `brew update && brew upgrade pyenv` (el `python-build` que trae la imagen es
+  un snapshot vendido con el formula de Homebrew y puede no incluir todavía la
+  definición de un patch recién liberado); `build-linux-arm64` hace el
+  equivalente con `git pull` sobre `~/.pyenv` si es un checkout git.
 
 Los caches de CircleCI son **inmutables por clave**: para invalidar todo el
 conjunto manualmente, incrementar el prefijo versionado (`v1-` → `v2-`) en

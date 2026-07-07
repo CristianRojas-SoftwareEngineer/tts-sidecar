@@ -167,11 +167,15 @@ jobs:
           # output escaso (~10 min) en el primer miss; con cache restaurado,
           # `pyenv install -s` salta la compilación en segundos. La clave del
           # cache incluye la versión de Xcode: el CPython compilado depende del
-          # SDK del runner.
+          # SDK del runner. `brew upgrade pyenv` es obligatorio antes de fijar
+          # un patch exacto: el pyenv preinstalado en la imagen puede no traer
+          # localmente la definición del patch más reciente (python-build es
+          # un snapshot vendido con el formula de Homebrew, no se actualiza solo).
           name: Set up Python 3.13
           no_output_timeout: 20m
           command: |
             echo "[STEP] Set up Python 3.13 - INICIO"
+            brew update && brew upgrade pyenv
             pyenv install -s 3.13.14
             pyenv global 3.13.14
             pyenv rehash
@@ -484,11 +488,16 @@ jobs:
           # jobs Windows): patch fijo para que la clave de cache del CPython
           # compilado sea estable. no_output_timeout holgado: pyenv compila
           # CPython desde fuente con output escaso (~10 min) en el primer miss;
-          # con cache restaurado, `pyenv install -s` salta la compilación.
+          # con cache restaurado, `pyenv install -s` salta la compilación. Si
+          # `~/.pyenv` es un checkout git (instalación estándar del pyenv-installer
+          # en las imágenes `machine` de CircleCI), se actualiza antes de instalar:
+          # la definición de un patch recién liberado puede no estar en el
+          # snapshot vendido con la imagen.
           name: Set up Python 3.13
           no_output_timeout: 20m
           command: |
             echo "[STEP] Set up Python 3.13 - INICIO"
+            if [ -d "$(pyenv root)/.git" ]; then git -C "$(pyenv root)" pull --ff-only; fi
             pyenv install -s 3.13.14
             pyenv global 3.13.14
             pyenv rehash
@@ -602,11 +611,16 @@ jobs:
           # compila CPython desde fuente con output escaso (~10 min) en el
           # primer miss; con cache restaurado, `pyenv install -s` salta la
           # compilación. La clave del cache incluye la versión de Xcode: el
-          # CPython compilado depende del SDK del runner.
+          # CPython compilado depende del SDK del runner. `brew upgrade pyenv`
+          # es obligatorio antes de fijar un patch exacto: el pyenv preinstalado
+          # en la imagen puede no traer localmente la definición del patch más
+          # reciente (python-build es un snapshot vendido con el formula de
+          # Homebrew, no se actualiza solo).
           name: Set up Python 3.13
           no_output_timeout: 20m
           command: |
             echo "[STEP] Set up Python 3.13 - INICIO"
+            brew update && brew upgrade pyenv
             pyenv install -s 3.13.14
             pyenv global 3.13.14
             pyenv rehash
