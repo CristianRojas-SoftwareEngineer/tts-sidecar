@@ -37,6 +37,8 @@ import torch
 
 from . import voices
 from .model_cache import (
+    BASE_MODEL_REVISION,
+    MODEL_REVISIONS,
     MODELS as _MODEL_ALIASES,
     _resolve_cached_snapshot,
     cache_folder_for,
@@ -388,8 +390,22 @@ class ChatterboxEngine:
         from huggingface_hub import snapshot_download
         import os
 
+        # Revisión fijada del repo (R-03): la resolución de carga y la descarga de
+        # respaldo honran el mismo pin que 'setup' y la detección de caché, de modo
+        # que un bump futuro de MODEL_REVISIONS no puede producir síntesis silenciosa
+        # con el modelo viejo que 'refs/main' seguiría prefiriendo. Acepta tanto el
+        # alias como el repo id (model_name es el repo id resuelto por self.MODELS).
+        revision = MODEL_REVISIONS.get(model_name)
+        if revision is None:
+            for alias, repo in self.MODELS.items():
+                if repo == model_name and alias in MODEL_REVISIONS:
+                    revision = MODEL_REVISIONS[alias]
+                    break
+
         # Intenta encontrar un modelo ya cacheado
-        cached = _resolve_cached_snapshot(hub_cache_path() / cache_folder_for(model_name))
+        cached = _resolve_cached_snapshot(
+            hub_cache_path() / cache_folder_for(model_name), revision=revision
+        )
 
         if cached is not None:
             # Verifica que existan los archivos de es-mx-latam
@@ -408,6 +424,7 @@ class ChatterboxEngine:
             snapshot_download(
                 repo_id=model_name,
                 repo_type="model",
+                revision=revision,
                 token=os.getenv("HF_TOKEN"),
             )
         )
@@ -444,11 +461,14 @@ class ChatterboxEngine:
         # es-mx-latam no incluye ve.safetensors; se comparte con el modelo base
         ve_path = cache_dir / "ve.safetensors"
         if not ve_path.exists():
-            # Intenta la caché del modelo base, con el mismo criterio de
-            # resolución determinista (refs/main, luego mtime) que el resto
-            # del motor, en vez de un os.listdir()[0] de orden no garantizado.
+            # Intenta la caché del modelo base honrando la revisión fijada
+            # (BASE_MODEL_REVISION): la carga resuelve exclusivamente el snapshot
+            # del pin, igual que 'setup' lo descarga y la detección lo valida
+            # (cierre de R-03: la carga ya no cae al fallback refs/main→mtime, así
+            # que un bump de revisión no reintroduce el ve.safetensors viejo).
             base_snapshot = _resolve_cached_snapshot(
-                hub_cache_path() / cache_folder_for("ResembleAI/chatterbox")
+                hub_cache_path() / cache_folder_for("ResembleAI/chatterbox"),
+                revision=BASE_MODEL_REVISION,
             )
             if base_snapshot is not None:
                 ve_path = base_snapshot / "ve.safetensors"
@@ -463,6 +483,7 @@ class ChatterboxEngine:
             ve_path = Path(hf_hub_download(
                 repo_id="ResembleAI/chatterbox",
                 filename="ve.safetensors",
+                revision=BASE_MODEL_REVISION,
                 token=os.getenv("HF_TOKEN"),
             ))
 

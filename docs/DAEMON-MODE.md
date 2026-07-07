@@ -186,9 +186,14 @@ tts-sidecar speak --text "Hola" --no-daemon
 
 El endpoint `/synthesize` **no acepta rutas de audio arbitrarias del sistema
 de archivos**: `voice_audio`/`speech_audio` deben resolver (tras seguir
-symlinks) dentro de un directorio de voces conocido (fábrica o usuario, ver
-`voices.allowed_audio_dirs()` en `src/tts_sidecar/voices.py`). Cualquier
-otra ruta se rechaza con `400`.
+symlinks) dentro de un directorio permitido —un directorio de voces conocido
+(fábrica o usuario) o el subdirectorio de sesión del daemon bajo el tempdir del
+SO (`<tempdir>/tts-sidecar/`), donde los clientes IPC preparan audio de sesión;
+ver `voices.allowed_audio_dirs()` en `src/tts_sidecar/voices.py`. El tempdir
+compartido general (`%TEMP%`/`/tmp`) **no** es un directorio permitido: acotarlo
+al subdirectorio namespaced evita que cualquier proceso local plante un `.wav`
+en el temp compartido para que el daemon lo lea. Cualquier otra ruta se rechaza
+con `400`.
 
 Esta restricción evita que un proceso local cualquiera use el daemon como
 lector arbitrario de `.wav` del sistema (el daemon escucha en loopback sin

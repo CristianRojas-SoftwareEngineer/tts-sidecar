@@ -9,11 +9,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 class TestServerConcurrency:
-    def test_health_responds_during_synthesis(self, tmp_path):
+    def test_health_responds_during_synthesis(self, tmp_path, monkeypatch):
         """Una síntesis bloqueada no debe congelar /health (WARNING-03)."""
         import threading
         from fastapi.testclient import TestClient
         from tts_sidecar.daemon import server
+        from tts_sidecar import voices
 
         started = threading.Event()
         release = threading.Event()
@@ -26,6 +27,7 @@ class TestServerConcurrency:
 
         wav = tmp_path / "voz.wav"
         wav.write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
+        monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(tmp_path)])
 
         old_engine = server._engine
         server.set_engine(SlowEngine())
@@ -167,6 +169,60 @@ class TestSynthesizeHeaderValidationAndCanonicalPath:
             server.set_engine(old_engine)
 
 
+class TestDaemonSessionSandbox:
+    """R-01: el sandbox real acota el tempdir a `<tempdir>/tts-sidecar/`; el
+    tempdir compartido general ya no es un directorio permitido."""
+
+    def test_rejects_wav_in_general_tempdir(self, monkeypatch):
+        import os
+        import tempfile
+        from fastapi.testclient import TestClient
+        from tts_sidecar.daemon import server
+
+        wav = os.path.join(tempfile.gettempdir(), "tts_sidecar_test_reject.wav")
+        with open(wav, "wb") as f:
+            f.write(b"RIFF\x00\x00\x00\x00WAVE")
+
+        old_engine = server._engine
+        server.set_engine(MagicMock())
+        try:
+            with TestClient(server.app) as client:
+                resp = client.post(
+                    "/synthesize", json={"text": "hola", "speech_audio": wav}
+                )
+                assert resp.status_code == 400
+        finally:
+            server.set_engine(old_engine)
+            os.remove(wav)
+
+    def test_accepts_wav_in_namespaced_session_dir(self):
+        import os
+        from fastapi.testclient import TestClient
+        from tts_sidecar.daemon import server
+        from tts_sidecar import voices
+
+        session_dir = voices.ensure_daemon_session_dir()
+        wav = os.path.join(session_dir, "tts_sidecar_test_accept.wav")
+        with open(wav, "wb") as f:
+            f.write(b"RIFF\x00\x00\x00\x00WAVE")
+
+        fake_engine = MagicMock()
+        fake_engine.speak.return_value = b"RIFF" + b"\x00" * 40
+        fake_engine._synthesis_timing = {}
+
+        old_engine = server._engine
+        server.set_engine(fake_engine)
+        try:
+            with TestClient(server.app) as client:
+                resp = client.post(
+                    "/synthesize", json={"text": "hola", "speech_audio": wav}
+                )
+                assert resp.status_code == 200
+        finally:
+            server.set_engine(old_engine)
+            os.remove(wav)
+
+
 class TestKillPidVerified:
     def _fake_psutil(self, cmdline):
         proc = MagicMock()
@@ -279,10 +335,42 @@ class TestDaemonManager:
         from tts_sidecar.daemon import DaemonIPCClient
         mock_resp = MagicMock()
         mock_resp.status_code = 200
+        # Cuerpo válido de HealthResponse: la detección de vida ahora valida
+        # identidad, no solo el status code.
+        mock_resp.json.return_value = {
+            "status": "healthy",
+            "model_loaded": True,
+            "uptime_seconds": 1.0,
+        }
         mock_get.return_value = mock_resp
 
         client = DaemonIPCClient()
         assert client.is_running() is True
+
+    @patch("requests.get")
+    def test_is_running_false_foreign_service_on_port(self, mock_get):
+        """R-02: un 200 de otro servicio en el puerto 8765, cuyo cuerpo no valida
+        como HealthResponse, se trata como «no es el daemon»."""
+        from tts_sidecar.daemon import DaemonIPCClient
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"message": "soy otro servicio"}
+        mock_get.return_value = mock_resp
+
+        client = DaemonIPCClient()
+        assert client.is_running() is False
+
+    @patch("requests.get")
+    def test_is_running_false_non_json_body(self, mock_get):
+        """Un 200 con cuerpo no-JSON tampoco cuenta como daemon vivo."""
+        from tts_sidecar.daemon import DaemonIPCClient
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.side_effect = ValueError("no es JSON")
+        mock_get.return_value = mock_resp
+
+        client = DaemonIPCClient()
+        assert client.is_running() is False
 
     @patch("requests.get")
     def test_is_running_false_connection_error(self, mock_get):

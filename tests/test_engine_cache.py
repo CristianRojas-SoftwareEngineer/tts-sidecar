@@ -222,6 +222,43 @@ def _hf_env(**env):
         importlib.reload(constants)
 
 
+class TestDownloadModelHonorsPin:
+    """R-03: la resolución de carga del engine honra la revisión fijada, igual
+    que la detección de caché: un snapshot de otra revisión no se usa aunque
+    refs/main lo prefiera (antes la carga caía al fallback refs/main→mtime)."""
+
+    def _fake_hub(self, tmp_path, monkeypatch):
+        hub = tmp_path / "hub"
+        hub.mkdir()
+        from huggingface_hub import constants
+
+        monkeypatch.setattr(constants, "HF_HUB_CACHE", str(hub))
+        return hub
+
+    def _engine_sin_modelo(self):
+        from tts_sidecar.engine import ChatterboxEngine
+
+        return ChatterboxEngine.__new__(ChatterboxEngine)
+
+    def test_download_model_ignores_other_revision_snapshot(self, tmp_path, monkeypatch):
+        hub = self._fake_hub(tmp_path, monkeypatch)
+        model_dir = hub / ES_MX_FOLDER
+
+        # Snapshot de la revisión fijada (el que la carga DEBE usar).
+        pinned = _make_snapshot(model_dir, PINNED_REV, mtime=time.time() - 1000)
+        (pinned / "t3_es_mx_latam.safetensors").write_bytes(VALID_SAFETENSORS)
+
+        # Snapshot de OTRA revisión, más reciente y apuntado por refs/main:
+        # sin honrar el pin, la carga lo preferiría (asimetría de R-03).
+        other = _make_snapshot(model_dir, "otra_revision", mtime=time.time())
+        (other / "t3_es_mx_latam.safetensors").write_bytes(VALID_SAFETENSORS)
+        _set_ref_main(model_dir, "otra_revision")
+
+        eng = self._engine_sin_modelo()
+        resolved = eng._download_model("ResembleAI/Chatterbox-Multilingual-es-mx-latam")
+        assert resolved == pinned
+
+
 class TestHubCachePath:
     def test_hf_hub_cache_takes_precedence(self, tmp_path):
         custom = tmp_path / "hub-custom"

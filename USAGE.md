@@ -167,7 +167,7 @@ las tablas por brevedad: está presente en todos.
 | Clave | Tipo | Significado |
 |-------|------|-------------|
 | `running` | boolean | Si el daemon responde al health check |
-| `status` | string | Solo con `running: true`: estado reportado (`"ready"`, `"unknown"`, …) |
+| `status` | string | Solo con `running: true`: estado reportado (`"healthy"`, `"initializing"`, `"unknown"`) |
 | `model_loaded` | boolean | Solo con `running: true`: si el modelo está cargado |
 | `uptime_seconds` | number | Solo con `running: true`: segundos desde el arranque |
 
@@ -248,8 +248,9 @@ Plataforma: Windows 11 / Linux 6.x / Darwin 24.x
 [PASS] Audio library: pycaw (Windows) — 2 dispositivo(s)
 [PASS] Chatterbox model: es-mx-latam presente en la caché
 [PASS] Voices directory: 1 voz(voces) disponible(s)
+[PASS] RAM: 16.0 GB
 
-Chequeos: 4 exitosos, 0 fallidos
+Chequeos: 5 exitosos, 0 fallidos
 ```
 
 Termina con código de salida 0 si todo pasa, y 1 si algún chequeo falla (cada
@@ -381,9 +382,10 @@ tts-sidecar speak --text "Hola" --voice mi_voz --no-daemon
 ```
 
 > **`--voice-audio`/`--speech-audio` vía daemon**: el daemon solo acepta rutas
-> de audio dentro de los directorios de voces (fábrica o usuario), no un
-> archivo arbitrario del sistema. Si el daemon está activo y tu audio vive
-> fuera de esos directorios, tienes tres alternativas: (1) registra el audio
+> de audio dentro de los directorios de voces (fábrica o usuario) o del
+> subdirectorio de sesión del daemon (`<tempdir>/tts-sidecar/`), no un archivo
+> arbitrario del sistema ni el tempdir compartido general. Si el daemon está
+> activo y tu audio vive fuera de esos directorios, tienes tres alternativas: (1) registra el audio
 > como voz con `voice add` y usa `--voice`; (2) fuerza `--no-daemon` para
 > sintetizar en modo directo con esa ruta; o (3) copia el audio dentro del
 > directorio de voces del usuario. Sin `--daemon` explícito, el CLI detecta la
@@ -591,7 +593,7 @@ servidor en segundo plano y confirma con `Daemon iniciado correctamente`. Luego
 
 ```
 Daemon en ejecución:
-  Estado: ready
+  Estado: healthy
   Modelo cargado: True
   Tiempo activo: 42.3s
 ```

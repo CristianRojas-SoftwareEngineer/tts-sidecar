@@ -858,6 +858,22 @@ class TestExitCodes:
                 cmd_daemon(args)
         assert exc.value.code == EXIT_DAEMON_UNREACHABLE
 
+    def test_daemon_serve_without_model_exits_and_skips_serve(self):
+        """R-04: 'daemon serve' sin modelo en caché falla rápido remitiendo a
+        'setup' (exit EXIT_MODEL_MISSING) y NO carga/arranca el servidor."""
+        import argparse
+        from tts_sidecar.cli import cmd_daemon, EXIT_MODEL_MISSING
+
+        args = argparse.Namespace(action="serve", auto_restart=False, max_retries=0)
+        serve = MagicMock()
+
+        with patch("tts_sidecar.model_cache.is_model_cached", return_value=False), \
+                patch("tts_sidecar.daemon.run.serve", serve):
+            with pytest.raises(SystemExit) as exc:
+                cmd_daemon(args)
+        assert exc.value.code == EXIT_MODEL_MISSING
+        serve.assert_not_called()
+
 
 class TestCmdCleanup:
     """El comando cleanup borra solo las rutas del proyecto, con confirmación."""

@@ -897,6 +897,11 @@ def cmd_daemon(args):
     if args.action == "serve":
         # Servidor en primer plano. Lo usa el ejecutable congelado para autoinvocar
         # el daemon (el .exe no puede ejecutar `python -m ...`).
+        # Exige el modelo en caché antes de cargar el engine, igual que 'start':
+        # sin este gate, 'daemon serve' sin 'setup' dispararía la red de seguridad
+        # del engine (descarga de cientos de MB). Las descargas son responsabilidad
+        # exclusiva de 'setup'.
+        _require_model_cached("es-mx-latam")
         from .daemon.run import serve
         serve(
             auto_restart=getattr(args, "auto_restart", False),

@@ -54,16 +54,36 @@ def factory_voices_root() -> str:
     return paths.bundled_voices_dir()
 
 
+def daemon_session_dir() -> str:
+    """Subdirectorio namespaced del tempdir para el staging de audio de sesión IPC.
+
+    `<tempdir>/tts-sidecar/`: el único punto del temp compartido desde el que el
+    daemon acepta audio de entrada. Los flujos IPC que preparen audio de sesión
+    deben escribirlo aquí (usar `ensure_daemon_session_dir` para crearlo).
+    """
+    import tempfile
+
+    return os.path.join(tempfile.gettempdir(), "tts-sidecar")
+
+
+def ensure_daemon_session_dir() -> str:
+    """Crea (si falta) y devuelve el subdirectorio de sesión del daemon."""
+    target = daemon_session_dir()
+    os.makedirs(target, exist_ok=True)
+    return target
+
+
 def allowed_audio_dirs() -> list[str]:
     """Directorios desde los que el daemon puede leer audio de entrada.
 
     Usado por `/synthesize` (WARNING-02) para acotar `voice_audio`/`speech_audio`
-    a rutas confiables: el registro de voces (usuario y fábrica) y el directorio
-    temporal del SO, de donde los clientes IPC pueden preparar audio de sesión.
+    a rutas confiables: el registro de voces (usuario y fábrica) y un subdirectorio
+    namespaced propio bajo el tempdir del SO (`<tempdir>/tts-sidecar/`), de donde
+    los clientes IPC pueden preparar audio de sesión. NO se permite el tempdir
+    compartido general: acotarlo evita que cualquier proceso local plante un `.wav`
+    en `%TEMP%`/`/tmp` para que el daemon lo lea.
     """
-    import tempfile
-
-    return [voices_root(), factory_voices_root(), tempfile.gettempdir()]
+    return [voices_root(), factory_voices_root(), daemon_session_dir()]
 
 
 def voice_dir(name: str) -> str:

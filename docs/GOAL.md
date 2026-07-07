@@ -170,7 +170,7 @@ La implementación está completa únicamente cuando:
 - [x] **docs/DESIGN.md** corresponde al estado implementado
 - [x] El daemon mode está implementado y funciona correctamente
 - [x] Los logs están normalizados con estructura consistente
-- [x] Los tests pytest pasan (261/261)
+- [x] Los tests pytest pasan (268/268)
 
 ---
 
@@ -187,5 +187,5 @@ validación E2E" arriba):
 - Scripts de build PyInstaller por SO (Windows/Linux/macOS)
 - Descarga automática del modelo Chatterbox desde HuggingFace
 - CLI completa con todos los comandos
-- Tests pytest (261 tests: timing, protocolo, daemon, CLI, voces, caché de modelo, audio y utilidades de build)
+- Tests pytest (268 tests: timing, protocolo, daemon, CLI, voces, caché de modelo, audio y utilidades de build)
 - Documentación sincronizada

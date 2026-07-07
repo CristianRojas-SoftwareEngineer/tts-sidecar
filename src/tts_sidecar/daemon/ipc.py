@@ -38,13 +38,29 @@ class DaemonIPCClient:
         self.base_url = f"http://127.0.0.1:{self.port}"
 
     def is_running(self) -> bool:
-        """Comprueba si el daemon está corriendo y responde al health check."""
+        """Comprueba si el daemon está corriendo y responde al health check.
+
+        No basta con un 200: si otro servicio local ocupara el puerto 8765 y
+        respondiera 200, un chequeo por status code lo confundiría con nuestro
+        daemon (falso «ya corriendo» y síntesis posteriores fallando con exit 5
+        difícil de atribuir). Se valida que el cuerpo sea un `HealthResponse`
+        de nuestro protocolo; cualquier otra cosa se trata como «no es el daemon».
+        """
+        from ..daemon.protocol import HealthResponse
+
         try:
             response = requests.get(
                 f"{self.base_url}/health",
                 timeout=self.TIMEOUT
             )
-            return response.status_code == 200
+            if response.status_code != 200:
+                return False
+            try:
+                HealthResponse(**response.json())
+            except (ValueError, TypeError):
+                # Cuerpo ausente, no-JSON o que no valida el esquema: no es nuestro daemon.
+                return False
+            return True
         except (requests.ConnectionError, requests.Timeout):
             return False
 

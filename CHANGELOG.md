@@ -5,10 +5,14 @@ Todos los cambios notables de TTS Sidecar se documentan en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
-## [No publicado]
+## [0.1.1] — 2026-07-07
 
 Ciclo perfectivo que corrige los 12 hallazgos Menores y el residuo `WARNING-01`
-identificados durante la revisión final del release `0.1.0`. Todos los cambios
+identificados durante la revisión final del release `0.1.0`, más el ciclo
+correctivo de la auditoría de production-readiness: cierra la única grieta
+funcional (el release gate del pin de revisiones en la carga del engine) y siete
+Menores (gate de `daemon serve`, identidad del health check, sandbox acotado del
+daemon, exactitud documental y procedencia del lockfile). Todos los cambios
 de contrato son aditivos: los códigos de salida existentes no cambian y
 `schema_version` permanece en `"1"`.
 
@@ -60,10 +64,40 @@ de contrato son aditivos: los códigos de salida existentes no cambian y
   (antes describían pycaw-WASAPI/pyalsaaudio/AVFoundation); árboles de
   estructura con `voices.py`, `paths.py` y `model_cache.py`; CI descrito como
   Linux/Windows/macOS en `CONTRIBUTING.md`; conteo de tests actualizado a
-  **261** en `docs/GOAL.md`; inventario de licencias consistente (dependencias
+  **268** en `docs/GOAL.md`; inventario de licencias consistente (dependencias
   copyleft-compatibles mencionadas en `USAGE.md`/`CLAUDE.md`; los runtimes
   NVIDIA no van en ningún artefacto distribuido — `README.md` y
   `THIRD-PARTY-LICENSES.md`).
+
+- **El engine honra las revisiones fijadas en la carga y en las descargas de
+  respaldo** (release gate de la auditoría de production-readiness): la
+  resolución de snapshot en tiempo de carga (language pack y snapshot base del
+  Voice Encoder) y las dos redes de seguridad de descarga (`snapshot_download`
+  del modelo, `hf_hub_download` de `ve.safetensors`) pasan `revision=`
+  (`MODEL_REVISIONS`/`BASE_MODEL_REVISION`). Cierra la asimetría por la que la
+  detección honraba el pin pero la carga caía al fallback `refs/main`→mtime: tras
+  un bump futuro de revisión ya no puede producirse síntesis silenciosa con el
+  modelo viejo. Simétrico con `setup` y la detección de caché.
+- **`daemon serve` exige el modelo en caché antes de arrancar** (auditoría de
+  production-readiness): mismo gate que `daemon start`; sin modelo provisionado
+  falla rápido remitiendo a `setup` (exit 2) sin cargar el engine ni disparar la
+  descarga de su red de seguridad. Ningún subcomando descarga de forma implícita.
+- **Sandbox de audio del daemon acotado a un subdirectorio namespaced**
+  (auditoría de production-readiness): `/synthesize` acepta audio bajo los
+  directorios de voces (fábrica/usuario) y `<tempdir>/tts-sidecar/`, pero ya no
+  bajo el tempdir compartido general (`%TEMP%`/`/tmp`), reduciendo la superficie
+  de temp compartido preservando el staging IPC. `docs/DAEMON-MODE.md` y
+  `USAGE.md` describen la superficie real.
+- **Exactitud documental de estados, conteos y `doctor`** (auditoría de
+  production-readiness): `daemon status` documenta los valores reales
+  (`"healthy"`/`"initializing"`, ya no `"ready"`) en prosa y en la tabla del
+  esquema JSON de `USAGE.md`; el ejemplo de `doctor` incluye el chequeo de RAM y
+  el total de chequeos coherente (5); conteo de tests a **268**.
+- **`requirements-lock.txt` regenerado con el comando canónico** (auditoría de
+  production-readiness): sin el `--constraint` a un archivo externo al repo; su
+  header ya no referencia ningún override y la procedencia vuelve a ser
+  reproducible desde `CLAUDE.md`/`docs/BUILD.md`. La resolución de versiones es
+  idéntica a la anterior; instala con `--require-hashes`.
 
 ### Corregido
 
@@ -82,6 +116,12 @@ de contrato son aditivos: los códigos de salida existentes no cambian y
 - **Fixture `mock_daemon_client` alineada con el cliente real** (R-10): la
   firma de `synthesize` coincide con `DaemonIPCClient.synthesize`
   (`on_progress` en vez de los inexistentes `model`/`compute_backend`).
+- **La detección de vida del daemon valida la identidad del servicio**
+  (auditoría de production-readiness): `DaemonIPCClient.is_running` ya no acepta
+  cualquier `200` en `/health`, sino que valida el cuerpo contra `HealthResponse`;
+  si otro servicio local ocupara el puerto 8765 y respondiera `200`, ya no se
+  confunde con un falso «daemon ya corriendo» (que derivaba en síntesis fallidas
+  con exit 5 difícil de atribuir). `DaemonManager` delega en el mismo chequeo.
 - **Detección del Voice Encoder honra la revisión fijada del repo base**
   (`WARNING-01`, residuo de R-06): `is_ve_cached` resuelve el snapshot del
   repo `ResembleAI/chatterbox` exclusivamente contra `BASE_MODEL_REVISION` (un
@@ -167,5 +207,5 @@ estado con el que nace el producto.
   `THIRD-PARTY-LICENSES.md` (inventario de licencias generado del lockfile).
   Código propio bajo GPL-3.0-or-later; modelo MIT.
 
-[No publicado]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.1.0...HEAD
+[0.1.1]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/releases/tag/v0.1.0
