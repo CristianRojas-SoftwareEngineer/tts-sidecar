@@ -21,19 +21,46 @@ jobs:
             sudo apt-get install -y libasound2-dev
             echo "[STEP] Install system dependencies - FIN"
       - run:
-          # Instalación reproducible desde el lock universal con hashes
-          # (--require-hashes rechaza cualquier paquete sin hash o no fijado).
-          name: Install runtime dependencies (locked)
+          # Material de la clave de cache del venv: versión exacta de Python del
+          # runner + pins de herramientas fuera del lockfile. Un cambio en
+          # cualquiera invalida el cache automáticamente.
+          name: Compute cache key
           command: |
-            echo "[STEP] Install runtime dependencies (locked) - INICIO"
-            pip install -r requirements-lock.txt --require-hashes
-            echo "[STEP] Install runtime dependencies (locked) - FIN"
+            echo "[STEP] Compute cache key - INICIO"
+            python --version > cache-key.txt
+            echo "pytest==9.1.1" >> cache-key.txt
+            cat cache-key.txt
+            echo "[STEP] Compute cache key - FIN"
+      - restore_cache:
+          keys:
+            - venv-v1-{{ arch }}-{{ checksum "cache-key.txt" }}-{{ checksum "requirements-lock-linux-cpu.txt" }}
+      - run:
+          # Instalación reproducible desde el lock CPU-only con hashes
+          # (--require-hashes rechaza cualquier paquete sin hash o no fijado).
+          # Se usa el lock CPU (no el universal): la suite mockea el engine
+          # (torch no se ejercita) y el build de esta misma plataforma
+          # (build-linux-x64) ya instala exactamente este lock, así que el
+          # stack nvidia-*-cu12 del lock universal solo agregaría varios GB
+          # sin señal adicional. Las dependencias viven en un venv cacheado:
+          # en cache hit, pip re-verifica el lock como no-op rápido.
+          name: Install runtime dependencies (locked, CPU-only)
+          command: |
+            echo "[STEP] Install runtime dependencies (locked, CPU-only) - INICIO"
+            python -m venv ~/.venv
+            echo "source ~/.venv/bin/activate" >> $BASH_ENV
+            source ~/.venv/bin/activate
+            pip install -r requirements-lock-linux-cpu.txt --require-hashes --extra-index-url https://download.pytorch.org/whl/cpu
+            echo "[STEP] Install runtime dependencies (locked, CPU-only) - FIN"
       - run:
           name: Install pytest
           command: |
             echo "[STEP] Install pytest - INICIO"
             pip install pytest==9.1.1
             echo "[STEP] Install pytest - FIN"
+      - save_cache:
+          key: venv-v1-{{ arch }}-{{ checksum "cache-key.txt" }}-{{ checksum "requirements-lock-linux-cpu.txt" }}
+          paths:
+            - ~/.venv
       - run:
           # WARNING-04: CLAUDE.md documenta py_compile como chequeo de verificación,
           # pero no corría en CI; compileall detecta errores de sintaxis en módulos
@@ -68,28 +95,52 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Write-Host "[STEP] Install Python 3.13 - FIN"
       - run:
+          # Material de la clave de cache del venv: versión exacta de Python del
+          # runner + pins de herramientas fuera del lockfile.
+          name: Compute cache key
+          command: |
+            Write-Host "[STEP] Compute cache key - INICIO"
+            python --version | Out-File -Encoding ascii cache-key.txt
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Add-Content -Encoding ascii cache-key.txt "pytest==9.1.1"
+            Get-Content cache-key.txt
+            Write-Host "[STEP] Compute cache key - FIN"
+      - restore_cache:
+          keys:
+            - venv-v1-{{ arch }}-{{ checksum "cache-key.txt" }}-{{ checksum "requirements-lock.txt" }}
+      - run:
+          # Dependencias en un venv del proyecto (.venv) cacheado. PowerShell no
+          # tiene el equivalente de $BASH_ENV para activar el venv entre steps:
+          # los steps posteriores invocan .venv\Scripts\python.exe por ruta
+          # explícita. En cache hit, pip re-verifica el lock como no-op rápido.
           name: Install runtime dependencies (locked)
           command: |
             Write-Host "[STEP] Install runtime dependencies (locked) - INICIO"
             python --version
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            python -m pip install --upgrade pip
+            if (-not (Test-Path .venv)) { python -m venv .venv }
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            python -m pip install -r requirements-lock.txt --require-hashes
+            .venv\Scripts\python.exe -m pip install --upgrade pip
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            .venv\Scripts\python.exe -m pip install -r requirements-lock.txt --require-hashes
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Write-Host "[STEP] Install runtime dependencies (locked) - FIN"
       - run:
           name: Install pytest
           command: |
             Write-Host "[STEP] Install pytest - INICIO"
-            python -m pip install pytest==9.1.1
+            .venv\Scripts\python.exe -m pip install pytest==9.1.1
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Write-Host "[STEP] Install pytest - FIN"
+      - save_cache:
+          key: venv-v1-{{ arch }}-{{ checksum "cache-key.txt" }}-{{ checksum "requirements-lock.txt" }}
+          paths:
+            - .venv
       - run:
           name: Run tests
           command: |
             Write-Host "[STEP] Run tests - INICIO"
-            python -m pytest tests/ -v
+            .venv\Scripts\python.exe -m pytest tests/ -v
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Write-Host "[STEP] Run tests - FIN"
 
@@ -104,27 +155,67 @@ jobs:
     resource_class: m4pro.medium
     steps:
       - checkout
+      - restore_cache:
+          keys:
+            - pyenv-v1-{{ arch }}-3.13.14-xcode26.4
       - run:
-          # Pin de Python 3.13 vía pyenv (espejo de build-darwin-arm64): no usar
-          # el python3 del sistema sin fijar, para testear sobre la misma versión
-          # que empaqueta el build. no_output_timeout holgado: pyenv compila
-          # CPython desde fuente con output escaso y puede acercarse a los 10 min.
+          # Pin EXACTO de Python 3.13.14 vía pyenv (espejo del pin de Chocolatey
+          # en los jobs Windows): no usar el python3 del sistema sin fijar, para
+          # testear sobre la misma versión que empaqueta el build, y con patch
+          # fijo para que la clave de cache del CPython compilado sea estable.
+          # no_output_timeout holgado: pyenv compila CPython desde fuente con
+          # output escaso (~10 min) en el primer miss; con cache restaurado,
+          # `pyenv install -s` salta la compilación en segundos. La clave del
+          # cache incluye la versión de Xcode: el CPython compilado depende del
+          # SDK del runner.
           name: Set up Python 3.13
           no_output_timeout: 20m
           command: |
             echo "[STEP] Set up Python 3.13 - INICIO"
-            pyenv install -s 3.13
-            pyenv global 3.13
+            pyenv install -s 3.13.14
+            pyenv global 3.13.14
+            pyenv rehash
             python --version
+            echo "[STEP] Set up Python 3.13 - FIN"
+      - save_cache:
+          key: pyenv-v1-{{ arch }}-3.13.14-xcode26.4
+          paths:
+            - ~/.pyenv/versions
+      - run:
+          # Material de la clave de cache del venv: versión exacta de Python +
+          # pins de herramientas fuera del lockfile.
+          name: Compute cache key
+          command: |
+            echo "[STEP] Compute cache key - INICIO"
+            python --version > cache-key.txt
+            echo "pytest==9.1.1" >> cache-key.txt
+            cat cache-key.txt
+            echo "[STEP] Compute cache key - FIN"
+      - restore_cache:
+          keys:
+            - venv-v1-{{ arch }}-{{ checksum "cache-key.txt" }}-{{ checksum "requirements-lock.txt" }}
+      - run:
+          # Instalación reproducible desde el lock universal con hashes, en un
+          # venv cacheado: en cache hit, pip re-verifica el lock como no-op.
+          name: Install runtime dependencies (locked)
+          command: |
+            echo "[STEP] Install runtime dependencies (locked) - INICIO"
+            python -m venv ~/.venv
+            echo "source ~/.venv/bin/activate" >> $BASH_ENV
+            source ~/.venv/bin/activate
             python -m pip install --upgrade pip
             python -m pip install -r requirements-lock.txt --require-hashes
-            echo "[STEP] Set up Python 3.13 - FIN"
+            echo "[STEP] Install runtime dependencies (locked) - FIN"
       - run:
           name: Install pytest
           command: |
             echo "[STEP] Install pytest - INICIO"
             python -m pip install pytest==9.1.1
             echo "[STEP] Install pytest - FIN"
+      - save_cache:
+          key: venv-v1-{{ arch }}-{{ checksum "cache-key.txt" }}-{{ checksum "requirements-lock.txt" }}
+          paths:
+            - ~/.venv
       - run:
           name: Run tests
           command: |
@@ -147,20 +238,45 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Write-Host "[STEP] Install Python 3.13 - FIN"
       - run:
+          # Material de la clave de cache del venv: versión exacta de Python del
+          # runner + pins de herramientas fuera del lockfile.
+          name: Compute cache key
+          command: |
+            Write-Host "[STEP] Compute cache key - INICIO"
+            python --version | Out-File -Encoding ascii cache-key.txt
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Add-Content -Encoding ascii cache-key.txt "pyinstaller==6.21.0"
+            Get-Content cache-key.txt
+            Write-Host "[STEP] Compute cache key - FIN"
+      - restore_cache:
+          keys:
+            - venv-v1-{{ arch }}-{{ checksum "cache-key.txt" }}-{{ checksum "requirements-lock.txt" }}
+      - run:
+          # Dependencias Python en un venv del proyecto (.venv) cacheado; los
+          # steps posteriores invocan .venv\Scripts\python.exe por ruta explícita
+          # (PowerShell no tiene el equivalente de $BASH_ENV). Inno Setup queda
+          # fuera del cache: el install de Chocolatey no se cachea de forma
+          # confiable en CircleCI.
           name: Install dependencies
           command: |
             Write-Host "[STEP] Install dependencies - INICIO"
             python --version
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            python -m pip install --upgrade pip
+            if (-not (Test-Path .venv)) { python -m venv .venv }
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            python -m pip install -r requirements-lock.txt --require-hashes
+            .venv\Scripts\python.exe -m pip install --upgrade pip
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            python -m pip install pyinstaller==6.21.0
+            .venv\Scripts\python.exe -m pip install -r requirements-lock.txt --require-hashes
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            .venv\Scripts\python.exe -m pip install pyinstaller==6.21.0
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             choco install innosetup -y --version=6.3.3
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Write-Host "[STEP] Install dependencies - FIN"
+      - save_cache:
+          key: venv-v1-{{ arch }}-{{ checksum "cache-key.txt" }}-{{ checksum "requirements-lock.txt" }}
+          paths:
+            - .venv
       - run:
           # PyInstaller solo (--no-installer): la etapa Installer corre como step
           # separado (abajo). PyInstaller se lanza vía scripts/pyinstaller_wrapper.py
@@ -171,7 +287,7 @@ jobs:
           no_output_timeout: 20m
           command: |
             Write-Host "[STEP] Build Windows (PyInstaller onedir) - INICIO"
-            python scripts/build_windows.py --arch x86_64 --no-installer
+            .venv\Scripts\python.exe scripts/build_windows.py --arch x86_64 --no-installer
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Write-Host "[STEP] Build Windows (PyInstaller onedir) - FIN"
       - run:
@@ -195,7 +311,7 @@ jobs:
           no_output_timeout: 25m
           command: |
             Write-Host "[STEP] Generate installer - INICIO"
-            python scripts/create_installer_windows.py dist/tts-sidecar
+            .venv\Scripts\python.exe scripts/create_installer_windows.py dist/tts-sidecar
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Write-Host "[STEP] Generate installer - FIN"
       - run:
@@ -257,15 +373,32 @@ jobs:
             sudo apt-get install -y patchelf libasound2-dev
             echo "[STEP] Install system dependencies - FIN"
       - run:
+          # Material de la clave de cache del venv: versión exacta de Python del
+          # runner + pins de herramientas fuera del lockfile.
+          name: Compute cache key
+          command: |
+            echo "[STEP] Compute cache key - INICIO"
+            python --version > cache-key.txt
+            echo "pyinstaller==6.21.0" >> cache-key.txt
+            cat cache-key.txt
+            echo "[STEP] Compute cache key - FIN"
+      - restore_cache:
+          keys:
+            - venv-v1-{{ arch }}-{{ checksum "cache-key.txt" }}-{{ checksum "requirements-lock-linux-cpu.txt" }}
+      - run:
           # N-05: lock específico con torch/torchaudio CPU-only (wheels +cpu del
           # índice oficial de PyTorch), sin el stack nvidia-*-cu12 que el índice
           # de PyPI resuelve por defecto en x86_64/linux (~varios GB extra).
           # Solo x86_64 lo necesita: los paquetes nvidia-*-cu12 del lock universal
           # están marcados platform_machine == 'x86_64', por lo que arm64 ya
-          # instala sin CUDA desde el lock universal.
+          # instala sin CUDA desde el lock universal. Las dependencias viven en
+          # un venv cacheado: en cache hit, pip re-verifica el lock como no-op.
           name: Install runtime dependencies (locked, CPU-only)
           command: |
             echo "[STEP] Install runtime dependencies (locked, CPU-only) - INICIO"
+            python -m venv ~/.venv
+            echo "source ~/.venv/bin/activate" >> $BASH_ENV
+            source ~/.venv/bin/activate
             pip install -r requirements-lock-linux-cpu.txt --require-hashes --extra-index-url https://download.pytorch.org/whl/cpu
             echo "[STEP] Install runtime dependencies (locked, CPU-only) - FIN"
       - run:
@@ -274,6 +407,10 @@ jobs:
             echo "[STEP] Install PyInstaller - INICIO"
             pip install pyinstaller==6.21.0
             echo "[STEP] Install PyInstaller - FIN"
+      - save_cache:
+          key: venv-v1-{{ arch }}-{{ checksum "cache-key.txt" }}-{{ checksum "requirements-lock-linux-cpu.txt" }}
+          paths:
+            - ~/.venv
       - run:
           name: Build Linux x64
           no_output_timeout: 20m
@@ -339,25 +476,58 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y patchelf libasound2-dev
             echo "[STEP] Install system dependencies - FIN"
+      - restore_cache:
+          keys:
+            - pyenv-v1-{{ arch }}-3.13.14
       - run:
-          # no_output_timeout holgado: pyenv compila CPython desde fuente con
-          # output escaso y puede acercarse a los 10 min del default.
+          # Pin EXACTO de Python 3.13.14 (espejo del pin de Chocolatey en los
+          # jobs Windows): patch fijo para que la clave de cache del CPython
+          # compilado sea estable. no_output_timeout holgado: pyenv compila
+          # CPython desde fuente con output escaso (~10 min) en el primer miss;
+          # con cache restaurado, `pyenv install -s` salta la compilación.
           name: Set up Python 3.13
           no_output_timeout: 20m
           command: |
             echo "[STEP] Set up Python 3.13 - INICIO"
-            pyenv install -s 3.13
-            pyenv global 3.13
+            pyenv install -s 3.13.14
+            pyenv global 3.13.14
+            pyenv rehash
             python --version
             echo "[STEP] Set up Python 3.13 - FIN"
+      - save_cache:
+          key: pyenv-v1-{{ arch }}-3.13.14
+          paths:
+            - ~/.pyenv/versions
       - run:
+          # Material de la clave de cache del venv: versión exacta de Python +
+          # pins de herramientas fuera del lockfile.
+          name: Compute cache key
+          command: |
+            echo "[STEP] Compute cache key - INICIO"
+            python --version > cache-key.txt
+            echo "pyinstaller==6.21.0" >> cache-key.txt
+            cat cache-key.txt
+            echo "[STEP] Compute cache key - FIN"
+      - restore_cache:
+          keys:
+            - venv-v1-{{ arch }}-{{ checksum "cache-key.txt" }}-{{ checksum "requirements-lock.txt" }}
+      - run:
+          # Lock universal en venv cacheado: en cache hit, pip re-verifica el
+          # lock como no-op rápido.
           name: Install dependencies
           command: |
             echo "[STEP] Install dependencies - INICIO"
+            python -m venv ~/.venv
+            echo "source ~/.venv/bin/activate" >> $BASH_ENV
+            source ~/.venv/bin/activate
             python -m pip install --upgrade pip
             python -m pip install -r requirements-lock.txt --require-hashes
             python -m pip install pyinstaller==6.21.0
             echo "[STEP] Install dependencies - FIN"
+      - save_cache:
+          key: venv-v1-{{ arch }}-{{ checksum "cache-key.txt" }}-{{ checksum "requirements-lock.txt" }}
+          paths:
+            - ~/.venv
       - run:
           name: Build Linux ARM64
           no_output_timeout: 20m
@@ -420,37 +590,79 @@ jobs:
     resource_class: m4pro.medium
     steps:
       - checkout
+      - restore_cache:
+          keys:
+            - pyenv-v1-{{ arch }}-3.13.14-xcode26.4
       - run:
-          # Pin de Python 3.13 vía pyenv (espejo del job build-linux-arm64):
-          # el runner de macOS no debe usar su python3 del sistema sin fijar,
-          # o el build empaquetaría una versión no controlada. no_output_timeout
-          # holgado: pyenv compila CPython desde fuente con output escaso.
+          # Pin EXACTO de Python 3.13.14 vía pyenv (espejo del job
+          # build-linux-arm64 y del pin de Chocolatey): el runner de macOS no
+          # debe usar su python3 del sistema sin fijar, o el build empaquetaría
+          # una versión no controlada; patch fijo para que la clave de cache del
+          # CPython compilado sea estable. no_output_timeout holgado: pyenv
+          # compila CPython desde fuente con output escaso (~10 min) en el
+          # primer miss; con cache restaurado, `pyenv install -s` salta la
+          # compilación. La clave del cache incluye la versión de Xcode: el
+          # CPython compilado depende del SDK del runner.
           name: Set up Python 3.13
           no_output_timeout: 20m
           command: |
             echo "[STEP] Set up Python 3.13 - INICIO"
-            pyenv install -s 3.13
-            pyenv global 3.13
+            pyenv install -s 3.13.14
+            pyenv global 3.13.14
+            pyenv rehash
             python --version
+            echo "[STEP] Set up Python 3.13 - FIN"
+      - save_cache:
+          key: pyenv-v1-{{ arch }}-3.13.14-xcode26.4
+          paths:
+            - ~/.pyenv/versions
+      - run:
+          # Material de la clave de cache del venv: versión exacta de Python +
+          # pins de herramientas fuera del lockfile.
+          name: Compute cache key
+          command: |
+            echo "[STEP] Compute cache key - INICIO"
+            python --version > cache-key.txt
+            echo "pyinstaller==6.21.0" >> cache-key.txt
+            cat cache-key.txt
+            echo "[STEP] Compute cache key - FIN"
+      - restore_cache:
+          keys:
+            - venv-v1-{{ arch }}-{{ checksum "cache-key.txt" }}-{{ checksum "requirements-lock.txt" }}
+      - run:
+          # Lock universal en venv cacheado: en cache hit, pip re-verifica el
+          # lock como no-op rápido.
+          name: Install runtime dependencies (locked)
+          command: |
+            echo "[STEP] Install runtime dependencies (locked) - INICIO"
+            python -m venv ~/.venv
+            echo "source ~/.venv/bin/activate" >> $BASH_ENV
+            source ~/.venv/bin/activate
             python -m pip install --upgrade pip
             python -m pip install -r requirements-lock.txt --require-hashes
-            echo "[STEP] Set up Python 3.13 - FIN"
+            echo "[STEP] Install runtime dependencies (locked) - FIN"
       - run:
           name: Install PyInstaller
           command: |
             echo "[STEP] Install PyInstaller - INICIO"
             python -m pip install pyinstaller==6.21.0
             echo "[STEP] Install PyInstaller - FIN"
+      - save_cache:
+          key: venv-v1-{{ arch }}-{{ checksum "cache-key.txt" }}-{{ checksum "requirements-lock.txt" }}
+          paths:
+            - ~/.venv
       - run:
           # create-dmg es un script de shell distribuido por Homebrew, no un
           # paquete de PyPI: `pip3 install create-dmg` fallaba siempre
           # (con o sin pin), independientemente de esta auditoría. Homebrew
           # no soporta fijar una versión exacta de forma simple (a diferencia
-          # de pip), así que se deja sin pin explícito.
+          # de pip), así que se deja sin pin explícito; y como no se pinea,
+          # el `brew update` implícito (minutos de wall-time) tampoco aporta:
+          # HOMEBREW_NO_AUTO_UPDATE=1 lo suprime.
           name: Install create-dmg (Homebrew)
           command: |
             echo "[STEP] Install create-dmg (Homebrew) - INICIO"
-            brew install create-dmg
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install create-dmg
             echo "[STEP] Install create-dmg (Homebrew) - FIN"
       - run:
           name: Build macOS arm64
@@ -589,10 +801,9 @@ workflows:
   build-all:
     # CircleCI NO ejecuta un job en un tag salvo que el job Y todas sus
     # dependencias declaren `filters.tags`; por eso el filtro `tags: only /^v.*/`
-    # se propaga por toda la cadena (tests → builds → publish-release). Como no
-    # se toca el default de `branches`, tests y builds siguen corriendo en cada
-    # push de rama igual que hoy, y ADEMÁS en tags `v*`. `publish-release` es el
-    # único con `branches: ignore /.*/`: solo corre en tags.
+    # se propaga por toda la cadena (tests → builds → publish-release). Todos
+    # los jobs declaran además `branches: ignore /.*/`: el pipeline completo
+    # corre SOLO en tags `v*`, nunca en pushes de rama.
     jobs:
       - test-linux:
           filters:

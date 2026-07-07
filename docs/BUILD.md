@@ -287,6 +287,42 @@ sin él, el `Write-Host` final resetearía el exit code del step y lo pondría v
 fallo. Los steps con riesgo de silencio prolongado (`pyenv install`, builds, instalador)
 declaran `no_output_timeout` explícito.
 
+### Cacheo de dependencias y toolchain
+
+Los 7 jobs con Python usan `save_cache`/`restore_cache` de CircleCI para no
+descargar ~1.5–2.5 GB de wheels ni recompilar CPython en cada corrida. Hay dos
+tipos de cache, con claves independientes:
+
+- **Cache de venv (dependencias instaladas).** Cada job instala sus dependencias
+  en un venv (`~/.venv` en los jobs bash; `.venv` del proyecto en los PowerShell,
+  que no tienen el equivalente de `$BASH_ENV` y por eso invocan
+  `.venv\Scripts\python.exe` por ruta explícita en los steps posteriores). La
+  clave es `venv-v1-{{ arch }}-{{ checksum "cache-key.txt" }}-{{ checksum
+  "<lockfile>" }}`, donde `cache-key.txt` se genera en runtime con la versión
+  exacta de Python efectiva más los pins de herramientas fuera del lockfile
+  (`pytest==9.1.1` en los jobs de test, `pyinstaller==6.21.0` en los de build).
+  Así, un cambio de lockfile, de patch de Python o de pin invalida el cache
+  automáticamente. En cache hit, `pip install --require-hashes` sigue corriendo
+  y re-verifica el lock como no-op rápido: el determinismo de instalación no se
+  relaja.
+
+- **Cache de CPython compilado (pyenv).** `test-macos`, `build-linux-arm64` y
+  `build-darwin-arm64` compilan CPython desde fuente vía pyenv (~8–15 min).
+  El patch se fija **exacto** (`pyenv install -s 3.13.14`, espejo del pin
+  `3.13.14` de Chocolatey en los jobs Windows — versión flotante y clave de
+  cache estable son incompatibles) y `~/.pyenv/versions` se cachea con clave
+  `pyenv-v1-{{ arch }}-3.13.14`; en los jobs macOS la clave añade el literal de
+  la versión de Xcode (`-xcode26.4`) porque el CPython compilado depende del SDK
+  del runner. Con el cache restaurado, `pyenv install -s` salta la compilación
+  en segundos. Separar esta clave de la del venv evita que un cambio de lockfile
+  fuerce recompilar Python.
+
+Los caches de CircleCI son **inmutables por clave**: para invalidar todo el
+conjunto manualmente, incrementar el prefijo versionado (`v1-` → `v2-`) en
+`.circleci/config.yml`. Además, `build-darwin-arm64` instala create-dmg con
+`HOMEBREW_NO_AUTO_UPDATE=1` para suprimir el `brew update` implícito (minutos
+de wall-time que no aportan: create-dmg no se pinea).
+
 El archivo de configuración completo está en `.circleci/config.yml`.
 
 ### CD: publicación del GitHub Release (`publish-release`)
@@ -341,9 +377,11 @@ Los siguientes paquetes no se usan en runtime y están excluidos del bundle:
 El CI y los builds **no** instalan desde `requirements.txt` (límites `>=` de
 desarrollo), sino desde `requirements-lock.txt`: un **lock universal con hashes**
 que fija la versión exacta de cada dependencia de runtime (directa y transitiva)
-para builds reproducibles e íntegros. Los 7 jobs de CI lo instalan con
-`pip install -r requirements-lock.txt --require-hashes`, que rechaza cualquier
-paquete cuyo contenido no coincida con el hash fijado (barrera de supply-chain).
+para builds reproducibles e íntegros. Los 7 jobs de CI con Python instalan su
+lockfile (el universal, o el CPU-only de Linux en `test-linux` y
+`build-linux-x64` — ver la sección siguiente) con `--require-hashes`, que
+rechaza cualquier paquete cuyo contenido no coincida con el hash fijado
+(barrera de supply-chain).
 
 El lock es **universal**: un solo archivo cubre Windows, Linux y macOS mediante
 marcadores de entorno (`sys_platform`, etc.), imprescindible porque el grafo de
@@ -372,8 +410,11 @@ El lock universal resuelve, para `sys_platform == 'linux' and platform_machine
 defecto con `torch` en esa combinación de plataforma/arquitectura — el AppImage
 lo arrastraba vía `--collect-all torch` aunque el proyecto no usa GPU NVIDIA.
 `arm64` no se ve afectado (esos marcadores excluyen `platform_machine !=
-'x86_64'`), así que solo el job `build-linux-x64` instala desde este lock
-alternativo; `build-linux-arm64`, los jobs de test y los builds de
+'x86_64'`), así que instalan desde este lock alternativo los dos jobs de esa
+plataforma: `build-linux-x64` y `test-linux` (la suite mockea el engine — torch
+no se ejercita — y el build de la misma plataforma ya usa exactamente este
+lock, así que el stack CUDA solo agregaría varios GB sin señal adicional).
+`build-linux-arm64`, `test-windows`, `test-macos` y los builds de
 Windows/macOS siguen usando `requirements-lock.txt`.
 
 `requirements-lock-linux-cpu.txt` fija `torch`/`torchaudio` a los wheels
