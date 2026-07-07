@@ -94,7 +94,7 @@ jobs:
       - run:
           # Pin de Chocolatey (espejo de build-windows-x64): un release nuevo no debe
           # romper el job sin cambios en el repo.
-          name: Set up Python 3.13 via pyenv (pinned 3.13.14) via choco (pinned 3.13.14)
+          name: Set up Python 3.13 via choco (pinned 3.13.14)
           command: |
             Write-Host "[STEP] Set up Python 3.13 via choco (pinned 3.13.14) - INICIO"
             choco install python313 -y --version=3.13.14
@@ -249,7 +249,7 @@ jobs:
           # SUGGESTION-06: sin pin, un release nuevo de Chocolatey puede romper
           # el build sin cambios en el repo. Versión fijada al momento de escribir
           # este pin; actualizar deliberadamente cuando se quiera adoptar una nueva.
-          name: Set up Python 3.13 via pyenv (pinned 3.13.14) via choco (pinned 3.13.14)
+          name: Set up Python 3.13 via choco (pinned 3.13.14)
           command: |
             Write-Host "[STEP] Set up Python 3.13 via choco (pinned 3.13.14) - INICIO"
             choco install python313 -y --version=3.13.14
