@@ -9,8 +9,8 @@ verificación de integridad para el usuario final.
 
 ## Prerequisitos
 
-- No hay hallazgos Bloqueantes ni Mayores abiertos de la auditoría de
-  preparación para distribución.
+- No hay hallazgos Bloqueantes ni Mayores abiertos (criterios de
+  aceptación del release; ver `docs/GOAL.md` §"Criterios de Aceptación").
 - `CHANGELOG.md` tiene la sección de la versión a publicar cortada (no
   "No publicado"), con las entradas reales de esa versión. **El job de release
   falla si no encuentra la sección `[X.Y.Z]`** (X.Y.Z = tag sin la `v`), así que
