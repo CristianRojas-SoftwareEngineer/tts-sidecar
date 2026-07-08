@@ -11,9 +11,11 @@ en [Experiencia unificada entre sistemas operativos](#experiencia-unificada-entr
 
 ## Instalación
 
-Hay dos flujos según la audiencia: el del **usuario del binario** (instala el
-ejecutable distribuido por SO) y el del **desarrollador** (ejecuta desde el código
-fuente con dependencias Python).
+Hay tres flujos según la audiencia: el del **usuario del binario** (instala el
+ejecutable distribuido por SO), el del **usuario de PyPI** (Python 3.13+ ya
+instalado) y el del **desarrollador** (ejecuta desde el código fuente con
+dependencias Python). Matriz de trade-offs completa entre los dos primeros en
+[docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
 
 ### Usuario del binario
 
@@ -23,6 +25,21 @@ PATH (en Windows el instalador lo agrega automáticamente). Luego invoca:
 ```bash
 tts-sidecar <comando>
 ```
+
+### Usuario de PyPI (`uv tool install` / `pipx`)
+
+```bash
+uv tool install tts-sidecar
+# o: pipx install tts-sidecar
+
+tts-sidecar setup
+tts-sidecar <comando>
+```
+
+Linux requiere la librería del sistema `libportaudio2` para reproducir audio
+(`sudo apt install libportaudio2` / `sudo dnf install portaudio`); no es
+necesaria para `speak --output` a archivo. Este canal no dispara
+SmartScreen/Gatekeeper (ver más abajo).
 
 ### Desarrollador (desde el código fuente)
 
@@ -521,14 +538,15 @@ voces de usuario. Todo es recuperable: `setup` reprovisiona el modelo y
 
 1. Ejecuta `tts-sidecar cleanup --all --yes` para eliminar el modelo y las voces
    de usuario sin confirmación interactiva (los datos que la desinstalación del
-   binario no toca; usa `cleanup --all` sin `--yes` si prefieres confirmar).
-2. Desinstala el binario según tu SO:
-   - **Windows**: desinstalador de Inno Setup (Panel de control → Aplicaciones);
-     revierte PATH y registro.
-   - **Linux**: `tts-sidecar setup --remove-path` (quita el symlink) y borra el
-     `.AppImage`.
-   - **macOS**: `Desinstalar (quitar del PATH).command` del `.dmg` y arrastra el
-     `.app` a la Papelera.
+   binario/paquete no toca; usa `cleanup --all` sin `--yes` si prefieres confirmar).
+2. Desinstala según tu canal:
+   - **Windows (binario)**: desinstalador de Inno Setup (Panel de control →
+     Aplicaciones); revierte PATH y registro.
+   - **Linux (binario)**: `tts-sidecar setup --remove-path` (quita el symlink) y
+     borra el `.AppImage`.
+   - **macOS (binario)**: `Desinstalar (quitar del PATH).command` del `.dmg` y
+     arrastra el `.app` a la Papelera.
+   - **PyPI**: `uv tool uninstall tts-sidecar` / `pipx uninstall tts-sidecar`.
 
 ---
 
@@ -551,8 +569,9 @@ binario.
 - **macOS**: monta el `.dmg` nuevo, arrastra el `.app` a Aplicaciones
   (sobrescribiendo el anterior) y vuelve a ejecutar el script
   `Instalar (PATH + modelo).command` del volumen nuevo.
+- **PyPI**: `uv tool upgrade tts-sidecar` / `pipx upgrade tts-sidecar`.
 
-En los tres casos, el modelo descargado (`~/.cache/huggingface/hub`) se
+En los cuatro casos, el modelo descargado (`~/.cache/huggingface/hub`) se
 reutiliza tal cual. Cada versión del binario fija la revisión exacta del modelo
 que usa: si tu caché contiene otra revisión (por ejemplo, la de una versión
 anterior), `setup` la detecta como no provisionada y descarga la revisión
@@ -853,6 +872,11 @@ Cómo proceder:
 
 Esto solo ocurre en el primer arranque; las ejecuciones posteriores no vuelven a
 pedir confirmación.
+
+> El canal PyPI (`uv tool install tts-sidecar`) no dispara ninguno de los dos
+> avisos: el launcher lo genera `uv`/`pipx` localmente, sin Mark-of-the-Web ni
+> cuarentena. Ver [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) si prefieres ese
+> canal.
 
 Antes de aceptar, puedes comprobar objetivamente que el archivo es el que
 publicó el proyecto cotejando su SHA-256 contra el `SHA256SUMS.txt` del

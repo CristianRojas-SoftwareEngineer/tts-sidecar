@@ -5,6 +5,48 @@ Todos los cambios notables de TTS Sidecar se documentan en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
+## [0.2.0] — 2026-07-08
+
+Añade un segundo canal de distribución (PyPI / `uv tool install` / `pipx`)
+junto al canal nativo de binarios PyInstaller existente, sin afectar su
+funcionamiento. Requirió reestructurar la ubicación de las voces de fábrica y
+el modelo de rutas para que sean válidos en los tres modos de ejecución
+(fuente, pip-installed, congelado) sin bifurcaciones. Registra además la
+estrategia de firma de código (SignPath + notarización Apple) como compromiso
+de roadmap en `docs/GOAL.md`.
+
+### Añadido
+
+- **Canal de distribución PyPI**: `uv tool install tts-sidecar` / `pipx
+  install tts-sidecar` instala el CLI completo, incluida la voz `default`.
+  Publicación automática en cada tag `v*` vía el job `publish-pypi` de CI, en
+  paralelo a los cuatro builds nativos. Documentado en el nuevo
+  `docs/DISTRIBUTION.md`, con la matriz de trade-offs frente al canal nativo
+  y el registro de la decisión de mantener ambos canales en paralelo.
+- **`src/tts_sidecar/bootstrap.py`**: consolida en una única función
+  idempotente (`apply()`) la supresión de warnings, las variables de entorno y
+  el mock de `pkg_resources` que antes solo vivían en `bin/tts-sidecar`,
+  duplicados parcialmente en `daemon/run.py`. Corre igual desde el entry point
+  de pip, `bin/tts-sidecar`, `python -m tts_sidecar` y el daemon.
+- **`src/tts_sidecar/__main__.py`**: habilita `python -m tts_sidecar` como
+  vía de invocación adicional.
+
+### Cambiado
+
+- **Voces de fábrica reubicadas** a `src/tts_sidecar/voices/` (antes `voices/`
+  en la raíz del repo), para que setuptools pueda empaquetarlas en el wheel
+  (`package-data`); el bundle PyInstaller (`--add-data`) se actualizó al mismo
+  origen.
+- **Modelo de rutas uniforme** (`paths.py`): `bundled_voices_dir()` resuelve
+  siempre relativa al paquete (sin distinguir fuente/congelado) y `data_root()`
+  devuelve siempre el user-data-dir por SO, incluso en modo fuente (antes
+  caía dentro del propio checkout).
+- **`pyproject.toml` publicable**: entry point `tts-sidecar = "tts_sidecar.cli:main"`,
+  versión dinámica (`dynamic = ["version"]`) resuelta desde
+  `tts_sidecar.__version__` como fuente única, metadata de PyPI completa
+  (`readme`, `urls`, `classifiers`, `keywords`) y `package-data` para las
+  voces de fábrica.
+
 ## [0.1.1] — 2026-07-07
 
 Ciclo perfectivo que corrige los 12 hallazgos Menores y el residuo `WARNING-01`

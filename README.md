@@ -35,6 +35,11 @@ la responsabilidad del uso legítimo recae en quien lo emplea.
 
 ## Instalación
 
+TTS Sidecar se distribuye por **dos canales** (detalle completo y matriz de
+trade-offs en [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md)): el binario
+pre-compilado por SO (audiencia general, sin Python) y el paquete PyPI
+(audiencia técnica con Python 3.13+).
+
 ### Opción 1: Descargar binario pre-compilado
 
 Descarga el ejecutable para tu plataforma desde [Releases](https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/releases):
@@ -85,6 +90,11 @@ reputación acumulada ante SmartScreen.
 - **macOS (Gatekeeper)**: haz clic derecho sobre el `.app`/`.dmg` → **Abrir** y
   confirma (o quita la cuarentena con `xattr`).
 
+> El canal PyPI (`uv tool install tts-sidecar`, ver [Opción 2](#opción-2-instalar-desde-pypi-uv--pipx))
+> no dispara ninguno de los dos avisos: el launcher lo genera `uv`/`pipx`
+> localmente, sin Mark-of-the-Web ni cuarentena. Detalle en
+> [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
+
 Solo ocurre en el primer arranque. La forma objetiva de confiar en el artefacto
 es **verificar su SHA-256** contra el `SHA256SUMS.txt` del Release (ver
 [SECURITY.md](SECURITY.md)). Está previsto firmar los binarios vía
@@ -107,7 +117,25 @@ solo si falta; si ya está cacheado, termina al instante sin descargar. Hasta qu
 el modelo esté provisionado, `speak` y `daemon start` **fallan de inmediato** y te
 remiten a `tts-sidecar setup` (nunca disparan una descarga silenciosa).
 
-### Opción 2: Compilar desde código
+### Opción 2: Instalar desde PyPI (uv / pipx)
+
+Para audiencia técnica con Python 3.13+ ya instalado:
+
+```bash
+uv tool install tts-sidecar
+# o: pipx install tts-sidecar
+
+tts-sidecar setup     # provisiona el modelo, idéntico al canal nativo
+tts-sidecar speak --text "Hola mundo"
+```
+
+> Linux: `sounddevice` requiere la librería del sistema `libportaudio2` para
+> reproducir audio (`sudo apt install libportaudio2` / `sudo dnf install
+> portaudio`); no es necesaria si solo usas `speak --output` a archivo. Ver
+> [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) para la matriz completa de
+> trade-offs entre canales y el flujo de actualización/desinstalación.
+
+### Opción 3: Compilar desde código
 
 ```bash
 # Instalar dependencias de build
@@ -241,6 +269,7 @@ desde código fuente con ese lock. El detalle completo y verificado está en
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - Arquitectura del sistema
 - [docs/DAEMON-MODE.md](docs/DAEMON-MODE.md) - Daemon mode (servidor persistente)
 - [docs/BUILD.md](docs/BUILD.md) - Guía de compilación PyInstaller
+- [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) - Canales de distribución (nativo + PyPI)
 
 ## Comunidad y soporte
 

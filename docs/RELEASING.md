@@ -7,6 +7,11 @@ borrador (draft)**. El propietario solo revisa el draft y pulsa «publish». Sin
 firma de código (R-38), el cotejo de checksums SHA-256 sigue siendo la cadena de
 verificación de integridad para el usuario final.
 
+En paralelo a los 4 builds nativos corre el job **`publish-pypi`**, que publica
+el paquete al canal PyPI (ver [docs/DISTRIBUTION.md](DISTRIBUTION.md)). A
+diferencia de `publish-release`, `publish-pypi` **no tiene paso de revisión
+manual**: publica directamente en PyPI sin generar un borrador.
+
 ## Prerequisitos
 
 - No hay hallazgos Bloqueantes ni Mayores abiertos (criterios de
@@ -15,8 +20,17 @@ verificación de integridad para el usuario final.
   "No publicado"), con las entradas reales de esa versión. **El job de release
   falla si no encuentra la sección `[X.Y.Z]`** (X.Y.Z = tag sin la `v`), así que
   este corte es obligatorio antes de taggear.
-- La suite pasa en los tres SO (`test-linux`, `test-windows`, `test-macos` en
-  verde en CircleCI para el commit a taggear).
+- La suite pasa localmente (`pytest tests/ -v`) en el commit a taggear. **No
+  hay forma de verificar esto en CircleCI antes de taggear**: el workflow
+  `build-all` tiene `branches: ignore: /.*/` en todos sus jobs, así que
+  CircleCI no corre nada en pushes a `main` — el tag es lo único que dispara
+  el pipeline. La protección dentro del pipeline no es una comprobación
+  previa, sino el propio grafo de dependencias: `build-windows-x64`,
+  `build-linux-x64`, `build-linux-arm64`, `build-darwin-arm64` y
+  `publish-pypi` declaran `requires: [test-linux, test-windows, test-macos]`,
+  así que si los tests fallan en el pipeline del tag, ni los builds ni
+  `publish-pypi` llegan a ejecutarse. Correr la suite en local antes de
+  taggear sigue siendo la única manera de anticipar ese resultado.
 - **Revisiones fijadas del modelo auditadas** (R-15): las constantes
   `MODEL_REVISIONS` y `BASE_MODEL_REVISION` de `src/tts_sidecar/model_cache.py`
   apuntan a los commit hashes de HuggingFace que este release distribuye. Si el
@@ -29,6 +43,15 @@ verificación de integridad para el usuario final.
   en CircleCI (Organization Settings → Contexts) con la variable `GH_TOKEN` = un
   fine-grained PAT con permiso `contents: write` sobre el repo. Está aislado al
   job `publish-release`; ningún otro job lo ve.
+- **Prerequisito operativo (una sola vez):** existe el context `pypi-publish`
+  en CircleCI con la variable `PYPI_API_TOKEN` = un token API de PyPI con scope
+  al proyecto. Está aislado al job `publish-pypi`; ningún otro job lo ve.
+- **La publicación a PyPI es irreversible**: a diferencia del GitHub Release
+  (que queda en borrador y se puede descartar sin efecto), el tag dispara la
+  publicación en firme a PyPI — un paquete subido no se puede sobrescribir,
+  solo yankear una versión y publicar una nueva. Por eso el corte del
+  `CHANGELOG.md` y la versión en `__init__.py` deben estar correctos **antes**
+  de crear el tag, no después.
 
 ## 1. Corte: crear y publicar el tag
 
@@ -59,6 +82,12 @@ Una vez pushado el tag, el pipeline ejecuta sin intervención:
    - Extrae las notas de la sección `[X.Y.Z]` de `CHANGELOG.md`.
    - Crea el GitHub Release en **borrador** sobre el tag `vX.Y.Z`, con los 5
      assets (4 artefactos + `SHA256SUMS.txt`) y las notas.
+3. **`publish-pypi`** (en paralelo a los 4 builds, solo requiere la triple
+   puerta de tests): construye el sdist y el wheel, valida la metadata
+   (`twine check`), instala el wheel en un venv limpio para verificar que
+   `tts-sidecar version` coincide con el tag y que la voz `default` está
+   presente, y publica a PyPI con `twine upload`. Detalle completo en
+   [docs/DISTRIBUTION.md](DISTRIBUTION.md#flujo-de-publicación-ci).
 
 Ya no hay descarga ni cotejo manual de artefactos: la recolección por workspace
 es determinista (el mismo binario que pasó el smoke test es el que se adjunta).

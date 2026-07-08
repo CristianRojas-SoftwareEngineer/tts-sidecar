@@ -207,9 +207,16 @@ de editor desconocido en el instalador (solo sobre archivos descargados de
 internet, que llevan la Mark of the Web — un build local no la dispara).
 Firmar/notarizar con identidad propia requiere certificados de pago (Apple
 Developer ID, certificado Authenticode) y queda fuera del alcance actual del
-pipeline; la ruta prevista para Windows es
-[SignPath Foundation](https://signpath.org/) (firma gratuita para proyectos
-open source, integrada al CI; ver `SECURITY.md` §«Artefactos sin firmar»).
+pipeline; la ruta prevista para Windows y macOS está registrada como
+compromiso de roadmap en [docs/GOAL.md](GOAL.md#roadmap-compromisos-a-futuro)
+(ver también `SECURITY.md` §«Artefactos sin firmar»).
+
+Como mitigación aditiva ya implementada (no sustituye a la firma), el proyecto
+publica en paralelo un **canal PyPI** (`uv tool install tts-sidecar`) que no
+dispara ninguno de los dos avisos: el launcher lo genera `uv`/`pipx`
+localmente, sin Mark-of-the-Web ni cuarentena. Ver
+[docs/DISTRIBUTION.md](DISTRIBUTION.md) para el detalle de ambos canales y su
+matriz de trade-offs.
 
 ---
 

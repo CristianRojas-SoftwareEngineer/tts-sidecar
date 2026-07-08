@@ -17,6 +17,12 @@ TTS Sidecar es un motor de síntesis de voz (TTS) offline en Python usando Chatt
 # Ejecutar CLI (desarrollo)
 python bin/tts-sidecar <comando>
 
+# Construir el paquete PyPI (sdist + wheel; ver docs/DISTRIBUTION.md)
+uv build
+
+# Instalar el paquete publicado desde PyPI (canal alternativo al binario nativo)
+uv tool install tts-sidecar
+
 # Compilar binario Windows con PyInstaller
 npm run build-windows
 
@@ -51,9 +57,11 @@ python -m py_compile src/tts_sidecar/cli.py
 ### Stack de implementación
 
 ```
-bin/tts-sidecar              # Entry point (suprime warnings, delegar a cli.main)
+bin/tts-sidecar              # Entry point de modo fuente: ajusta sys.path, delega a cli.main
 src/tts_sidecar/
-├── cli.py                   # CLI con argparse (speak, voice, daemon, devices, doctor, setup, version)
+├── __main__.py              # Entry point de `python -m tts_sidecar`
+├── bootstrap.py             # apply() idempotente: warnings, env vars, logging, mock pkg_resources
+├── cli.py                   # CLI con argparse (speak, voice, daemon, devices, doctor, setup, version); llama bootstrap.apply()
 ├── engine.py                # Wrapper Chatterbox + síntesis
 ├── audio.py                 # Playback multiplataforma
 ├── timing.py                # StageTimer, log(), timed_command
@@ -62,8 +70,13 @@ src/tts_sidecar/
 │   ├── daemon.py            # Lifecycle manager
 │   ├── ipc.py               # HTTP client para daemon
 │   ├── protocol.py           # Pydantic request/response models
-│   └── run.py               # Entry point: python -m ...daemon.run
+│   └── run.py               # Entry point: python -m ...daemon.run (usa bootstrap.apply())
 ```
+
+El entry point `tts-sidecar` instalado vía pip/`uv tool install` (`[project.scripts]`
+en `pyproject.toml`) invoca directamente `tts_sidecar.cli:main`; `bootstrap.apply()`
+corre dentro de `cli.py`, así que el bootstrap es idéntico en las tres vías de
+invocación (pip, `bin/tts-sidecar`, `python -m tts_sidecar`).
 
 ### Motor TTS
 
@@ -117,16 +130,17 @@ tts-sidecar voice add --name mi_voz --reference timbre.wav --speech condicion.wa
 
 Las voces se resuelven con precedencia **usuario→fábrica** (`voices.py`):
 
-- **Fábrica**: `voices/` en la raíz del repo, commiteadas y empaquetadas vía
-  `--add-data`; de solo lectura. Se resuelven en `paths.bundled_voices_dir()`
-  (raíz del repo en modo fuente, `sys._MEIPASS` congelado). Incluye la voz
-  `default`, construida desde `assets/audios/`.
-- **Usuario**: `data_root()/voices` (user-data-dir por SO congelado; `src/voices`
-  en modo fuente, hoy sin uso). Escribibles vía `voice add`.
+- **Fábrica**: `src/tts_sidecar/voices/`, commiteadas y empaquetadas tanto en
+  el wheel PyPI (`package-data`) como en el bundle PyInstaller (`--add-data`);
+  de solo lectura. Se resuelven en `paths.bundled_voices_dir()`, siempre
+  relativa al paquete (misma expresión en fuente, pip-installed y congelado,
+  sin bifurcar por modo). Incluye la voz `default`, construida desde
+  `assets/audios/`.
+- **Usuario**: `data_root()/voices` — user-data-dir por SO, incondicional en
+  los tres modos de ejecución. Escribibles vía `voice add`.
 
 Sin `--voice`, `--voice-audio` ni `--speech-audio`, `cmd_speak` resuelve la voz
 `default`, por lo que `tts-sidecar speak --text "Hola"` funciona sin audios.
-El directorio `src/voices/` fue **eliminado** tras el rediseño.
 <!-- </voice_design> -->
 
 <!-- <model_provisioning> -->
@@ -201,12 +215,6 @@ tts-sidecar version [--json]
 ## Estructura de directorios
 
 ```
-voices/                  # Voces de FÁBRICA (commiteadas, empaquetadas, solo lectura)
-└── default/             # Voz por defecto (derivada de assets/audios/)
-    ├── reference.wav    # Audio para timbre (cualquier largo)
-    └── speech.wav       # Audio para conditioning (10s+)
-# Las voces de USUARIO viven en el user-data-dir por SO (no en el repo)
-
 assets/                  # Material fuente (audios de la voz default, logo)
 ├── audios/              # Audios fuente (voz default) y de prueba
 │   ├── Voice Sampler.wav
@@ -214,10 +222,15 @@ assets/                  # Material fuente (audios de la voz default, logo)
 └── images/              # Logo del proyecto (fuente única de los iconos de build)
     └── TTS Sidecar - Logo.png
 
-src/tts_sidecar/      # Código fuente Python
+src/tts_sidecar/         # Código fuente Python
+├── voices/              # Voces de FÁBRICA (commiteadas, empaquetadas en wheel y bundle, solo lectura)
+│   └── default/         # Voz por defecto (derivada de assets/audios/)
+│       ├── reference.wav    # Audio para timbre (cualquier largo)
+│       └── speech.wav       # Audio para conditioning (10s+)
 └── daemon/              # Daemon mode
+# Las voces de USUARIO viven en el user-data-dir por SO (no en el repo)
 
-tests/                   # Tests pytest (268 tests)
+tests/                   # Tests pytest (280 tests)
 ├── conftest.py
 ├── test_audio.py
 ├── test_build_linux.py
@@ -229,6 +242,7 @@ tests/                   # Tests pytest (268 tests)
 ├── test_daemon.py
 ├── test_engine_cache.py
 ├── test_engine_progress.py
+├── test_paths.py
 ├── test_protocol.py
 ├── test_timing.py
 └── test_voices.py
@@ -238,7 +252,7 @@ tests/                   # Tests pytest (268 tests)
 <!-- <silenced_warnings> -->
 ## Warnings silenciados
 
-`bin/tts-sidecar` silencia:
+`src/tts_sidecar/bootstrap.py` (`apply()`) silencia:
 - `pkg_resources deprecation`
 - `diffusers LoRACompatibleLinear`
 - `huggingface_hub` HTTP warnings
@@ -254,6 +268,8 @@ tests/                   # Tests pytest (268 tests)
 - `docs/GOAL.md` - Meta del proyecto
 - `docs/DAEMON-MODE.md` - Daemon mode (servidor persistente)
 - `docs/BUILD.md` - Guía de compilación PyInstaller
+- `docs/DISTRIBUTION.md` - Canales de distribución (nativo + PyPI)
+- `docs/RELEASING.md` - Publicación de una versión (release + PyPI)
 - `docs/ARCHITECTURE.md` - Arquitectura del sistema
 - `scripts/build_windows.py` - Build PyInstaller para Windows
 - `scripts/pyinstaller_wrapper.py` - Wrapper COM que evita el cuelgue de PyInstaller en Windows (COINIT_MULTITHREADED + os._exit)
