@@ -850,7 +850,7 @@ jobs:
             source /tmp/smoke-venv/bin/activate
             pip install dist/*.whl
             EXPECTED_VERSION="${CIRCLE_TAG#v}"
-            ACTUAL_VERSION="$(tts-sidecar version)"
+            ACTUAL_VERSION="$(tts-sidecar version --json | python -c 'import json, sys; print(json.load(sys.stdin)["version"])')"
             if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
               echo "ERROR: version del wheel ($ACTUAL_VERSION) no coincide con el tag ($EXPECTED_VERSION)" >&2
               exit 1
