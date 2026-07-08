@@ -5,50 +5,11 @@ Uso:
     python -m tts_sidecar.daemon.run
 """
 
-# Supresión de warnings antes de cualquier otro import
-import warnings
-warnings.filterwarnings("ignore")
-import os
-os.environ["PYTHONWARNINGS"] = "ignore"
-os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
-os.environ["TRANSFORMERS_VERBOSITY"] = "error"
-os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-import logging
-logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
-logging.getLogger("chatterbox.models.tokenizers.tokenizer").setLevel(logging.ERROR)
-logging.getLogger("chatterbox.models.t3.inference.alignment_stream_analyzer").setLevel(logging.ERROR)
-
-# Workaround para Python 3.13+ donde pkg_resources fue eliminado.
-# El paquete perth (usado por chatterbox) lo importa en tiempo de import.
-# Proveemos un mock mínimo antes de que perth sea importado.
-#
-# El mock DEBE ser un módulo real con __spec__: cuando este módulo corre en el
-# mismo proceso que el entry point del CLI (p.ej. el subcomando congelado
-# `daemon serve`), el entry point puede haber instalado el mock antes, y cualquier
-# llamada posterior a importlib.util.find_spec('pkg_resources') lanzaría
-# "pkg_resources.__spec__ is not set" sobre un objeto bare. El guard
-# `not in sys.modules` replica el comportamiento de bin/tts-sidecar para no
-# reinstalar el mock si ya está presente.
-import sys
-import importlib.util
-if 'pkg_resources' not in sys.modules and importlib.util.find_spec('pkg_resources') is None:
-    import types
-    import importlib.machinery
-    from pathlib import Path
-
-    def _resource_filename(package, resource):
-        spec = importlib.util.find_spec(package)
-        if spec and spec.submodule_search_locations:
-            return str(Path(spec.submodule_search_locations[0]) / resource)
-        return resource
-
-    _mock = types.ModuleType('pkg_resources')
-    _mock.resource_filename = _resource_filename
-    _mock.__spec__ = importlib.machinery.ModuleSpec('pkg_resources', None)
-    sys.modules['pkg_resources'] = _mock
+from .. import bootstrap
+bootstrap.apply()
 
 import argparse
+import os
 import signal
 import sys
 import time

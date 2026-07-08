@@ -1449,3 +1449,67 @@ class TestSetupLightDownload:
         )
         mock_get_instance.assert_not_called()
         assert "Modelo descargado correctamente" in capsys.readouterr().err
+
+
+class TestBootstrap:
+    """El bootstrap pre-import (bootstrap.apply()) debe correr en cualquier vía
+    de invocación del proceso, ser idempotente y no crashear con pkg_resources
+    ausente (Python 3.13+)."""
+
+    def _reset(self, monkeypatch):
+        from tts_sidecar import bootstrap
+        monkeypatch.setattr(bootstrap, "_applied", False)
+        return bootstrap
+
+    def test_apply_is_idempotent(self, monkeypatch):
+        bootstrap = self._reset(monkeypatch)
+        calls = []
+        monkeypatch.setattr(
+            bootstrap, "_install_pkg_resources_mock", lambda: calls.append(1)
+        )
+
+        bootstrap.apply()
+        bootstrap.apply()
+
+        assert calls == [1]
+
+    def test_apply_sets_expected_env_vars(self, monkeypatch):
+        bootstrap = self._reset(monkeypatch)
+        for var in (
+            "PYTHONWARNINGS", "HF_HUB_DISABLE_IMPLICIT_TOKEN",
+            "TRANSFORMERS_VERBOSITY", "TRANSFORMERS_NO_ADVISORY_WARNINGS",
+            "TOKENIZERS_PARALLELISM",
+        ):
+            monkeypatch.delenv(var, raising=False)
+
+        bootstrap.apply()
+
+        assert os.environ["PYTHONWARNINGS"] == "ignore"
+        assert os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] == "1"
+        assert os.environ["TRANSFORMERS_VERBOSITY"] == "error"
+        assert os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] == "1"
+        assert os.environ["TOKENIZERS_PARALLELISM"] == "false"
+
+    def test_installs_pkg_resources_mock_with_valid_spec_when_absent(self, monkeypatch):
+        bootstrap = self._reset(monkeypatch)
+        sys.modules.pop("pkg_resources", None)
+        monkeypatch.setattr(
+            bootstrap.importlib.util, "find_spec",
+            lambda name: None if name == "pkg_resources" else object(),
+        )
+
+        bootstrap.apply()
+
+        mock = sys.modules["pkg_resources"]
+        assert mock.__spec__ is not None
+        assert callable(mock.resource_filename)
+        del sys.modules["pkg_resources"]
+
+    def test_does_not_reinstall_mock_when_pkg_resources_already_present(self, monkeypatch):
+        bootstrap = self._reset(monkeypatch)
+        sentinel = object()
+        monkeypatch.setitem(sys.modules, "pkg_resources", sentinel)
+
+        bootstrap.apply()
+
+        assert sys.modules["pkg_resources"] is sentinel

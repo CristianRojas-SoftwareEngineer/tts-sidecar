@@ -19,8 +19,8 @@ Contrato de salida (estable entre SO y lenguajes):
     plataforma.
 """
 
-import warnings
-warnings.filterwarnings("ignore", message="pkg_resources is deprecated")
+from . import bootstrap
+bootstrap.apply()
 
 import argparse
 import sys

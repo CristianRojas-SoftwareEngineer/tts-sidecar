@@ -5,29 +5,15 @@ Entry point de tts-sidecar.
 Modo compilado (PyInstaller --onedir): los paquetes están embebidos por
 PyInstaller y sys.path lo gestiona el intérprete embebido automáticamente.
 Modo desarrollo: se añade el directorio src/ del proyecto a sys.path.
+
+El bootstrap pre-import (warnings, env vars, logging, mock de pkg_resources)
+corre dentro de tts_sidecar.cli al importarlo, no aquí: así se aplica también
+al entry point generado por pip/uv y a `python -m tts_sidecar`.
 """
 
 import sys
-import os
 from pathlib import Path
 
-# Supresión de warnings antes de cualquier import
-import warnings
-warnings.filterwarnings("ignore")
-os.environ["PYTHONWARNINGS"] = "ignore"
-os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
-os.environ["TRANSFORMERS_VERBOSITY"] = "error"
-os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-import logging
-logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
-logging.getLogger("chatterbox.models.tokenizers.tokenizer").setLevel(logging.ERROR)
-logging.getLogger("chatterbox.models.t3.inference.alignment_stream_analyzer").setLevel(logging.ERROR)
-
-# En modo congelado (onedir), sys.frozen indica que corremos como bundle;
-# los paquetes están embebidos y no se necesita ajustar el path.
-# En modo desarrollo (no congelado), se añade src/ del proyecto al path.
 if getattr(sys, 'frozen', False):
     pass
 else:
@@ -36,30 +22,6 @@ else:
     _src_path = _project_root / "src"
     if _src_path.exists():
         sys.path.insert(0, str(_src_path))
-
-# Workaround para Python 3.13+ donde pkg_resources fue eliminado de setuptools.
-# El paquete perth (usado por chatterbox) lo importa en tiempo de import,
-# provocando un error fatal. Proveemos un mock mínimo antes de que perth sea importado.
-if 'pkg_resources' not in sys.modules:
-    import importlib.util
-    if importlib.util.find_spec('pkg_resources') is None:
-        import types
-        import importlib.machinery
-
-        def _resource_filename(package, resource):
-            spec = importlib.util.find_spec(package)
-            if spec and spec.submodule_search_locations:
-                return str(Path(spec.submodule_search_locations[0]) / resource)
-            return resource
-
-        # El mock debe ser un módulo real con __spec__: un objeto bare haría que
-        # cualquier llamada posterior a importlib.util.find_spec('pkg_resources')
-        # lanzara "pkg_resources.__spec__ is not set" (p.ej. desde daemon/run.py
-        # cuando corre en el mismo proceso vía el subcomando congelado `daemon serve`).
-        _mock = types.ModuleType('pkg_resources')
-        _mock.resource_filename = _resource_filename
-        _mock.__spec__ = importlib.machinery.ModuleSpec('pkg_resources', None)
-        sys.modules['pkg_resources'] = _mock
 
 from tts_sidecar.cli import main
 
