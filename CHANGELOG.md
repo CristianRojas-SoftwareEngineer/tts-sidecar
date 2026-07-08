@@ -5,6 +5,28 @@ Todos los cambios notables de TTS Sidecar se documentan en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
+## [0.2.1] — 2026-07-08
+
+Corrige la instalación vía `uv tool install tts-sidecar`: quedaba rota por un
+conflicto de resolución de dependencias entre `numpy` y `numba` (transitiva de
+`librosa`/`chatterbox-tts`).
+
+### Corregido
+
+- **`uv tool install tts-sidecar` fallaba** al intentar compilar
+  `llvmlite==0.36.0` desde fuente en Python 3.13 (`RuntimeError: Cannot
+  install on Python version 3.13.14; only versions >=3.6,<3.10 are
+  supported`). Causa: `chatterbox-tts` declara `numpy>=2.0.0` sin tope
+  superior para Python ≥3.13, mientras que `numba` (dependencia transitiva vía
+  `librosa`) exige `numpy<2.5`. El resolvedor de `uv` fijaba primero la
+  versión más reciente de `numpy` (sin tope) y, al no poder satisfacer el tope
+  de `numba`, retrocedía sobre `numba` hasta versiones sin soporte para Python
+  3.13, en vez de retroceder sobre `numpy`. `pip` no caía en esta trampa por
+  las heurísticas de su propio resolvedor, por lo que el smoke test de CI
+  (que usa `pip install`) no lo detectó. Fix: se fija explícitamente
+  `numpy<2.5` como dependencia directa en `pyproject.toml`, acotando el rango
+  antes de que cualquier resolvedor tenga que elegir entre `numpy` y `numba`.
+
 ## [0.2.0] — 2026-07-08
 
 Añade un segundo canal de distribución (PyPI / `uv tool install` / `pipx`)
