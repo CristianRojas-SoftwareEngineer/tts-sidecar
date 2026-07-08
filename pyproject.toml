@@ -4,11 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tts-sidecar"
-version = "0.1.0"
+dynamic = ["version"]
 description = "TTS Sidecar - 100% local voice cloning TTS (Chatterbox Multilingual)"
+readme = "README.md"
 requires-python = ">=3.13"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
+keywords = ["tts", "text-to-speech", "voice-cloning", "chatterbox", "offline", "español"]
+classifiers = [
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Environment :: Console",
+]
 
 # Fuente única de las dependencias de runtime. requirements.txt es un espejo
 # para desarrollo/CI que además incluye las herramientas de build.
@@ -23,8 +31,22 @@ dependencies = [
     "pycaw>=20240210; sys_platform == 'win32'",
 ]
 
+[project.urls]
+Homepage = "https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar"
+Repository = "https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar"
+Changelog = "https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/blob/main/CHANGELOG.md"
+
+[project.scripts]
+tts-sidecar = "tts_sidecar.cli:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "tts_sidecar.__version__"}
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+tts_sidecar = ["voices/**/*.wav"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
