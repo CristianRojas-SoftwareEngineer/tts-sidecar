@@ -730,9 +730,9 @@ jobs:
     # CD estrategia 1 (GitHub Releases). Solo corre en tags `v*` (ver el
     # workflow). Recolecta los 4 artefactos VERSIONADOS por workspace (no
     # `gh run download`: determinista, sin token de API de CircleCI), genera
-    # SHA256SUMS.txt y crea un GitHub Release en BORRADOR con notas del
-    # CHANGELOG. El humano revisa el draft y pulsa «publish». Requiere el
-    # context `github-release` con GH_TOKEN (fine-grained PAT, contents:write).
+    # SHA256SUMS.txt y publica el GitHub Release directo (sin draft) con notas
+    # del CHANGELOG; el tag es el punto de no retorno. Requiere el context
+    # `github-release` con GH_TOKEN (fine-grained PAT, contents:write).
     docker:
       - image: cimg/base:current
     steps:
@@ -792,19 +792,19 @@ jobs:
             cat notes.md
             echo "[STEP] Extract release notes from CHANGELOG section - FIN"
       - run:
-          # Crea el Release en BORRADOR con los 5 assets (4 artefactos +
-          # SHA256SUMS.txt). Si el tag ya tiene Release, `gh release create`
-          # falla ruidosamente (correcto: no re-publica en silencio).
-          name: Create draft GitHub Release with 4 artifacts + SHA256SUMS
+          # Publica el Release directo (sin draft) con los 5 assets (4
+          # artefactos + SHA256SUMS.txt). Si el tag ya tiene Release, `gh
+          # release create` falla ruidosamente (correcto: no re-publica en
+          # silencio).
+          name: Create GitHub Release (direct publish) with 4 artifacts + SHA256SUMS
           command: |
-            echo "[STEP] Create draft GitHub Release with 4 artifacts + SHA256SUMS - INICIO"
+            echo "[STEP] Create GitHub Release (direct publish) with 4 artifacts + SHA256SUMS - INICIO"
             set -euo pipefail
             gh release create "$CIRCLE_TAG" \
               artifacts/tts-sidecar-* artifacts/SHA256SUMS.txt \
-              --draft \
               --title "$CIRCLE_TAG" \
               --notes-file notes.md
-            echo "[STEP] Create draft GitHub Release with 4 artifacts + SHA256SUMS - FIN"
+            echo "[STEP] Create GitHub Release (direct publish) with 4 artifacts + SHA256SUMS - FIN"
 
   publish-pypi:
     # Canal de distribución A (docs/DISTRIBUTION.md): publica el sdist+wheel a

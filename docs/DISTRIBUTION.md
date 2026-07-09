@@ -18,8 +18,8 @@ fricción del primer arranque.
 | **SmartScreen / Gatekeeper** | Bloquea el primer arranque (ver más abajo) | No aplica: el launcher lo genera `pip`/`uv` localmente, sin Mark-of-the-Web |
 | **Actualización** | Reinstalar el paquete nuevo (ver `USAGE.md`) | `uv tool upgrade tts-sidecar` / `pipx upgrade tts-sidecar` |
 | **Desinstalación** | Desinstalador/borrar el `.AppImage` (ver `USAGE.md`) | `uv tool uninstall tts-sidecar` / `pipx uninstall tts-sidecar` |
-| **Publicación en CI** | Job `publish-release` → GitHub Release en borrador | Job `publish-pypi` → publicación directa a PyPI |
-| **Reversibilidad de la publicación** | El draft se puede borrar sin efecto | Irreversible: un paquete subido no se puede sobrescribir, solo yankear |
+| **Publicación en CI** | Job `publish-release` → GitHub Release directo | Job `publish-pypi` → publicación directa a PyPI |
+| **Reversibilidad de la publicación** | El Release es público al publicarse: revertir implica borrar un Release ya público | Irreversible: un paquete subido no se puede sobrescribir, solo yankear |
 
 En ambos casos, `setup` provisiona el modelo `es-mx-latam` en la caché de
 HuggingFace del usuario (`~/.cache/huggingface/hub`) de forma idéntica: el
@@ -139,10 +139,11 @@ PyInstaller):
 4. Publica a PyPI (`twine upload`) usando `PYPI_API_TOKEN` del context
    aislado `pypi-publish` (ningún otro job ve ese token).
 
-**La publicación a PyPI es irreversible**: a diferencia del GitHub Release
-(que queda en borrador y se puede descartar), un paquete subido a PyPI no se
-puede sobrescribir — solo yankear una versión y publicar una nueva. Por eso
-el smoke test del paso 3 corre siempre antes del upload. Prerequisito
+**La publicación a PyPI es irreversible**: al igual que el GitHub Release —que
+se publica directo y, para revertirlo, obliga a borrar un Release ya público—,
+un paquete subido a PyPI no se puede sobrescribir; solo yankear una versión y
+publicar una nueva. Por eso el smoke test del paso 3 corre siempre antes del
+upload. Prerequisito
 operativo (una sola vez): el context `pypi-publish` en CircleCI con la
 variable `PYPI_API_TOKEN` (token API de PyPI con scope al proyecto), análogo
 al context `github-release` existente (ver `docs/RELEASING.md`).

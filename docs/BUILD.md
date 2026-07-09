@@ -289,7 +289,7 @@ Los tests (3) y los builds (4) no están desalineados: responden a **ejes distin
 | `build-linux-x64` | Linux x64 | docker `cimg/python:3.13` (`large`) | PyInstaller onedir + AppImage |
 | `build-linux-arm64` | Linux ARM64 | docker `cimg/python:3.13` (`arm.medium`) | PyInstaller onedir + AppImage |
 | `build-darwin-arm64` | macOS arm64 (Apple Silicon) | macos `m4pro.medium` (Xcode 26.4.0) | PyInstaller onedir + .app + .dmg |
-| `publish-release` | — (CD) | docker `cimg/base:current` | Solo en tags `v*`: recolecta los 4 artefactos por workspace, genera `SHA256SUMS.txt` y crea un GitHub Release en **borrador** |
+| `publish-release` | — (CD) | docker `cimg/base:current` | Solo en tags `v*`: recolecta los 4 artefactos por workspace, genera `SHA256SUMS.txt` y publica el GitHub Release directo (sin borrador) |
 
 **Instalador de Windows como step separado.** En `build-windows-x64`, PyInstaller y la
 generación del instalador Inno Setup son dos steps distintos: el primero corre
@@ -410,8 +410,8 @@ Al pushear un tag `v*`, además de tests + builds corre `publish-release`
 `persist_to_workspace`/`attach_workspace` (no `gh run download`: se queda dentro
 del pipeline, es determinista y no requiere token de API de CircleCI), genera
 `SHA256SUMS.txt`, extrae las notas de la sección `[X.Y.Z]` de `CHANGELOG.md`
-(fail-fast si no existe) y crea el Release en **borrador**. El humano revisa el
-draft y pulsa «publish». El detalle del runbook está en `docs/RELEASING.md`.
+(fail-fast si no existe) y publica el GitHub Release directo (sin borrador). El
+detalle del runbook está en `docs/RELEASING.md`.
 
 Requisito operativo: el context `github-release` en CircleCI con `GH_TOKEN`
 (fine-grained PAT, permiso `contents: write` sobre el repo), aislado al job de

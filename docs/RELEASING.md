@@ -1,16 +1,17 @@
 # Publicación de una versión (RELEASING.md)
 
-`tts-sidecar` publica sus releases de forma **semi-automática**: al pushear un
+`tts-sidecar` publica sus releases de forma **automática**: al pushear un
 tag `v*`, CircleCI corre los tests, los 4 builds y el job `publish-release`, que
-recolecta los artefactos, genera `SHA256SUMS.txt` y crea un **GitHub Release en
-borrador (draft)**. El propietario solo revisa el draft y pulsa «publish». Sin
-firma de código (R-38), el cotejo de checksums SHA-256 sigue siendo la cadena de
-verificación de integridad para el usuario final.
+recolecta los artefactos, genera `SHA256SUMS.txt` y **publica el GitHub Release
+directo** (sin borrador) sobre el tag. Sin firma de código (R-38), el cotejo de
+checksums SHA-256 sigue siendo la cadena de verificación de integridad para el
+usuario final.
 
 En paralelo a los 4 builds nativos corre el job **`publish-pypi`**, que publica
-el paquete al canal PyPI (ver [docs/DISTRIBUTION.md](DISTRIBUTION.md)). A
-diferencia de `publish-release`, `publish-pypi` **no tiene paso de revisión
-manual**: publica directamente en PyPI sin generar un borrador.
+el paquete al canal PyPI (ver [docs/DISTRIBUTION.md](DISTRIBUTION.md)). Igual que
+`publish-release`, `publish-pypi` **no tiene paso de revisión manual**: ambos
+publican en firme en el mismo tag, sin generar un borrador ni requerir un clic
+humano.
 
 ## Prerequisitos
 
@@ -46,12 +47,12 @@ manual**: publica directamente en PyPI sin generar un borrador.
 - **Prerequisito operativo (una sola vez):** existe el context `pypi-publish`
   en CircleCI con la variable `PYPI_API_TOKEN` = un token API de PyPI con scope
   al proyecto. Está aislado al job `publish-pypi`; ningún otro job lo ve.
-- **La publicación a PyPI es irreversible**: a diferencia del GitHub Release
-  (que queda en borrador y se puede descartar sin efecto), el tag dispara la
-  publicación en firme a PyPI — un paquete subido no se puede sobrescribir,
-  solo yankear una versión y publicar una nueva. Por eso el corte del
-  `CHANGELOG.md` y la versión en `__init__.py` deben estar correctos **antes**
-  de crear el tag, no después.
+- **La publicación a PyPI es irreversible**: al igual que el GitHub Release —que
+  se publica directo sobre el tag y, para revertirlo, hay que borrar un Release
+  ya público—, el tag dispara la publicación en firme a PyPI: un paquete subido
+  no se puede sobrescribir, solo yankear una versión y publicar una nueva. Por
+  eso el corte del `CHANGELOG.md` y la versión en `__init__.py` deben estar
+  correctos **antes** de crear el tag, no después.
 
 ## 1. Corte: crear y publicar el tag
 
@@ -80,8 +81,8 @@ Una vez pushado el tag, el pipeline ejecuta sin intervención:
      `tts-sidecar-X.Y.Z-arm64.dmg`.
    - Genera `SHA256SUMS.txt` con los checksums de los 4.
    - Extrae las notas de la sección `[X.Y.Z]` de `CHANGELOG.md`.
-   - Crea el GitHub Release en **borrador** sobre el tag `vX.Y.Z`, con los 5
-     assets (4 artefactos + `SHA256SUMS.txt`) y las notas.
+   - Publica el GitHub Release directo (sin borrador) sobre el tag `vX.Y.Z`, con
+     los 5 assets (4 artefactos + `SHA256SUMS.txt`) y las notas.
 3. **`publish-pypi`** (en paralelo a los 4 builds, solo requiere la triple
    puerta de tests): construye el sdist y el wheel, valida la metadata
    (`twine check`), instala el wheel en un venv limpio para verificar que
@@ -98,22 +99,25 @@ Una vez pushado el tag, el pipeline ejecuta sin intervención:
 Ya no hay descarga ni cotejo manual de artefactos: la recolección por workspace
 es determinista (el mismo binario que pasó el smoke test es el que se adjunta).
 
-## 3. Manual: revisar y publicar el draft
+## 3. Verificación post-publicación
 
-En la pestaña **Releases** del repo aparece el borrador `vX.Y.Z`. Revisa:
+En la pestaña **Releases** del repo aparece el Release `vX.Y.Z` **ya público**
+(marcado como *latest* por defecto), con sus 5 assets y las notas del CHANGELOG.
+Verifica:
 
 - Los **5 assets** están presentes (4 artefactos + `SHA256SUMS.txt`).
 - Las **notas** corresponden a la sección `[X.Y.Z]` del `CHANGELOG.md`.
 - Opcional: coteja los hashes de `SHA256SUMS.txt` contra los emitidos por cada
   build en el log del pipeline (step "Emit artifact SHA-256").
 
-Si todo está bien, pulsa **«Publish release»**. Si algo falla (el job no corrió,
-faltan assets, notas vacías), corrige e itera: borra el draft, arregla la causa
-(p. ej. la sección del CHANGELOG) y **re-crea el tag** sobre el commit corregido.
+El tag es el **punto de no retorno**: el Release es público en cuanto el job
+termina. Si algo falla (faltan assets, notas incorrectas, artefacto roto), la
+iteración ya no es descartar un borrador: **borra el Release público** y
+**re-crea el tag** sobre el commit corregido (p. ej. tras arreglar la sección del
+CHANGELOG).
 
 > Si el tag ya tuviera un Release, `gh release create` falla ruidosamente en el
-> CI (no re-publica en silencio): borra el Release/draft anterior antes de
-> re-taggear.
+> CI (no re-publica en silencio): borra el Release anterior antes de re-taggear.
 
 ## 4. Verificación del usuario final
 
