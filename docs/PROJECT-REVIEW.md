@@ -661,8 +661,17 @@ independientes del orden de las Fases 1-3 (H-7):
 4. **Fase 3 (Windows)** — reutiliza el backbone; el spike de tooling (Paso 0) es su
    primer hito y su mayor riesgo.
 
-La **Línea A** (endurecimiento del build, sección «Asunto transversal») avanza en
-paralelo, sin depender del orden de las fases.
+La **Línea A** (endurecimiento del build, sección «Asunto transversal») es
+transversal, pero su *orden* conviene matizar. Los **build flags** (`--noupx`,
+`--version-file`) se adelantan **antes de la Fase 1** porque son un cambio único en
+`build_utils.py` que consumen todos los artefactos: `--noupx` evita la compresión
+UPX en cualquier build de PyInstaller (incluido el bootloader del `.AppImage` de
+Linux) y `--version-file` (metadata PE) es Windows-only y beneficia el `.exe`/
+instalador Inno de las Fases 2-3. Con este adelanto, el `.AppImage` de Linux ya
+sale sin UPX y el `.exe` de Windows de las fases siguientes ya lleva la metadata PE
+embebida. El paso **VirusTotal-CI** y el **runbook WDSI** sí pueden quedar sueltos
+en paralelo, sin depender del orden de las fases. Esto no cambia el número de
+fases, solo el orden de un subconjunto de la Línea A.
 
 Las tres fases son entregables independientes: se pueden publicar y anunciar por
 separado. Ninguna bloquea el canal nativo ni el canal PyPI existentes.
