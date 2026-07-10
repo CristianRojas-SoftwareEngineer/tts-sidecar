@@ -5,6 +5,34 @@ Todos los cambios notables de TTS Sidecar se documentan en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
+## [0.3.0] — 2026-07-10
+
+Extiende el canal nativo con instalación auto-hospedada por SO y reduce los
+falsos positivos de antivirus en los binarios PyInstaller, sin tocar el
+contrato del CLI (códigos de salida, esquemas `--json`) ni los canales
+existentes (nativo/PyPI).
+
+### Añadido
+
+- **Instalador Linux de una línea** (`install.sh`): resuelve el release más
+  reciente, elige el `.AppImage` por arquitectura (`uname -m`), verifica el
+  checksum SHA-256 contra `SHA256SUMS.txt` antes de instalar, integra el PATH
+  vía la variable `APPIMAGE` y ejecuta `setup`. Documentado en `README.md` y
+  `USAGE.md` con su desinstalación limpia de 3 pasos.
+- **Cask de Homebrew propio** (`homebrew-tts-sidecar`): `brew install --cask
+  tts-sidecar` instala desde el `.dmg` del release; `publish-metadata` en CI
+  reescribe el Cask con la versión y el `sha256` del `.dmg` en cada release
+  (idempotente). Ver `docs/RELEASING.md` y `docs/DISTRIBUTION.md`.
+- **Runbook de reporte de falso positivo** a Windows Defender Security
+  Intelligence (WDSI) en `SECURITY.md`, acotado a la detección de Defender
+  Antivirus (no afecta SmartScreen).
+
+### Cambiado
+
+- **Endurecimiento del build PyInstaller**: `--noupx` en los flags compartidos
+  y metadata PE (`--version-file`) en el `.exe` de Windows, para mitigar las
+  heurísticas de antivirus sobre el patrón de empaquetado. Cubierto por tests.
+
 ## [0.2.1] — 2026-07-08
 
 Corrige la instalación vía `uv tool install tts-sidecar`: quedaba rota por un
