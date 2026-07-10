@@ -215,6 +215,26 @@ validación E2E" arriba):
 
 ## Roadmap (compromisos a futuro)
 
+### Instalación auto-hospedada por SO (Linux y macOS)
+
+**Motivación**: además del canal nativo (descarga directa del artefacto) y el
+canal PyPI, el proyecto ofrece una instalación auto-hospedada por SO que resuelve
+descubrimiento, instalación, disponibilidad del comando en el PATH, provisión del
+modelo y desinstalación en un flujo guiado, reutilizando los artefactos que el
+canal nativo ya publica. La especificación completa está en
+[docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md).
+
+**Compromiso**:
+- **Linux**: un script `install.sh` servido por el propio repo, ejecutable con
+  `curl … | sh` sobre el `.AppImage` del release.
+- **macOS**: un tap de Homebrew propio con un Cask que instala el CLI desde el
+  `.dmg` del release, actualizado automáticamente en cada publicación por un job
+  de CI.
+
+**Publicación autónoma**: ambos canales publican sin aprobación ni pull request a
+terceros; se apoyan en repos propios y en la automatización de CI sobre el propio
+repo.
+
 ### Firma de código Windows (SignPath) y notarización Apple (macOS)
 
 **Motivación**: los binarios del canal nativo no están firmados, por lo que
@@ -238,3 +258,9 @@ el recomendado para usuarios no técnicos.
 
 **Criterio de cierre**: los instaladores de Windows y macOS generados por CI
 arrancan sin disparar SmartScreen ni Gatekeeper en una instalación limpia.
+
+Una vez disponible la firma Authenticode, esta habilita además un canal de
+instalación auto-hospedada en Windows análogo a los de Linux y macOS (ver
+[docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md)). Sin firma, la instalación
+sin alertas en Windows la provee el canal PyPI, que genera el ejecutable en la
+máquina del usuario.
