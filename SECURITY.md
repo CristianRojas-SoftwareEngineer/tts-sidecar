@@ -62,6 +62,18 @@ limitada, pero conviene explicitar sus supuestos:
   no una vulnerabilidad; ver «Uso ético y responsable» en
   [README.md](README.md)/[USAGE.md](USAGE.md).
 
+### Nota sobre el instalador de una línea de Linux
+
+`install.sh` (raíz del repo) se sirve por `raw.githubusercontent.com` y se
+ejecuta con `curl | sh`, el patrón habitual de instalación de una línea. La
+mitigación de ese patrón —ejecutar contenido remoto sin inspeccionarlo antes—
+es que **el propio script verifica el checksum SHA-256** del `.AppImage`
+descargado contra `SHA256SUMS.txt` (publicado junto al Release, ver
+«Artefactos sin firmar» abajo) **antes** de darle permisos de ejecución o de
+invocarlo; un checksum que no coincide aborta la instalación sin ejecutar
+nada. El propio `install.sh` no requiere privilegios elevados: instala en
+`~/.local/opt/tts-sidecar/`, sin `sudo`.
+
 ## Artefactos sin firmar
 
 Los binarios distribuidos **no están firmados ni notarizados**: Gatekeeper (macOS) y
@@ -85,3 +97,44 @@ desde el repositorio, MFA de los mantenedores y una política de firma
 publicada). La firma OV no suprime la advertencia de SmartScreen de inmediato
 —la reputación se acumula por volumen de descargas— pero reemplaza «editor
 desconocido» por un editor verificable.
+
+Mientras tanto, el build aplica dos mitigaciones baratas sin firma de código:
+todos los artefactos de PyInstaller se empaquetan con `--noupx` (sin
+compresión UPX, una de las señales que la heurística antivirus asocia con
+malware), y el `.exe` de Windows lleva metadata PE de identidad (empresa,
+producto y versión vía `--version-file`), ambas cubiertas por test en
+`tests/test_build_utils.py` y `tests/test_build_windows.py`.
+
+### Runbook: reportar un falso positivo de Defender Antivirus (WDSI)
+
+Si un release de Windows es marcado por **Microsoft Defender Antivirus** (por
+ejemplo con una firma como `Trojan:Win32/Wacatac`), reporta el falso positivo
+al portal de Microsoft (*Windows Defender Security Intelligence*):
+
+1. Entra a [microsoft.com/wdsi](https://www.microsoft.com/en-us/wdsi/filesubmission)
+   y elige **"Submit a file for malware analysis"**.
+2. Sube el artefacto marcado (el `.exe` o el instalador Inno Setup) tal cual se
+   descargó del [Release](https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/releases);
+   el reporte funciona con el binario **sin firmar**, no hace falta esperar a
+   tener firma de código.
+3. Clasifica la muestra como **"Incorrectly detected as malware / False
+   Positive"** e indica la detección exacta que reportó Defender.
+4. En el campo de comentarios, aclara que es un ejecutable PyInstaller de
+   código abierto (enlaza este repositorio y el commit/tag del que se
+   construyó el artefacto, verificable contra `SHA256SUMS.txt` — ver
+   [docs/RELEASING.md](docs/RELEASING.md)).
+5. Microsoft revisa la muestra con un analista y, si confirma el falso
+   positivo, **borra la detección globalmente** para todos los usuarios de
+   Defender (no solo para quien reportó).
+
+Alcance de este runbook: cubre **únicamente** la detección de Defender
+Antivirus. **No** desactiva ni acelera el paso de SmartScreen — SmartScreen es
+reputación de archivo/editor, y solo la resuelve la firma de código (ver la
+ruta prevista arriba), no un reporte a WDSI. Firmar el binario tampoco borra
+retroactivamente una detección de Defender ya existente: solo el reporte a
+WDSI lo hace. Sin firma de código, la reputación se acumula por archivo
+individual, así que **cada versión nueva puede requerir un reporte propio**;
+con firma de código, la reputación se hereda entre versiones y esa
+recurrencia disminuye considerablemente. Ver también la guía de usuario para
+los diálogos de bloqueo en
+[USAGE.md](USAGE.md#el-sistema-bloquea-el-primer-arranque-binarios-sin-firmar).

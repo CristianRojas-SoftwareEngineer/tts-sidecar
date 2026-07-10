@@ -17,10 +17,73 @@ BUILD_DIR = PROJECT_ROOT / "build"
 # Import shared logging utilities
 sys.path.insert(0, str(Path(__file__).parent))
 from build_utils import (
-    log, StageTimer, BuildTimer, copy_license_files,
+    log, StageTimer, BuildTimer, copy_license_files, get_version,
     check_pyinstaller, common_pyinstaller_args, bundle_size_mb, run_pyinstaller,
     BUILD_SUBPROCESS_TIMEOUT, PYINSTALLER_TIMEOUT, INSTALLER_TIMEOUT,
 )
+
+# Plantilla del archivo de versión PE (formato pyinstaller-versionfile /
+# VSVersionInfo) consumido por --version-file: da al .exe metadata de
+# identidad (empresa, producto, versión) que la heurística de los antivirus
+# usa como señal a favor de un binario legítimo (docs/SELF-HOSTED-INSTALL.md).
+_VERSION_FILE_TEMPLATE = """\
+# UTF-8
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=({v0}, {v1}, {v2}, 0),
+    prodvers=({v0}, {v1}, {v2}, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0),
+  ),
+  kids=[
+    StringFileInfo(
+      [
+        StringTable(
+          u'040904B0',
+          [StringStruct(u'CompanyName', u'TTS Sidecar'),
+          StringStruct(u'FileDescription', u'TTS Sidecar - motor de sintesis de voz offline'),
+          StringStruct(u'FileVersion', u'{version}'),
+          StringStruct(u'InternalName', u'tts-sidecar'),
+          StringStruct(u'LegalCopyright', u'GPL-3.0-or-later'),
+          StringStruct(u'OriginalFilename', u'tts-sidecar.exe'),
+          StringStruct(u'ProductName', u'TTS Sidecar'),
+          StringStruct(u'ProductVersion', u'{version}')])
+      ]),
+    VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
+  ]
+)
+"""
+
+
+def _write_version_file(dest_dir: Path) -> Path:
+    """Genera el archivo de versión PE que consume --version-file de PyInstaller.
+
+    Deriva los cuatro campos numéricos (filevers/prodvers) de get_version(),
+    la misma fuente única de versión que usan build_macos.py (Info.plist) y
+    create_installer_windows.py (Inno Setup). Los componentes no numéricos
+    (p. ej. sufijos "-rc1") se descartan del versionado numérico pero la
+    versión completa sigue viajando en FileVersion/ProductVersion como texto.
+    """
+    version = get_version()
+    parts = version.split(".")
+    nums = []
+    for part in (parts + ["0", "0", "0"])[:3]:
+        digits = "".join(ch for ch in part if ch.isdigit())
+        nums.append(int(digits) if digits else 0)
+    v0, v1, v2 = nums
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    version_file = dest_dir / "version_info.txt"
+    version_file.write_text(
+        _VERSION_FILE_TEMPLATE.format(v0=v0, v1=v1, v2=v2, version=version),
+        encoding="utf-8",
+    )
+    log(f"Archivo de versión PE generado: {version_file} ({version})")
+    return version_file
 
 
 def ensure_runtime_dependencies():
@@ -67,6 +130,10 @@ def build_windows(target_arch="x86_64", no_installer=False):
                 data_sep=";",
                 extra_collect_all=["pycaw"],
             )
+            # Metadata PE de identidad (empresa/producto/versión): solo tiene
+            # sentido en Windows, el .AppImage de Linux es ELF y no la soporta.
+            version_file = _write_version_file(BUILD_DIR)
+            pyinstaller_args += ["--version-file", str(version_file)]
             # [2:] omite [sys.executable, "-m"] del log para mostrar solo los args de PyInstaller
             log(f"Running: pyinstaller {' '.join(pyinstaller_args[2:])}")
             # run_pyinstaller reescribe la invocación al wrapper COM en Windows y

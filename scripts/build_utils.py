@@ -225,6 +225,11 @@ def common_pyinstaller_args(
         "--workpath", str(build_dir),
         "--specpath", str(project_root / "scripts"),
         "--noconfirm",
+        # Sin compresión UPX: el empaquetado UPX es una de las señales que la
+        # heurística de los antivirus asocia con malware (binario que se
+        # autodescomprime en memoria); --noupx la elimina en los tres builds
+        # a cambio de bundles algo más grandes (docs/SELF-HOSTED-INSTALL.md).
+        "--noupx",
         str(entry_point),
         # Recolectar todos los paquetes que PyInstaller no puede seguir
         # automáticamente (imports perezosos, extensiones C, código compilado)

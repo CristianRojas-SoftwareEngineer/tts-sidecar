@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 import build_utils
 from build_utils import (
     get_version, bundle_size_mb, ensure_build_dependency, fetch_pinned_asset,
-    run_pyinstaller, INSTALLER_TIMEOUT,
+    run_pyinstaller, INSTALLER_TIMEOUT, common_pyinstaller_args,
 )
 
 
@@ -243,6 +243,19 @@ class TestRunPyinstaller:
 def test_installer_timeout_defined():
     """INSTALLER_TIMEOUT existe con el valor holgado para ISCC sobre ~1.6 GB."""
     assert INSTALLER_TIMEOUT == 1800
+
+
+def test_common_pyinstaller_args_includes_noupx(tmp_path):
+    """--noupx debe estar presente para los tres scripts de build (endurecimiento
+    contra la heurística de antivirus que penaliza binarios comprimidos con UPX)."""
+    args = common_pyinstaller_args(
+        entry_point=tmp_path / "entry.py",
+        project_root=tmp_path,
+        dist_dir=tmp_path / "dist",
+        build_dir=tmp_path / "build",
+        data_sep=":",
+    )
+    assert "--noupx" in args
 
 
 def test_linux_cpu_lock_contains_no_nvidia_packages():

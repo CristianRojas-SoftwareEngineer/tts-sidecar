@@ -62,3 +62,29 @@ def test_installer_success_completes(monkeypatch):
 
     # No debe lanzar: el flujo llega al final normalmente.
     build_windows.build_windows("x86_64", no_installer=False)
+
+
+def test_version_file_passed_to_pyinstaller(monkeypatch):
+    """--version-file debe pasarse a PyInstaller con una ruta que existe en disco
+    (metadata PE de identidad, endurecimiento contra la heurística de antivirus)."""
+    monkeypatch.setattr(build_windows, "copy_license_files", lambda dest: None)
+    monkeypatch.setattr(build_windows, "bundle_size_mb", lambda onedir: 0.0)
+
+    capturados = []
+
+    def _fake_run_pyinstaller(args, timeout):
+        capturados.append(args)
+        return 0
+
+    monkeypatch.setattr(build_windows, "run_pyinstaller", _fake_run_pyinstaller)
+
+    build_windows.build_windows("x86_64", no_installer=True)
+
+    assert len(capturados) == 1
+    args = capturados[0]
+    assert "--version-file" in args
+    version_file = Path(args[args.index("--version-file") + 1])
+    assert version_file.exists()
+    contenido = version_file.read_text(encoding="utf-8")
+    assert "TTS Sidecar" in contenido
+    assert "GPL-3.0-or-later" in contenido
