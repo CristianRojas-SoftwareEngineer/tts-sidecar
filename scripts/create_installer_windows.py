@@ -63,14 +63,16 @@ def generate_iss(source_dir: Path, output_dir: Path, version: str, info_after: P
     lines.append("AppName=tts-sidecar")
     lines.append("AppVersion=" + version)
     lines.append("AppPublisher=tts-sidecar")
-    lines.append("DefaultDirName={autopf}\\tts-sidecar")
+    # Instalación per-user (sin UAC): perfil del usuario, patrón {localappdata}\Programs
+    # convencional (p.ej. VS Code); {userpf} no es constante estándar de Inno Setup.
+    lines.append("DefaultDirName={localappdata}\\Programs\\tts-sidecar")
     lines.append("DefaultGroupName=tts-sidecar")
     lines.append("OutputDir=" + output_win)
     # Vocabulario de arquitectura unificado al estilo `uname -m` (x86_64/aarch64),
     # en paridad con los AppImage de Linux (A-03).
     lines.append("OutputBaseFilename=tts-sidecar-" + version + "-x86_64-setup")
     lines.append("WizardStyle=modern")
-    lines.append("PrivilegesRequired=admin")
+    lines.append("PrivilegesRequired=lowest")
     lines.append("ArchitecturesAllowed=x64compatible")
     lines.append("ArchitecturesInstallIn64BitMode=x64compatible")
     # Emite el broadcast de cambio de entorno para que el PATH actualizado se propague.
@@ -109,12 +111,15 @@ def generate_iss(source_dir: Path, output_dir: Path, version: str, info_after: P
     lines.append("[Registry]")
     # La entrada de "Aplicaciones y características" la genera Inno Setup
     # automáticamente ({AppId}_is1); no se escribe una clave Uninstall manual.
-    # Añade {app} al PATH del sistema solo si no está ya presente (ver NeedsAddPath en [Code]).
-    lines.append('Root: HKLM; Subkey: "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: NeedsAddPath(ExpandConstant(\'{app}\')); Flags: preservestringtype')
+    # Añade {app} al PATH del usuario (HKCU), sin elevación, solo si no está ya
+    # presente (ver NeedsAddPath en [Code]).
+    lines.append('Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: NeedsAddPath(ExpandConstant(\'{app}\')); Flags: preservestringtype')
     lines.append("")
     lines.append("[Run]")
-    # Checkbox post-instalación: descarga el modelo en el contexto del usuario (sin elevación)
-    # para que la caché de HuggingFace quede en el perfil del usuario real, no del admin.
+    # Checkbox post-instalación: descarga el modelo a la caché de HuggingFace del
+    # usuario. Con PrivilegesRequired=lowest no hay elevación, así que
+    # runasoriginaluser queda inerte; se conserva por si el usuario fuerza la
+    # instalación elevada (el setup seguiría corriendo como el usuario original).
     # Se lanza vía `cmd /k` para que la consola persista al terminar (W-03): si setup
     # falla, el error queda visible en lugar de desaparecer con la ventana — paridad
     # con la Terminal persistente del .command de macOS.
@@ -125,9 +130,7 @@ def generate_iss(source_dir: Path, output_dir: Path, version: str, info_after: P
     lines.append("var")
     lines.append("  OrigPath: string;")
     lines.append("begin")
-    lines.append("  if not RegQueryStringValue(HKLM,")
-    lines.append("    'SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment',")
-    lines.append("    'Path', OrigPath)")
+    lines.append("  if not RegQueryStringValue(HKCU, 'Environment', 'Path', OrigPath)")
     lines.append("  then begin")
     lines.append("    Result := True;")
     lines.append("    exit;")
@@ -146,9 +149,7 @@ def generate_iss(source_dir: Path, output_dir: Path, version: str, info_after: P
     lines.append("begin")
     lines.append("  if CurUninstallStep <> usUninstall then")
     lines.append("    exit;")
-    lines.append("  if not RegQueryStringValue(HKLM,")
-    lines.append("    'SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment',")
-    lines.append("    'Path', OrigPath)")
+    lines.append("  if not RegQueryStringValue(HKCU, 'Environment', 'Path', OrigPath)")
     lines.append("  then")
     lines.append("    exit;")
     lines.append("  AppDir := ExpandConstant('{app}');")
@@ -162,9 +163,7 @@ def generate_iss(source_dir: Path, output_dir: Path, version: str, info_after: P
     lines.append("  else")
     lines.append("    { Entrada en medio o al final: recorta ';AppDir' con su separador previo. }")
     lines.append("    Delete(OrigPath, P - 1, Length(AppDir) + 1);")
-    lines.append("  RegWriteExpandStringValue(HKLM,")
-    lines.append("    'SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment',")
-    lines.append("    'Path', OrigPath);")
+    lines.append("  RegWriteExpandStringValue(HKCU, 'Environment', 'Path', OrigPath);")
     lines.append("end;")
 
     return "\n".join(lines)
@@ -190,7 +189,7 @@ def info_after_text() -> str:
         "    tts-sidecar setup\r\n\r\n"
         "Hasta que el modelo esté descargado, los comandos 'speak' y 'daemon start'\r\n"
         "fallarán de inmediato y te recordarán ejecutar 'tts-sidecar setup'.\r\n\r\n"
-        "El instalador añadió la carpeta de instalación al PATH del sistema, por lo\r\n"
+        "El instalador añadió la carpeta de instalación al PATH de tu usuario, por lo\r\n"
         "que podrás invocar 'tts-sidecar' por nombre en una terminal nueva.\r\n\r\n"
         "Código fuente (GPLv3)\r\n"
         "======================\r\n\r\n"

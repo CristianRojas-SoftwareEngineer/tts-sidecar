@@ -50,10 +50,30 @@ def test_adds_path_conditioned_on_needsaddpath(iss):
 
 
 def test_uninstall_trims_path_entry(iss):
-    # W-01: el desinstalador debe revertir la entrada {app} del PATH de HKLM.
+    # W-01: el desinstalador debe revertir la entrada {app} del PATH de usuario (HKCU).
     assert "procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);" in iss
     assert "usUninstall" in iss
-    assert "RegWriteExpandStringValue(HKLM," in iss
+    assert "RegWriteExpandStringValue(HKCU, 'Environment', 'Path', OrigPath);" in iss
+
+
+def test_installer_is_per_user_no_admin(iss):
+    # Instalación per-user: sin UAC (lowest) y bajo el perfil del usuario,
+    # patrón {localappdata}\Programs convencional (p.ej. VS Code).
+    assert "PrivilegesRequired=lowest" in iss
+    assert "DefaultDirName={localappdata}\\Programs\\tts-sidecar" in iss
+    assert "PrivilegesRequired=admin" not in iss
+
+
+def test_path_registry_uses_hkcu_environment(iss):
+    # El PATH se escribe en el registro del usuario (HKCU\Environment), no en HKLM.
+    assert 'Root: HKCU; Subkey: "Environment";' in iss
+
+
+def test_no_per_machine_registry_remnant(iss):
+    # Ninguna referencia residual al PATH per-machine de HKLM debe sobrevivir
+    # a la migración per-user (ni en [Registry] ni en [Code]).
+    assert "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment" not in iss
+    assert "HKLM" not in iss
 
 
 def test_without_key_manual_uninstall(iss):
