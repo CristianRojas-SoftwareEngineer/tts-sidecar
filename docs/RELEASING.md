@@ -26,11 +26,14 @@ humano.
   `build-all` tiene `branches: ignore: /.*/` en todos sus jobs, así que
   CircleCI no corre nada en pushes a `main` — el tag es lo único que dispara
   el pipeline. La protección dentro del pipeline no es una comprobación
-  previa, sino el propio grafo de dependencias: `build-windows-x64`,
-  `build-linux-x64`, `build-linux-arm64`, `build-darwin-arm64` y
-  `publish-pypi` declaran `requires: [test-linux, test-windows, test-macos]`,
-  así que si los tests fallan en el pipeline del tag, ni los builds ni
-  `publish-pypi` llegan a ejecutarse. Correr la suite en local antes de
+  previa, sino el propio grafo de dependencias: los 4 builds
+  (`build-windows-x64`, `build-linux-x64`, `build-linux-arm64`,
+  `build-darwin-arm64`) declaran `requires` sobre la triple puerta de tests
+  (`test-linux`, `test-windows`, `test-macos`) **más** los dos smoke-tests de
+  instaladores (`test-installer-linux`, `test-installer-windows`);
+  `publish-pypi` declara solo la triple puerta de tests (los instaladores de
+  una línea no participan del canal PyPI). Si cualquiera de esas puertas falla
+  en el pipeline del tag, ni los builds ni `publish-pypi` llegan a ejecutarse. Correr la suite en local antes de
   taggear sigue siendo la única manera de anticipar ese resultado.
 - **Revisiones fijadas del modelo auditadas** (R-15): las constantes
   `MODEL_REVISIONS` y `BASE_MODEL_REVISION` de `src/tts_sidecar/model_cache.py`
@@ -73,15 +76,16 @@ git push origin vX.Y.Z
 ```
 
 El push del tag dispara el workflow `build-all` en CircleCI sobre ese commit:
-triple puerta de tests + 4 builds **y además** el job `publish-release` (que solo
-corre en tags `v*`, nunca en ramas).
+triple puerta de tests + 2 smoke-tests de instaladores + 4 builds **y además**
+el job `publish-release` (que solo corre en tags `v*`, nunca en ramas).
 
 ## 2. Automático: lo que hace el CI
 
 Una vez pushado el tag, el pipeline ejecuta sin intervención:
 
-1. **Tests + builds**: la triple puerta de tests y los 4 builds nativos
-   (`build-windows-x64`, `build-linux-x64`, `build-linux-arm64`,
+1. **Tests + builds**: la triple puerta de tests, los smoke-tests de
+   instaladores (`test-installer-linux`, `test-installer-windows`) y los 4
+   builds nativos (`build-windows-x64`, `build-linux-x64`, `build-linux-arm64`,
    `build-darwin-arm64`). Cada build emite el SHA-256 de su artefacto en el log
    (step "Emit artifact SHA-256") y **persiste el artefacto versionado** al
    workspace compartido.

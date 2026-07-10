@@ -5,7 +5,7 @@ Todos los cambios notables de TTS Sidecar se documentan en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
-## [0.4.0] — Sin publicar
+## [0.4.0] — 2026-07-10
 
 Extiende la instalación auto-hospedada de una línea a Windows y migra el
 instalador Inno Setup a per-user, sin tocar el contrato del CLI (códigos de

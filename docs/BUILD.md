@@ -188,9 +188,9 @@ guiada + desinstalación limpia):
 
 | Aspecto | Windows | Linux | macOS |
 |---------|---------|-------|-------|
-| PATH | Automático: el instalador agrega `{app}` al PATH del sistema | `tts-sidecar setup` crea el symlink `~/.local/bin/tts-sidecar → $APPIMAGE` | Opt-in: `Instalar (PATH + modelo).command` del `.dmg` (symlink en `/usr/local/bin`, con sudo) |
+| PATH | Automático: el instalador agrega `{app}` al PATH del usuario (HKCU, per-user, sin UAC) | `tts-sidecar setup` crea el symlink `~/.local/bin/tts-sidecar → $APPIMAGE` | Opt-in: `Instalar (PATH + modelo).command` del `.dmg` (symlink en `/usr/local/bin`, con sudo) |
 | Guía hacia `setup` | Página informativa + casilla post-instalación que lo ejecuta en contexto de usuario | `setup` es el punto único de provisión (modelo + PATH) | El script de instalación ofrece ejecutar `setup` (sin sudo) tras enlazar |
-| Desinstalación | Desinstalador de Inno Setup (revierte PATH y registro) | `tts-sidecar setup --remove-path` + borrar el `.AppImage` | `Desinstalar (quitar del PATH).command` del `.dmg` + arrastrar el `.app` a la Papelera |
+| Desinstalación | Desinstalador de Inno Setup, sin admin (revierte la entrada de PATH en HKCU) | `tts-sidecar setup --remove-path` + borrar el `.AppImage` | `Desinstalar (quitar del PATH).command` del `.dmg` + arrastrar el `.app` a la Papelera |
 | Datos provisionados | `tts-sidecar cleanup --all` (paso previo recomendado en los tres SO: elimina modelo y voces de usuario antes de desinstalar el binario) | Ídem | Ídem |
 | Dependencias de build | Política interactiva común (`ensure_build_dependency`) | Ídem | Ídem |
 
@@ -198,14 +198,15 @@ guiada + desinstalación limpia):
 > empaqueta en el ejecutable; `speak` y `daemon start` fallan rápido remitiendo
 > a `setup` mientras falte.
 
-La tabla describe el `.dmg`/AppImage descargados a mano. Linux y macOS tienen
-además una instalación auto-hospedada de una línea que resuelve PATH,
+La tabla describe los artefactos descargados a mano. Las tres plataformas
+tienen además una instalación auto-hospedada de una línea que resuelve PATH,
 `setup` y desinstalación sin los pasos manuales de arriba: `install.sh`
-(`curl | sh`) en Linux, y un Cask de Homebrew propio
+(`curl | sh`) en Linux, un Cask de Homebrew propio
 (`brew install --cask tts-sidecar`, con `brew uninstall --cask` + `zap` para
-la desinstalación limpia) en macOS. Ninguno de los dos cambia el `.dmg`/
-AppImage que este script produce; ambos se apoyan en el artefacto nativo tal
-cual. Diseño completo en
+la desinstalación limpia) en macOS, e `install.ps1` (`irm | iex`) en Windows
+(descarga el instalador, verifica el checksum y lo ejecuta en silencio, sin
+UAC). Ninguno de los tres cambia el artefacto que los scripts de build
+producen; todos se apoyan en el artefacto nativo tal cual. Diseño completo en
 [docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md).
 
 ### Limitación conocida: firma de código y notarización
@@ -236,7 +237,10 @@ El pipeline de CircleCI ejecuta los tests y, si pasan, compila el proyecto para 
 plataformas automáticamente. Los jobs `test-linux`, `test-windows` y `test-macos` actúan
 como **triple puerta simétrica**: cada build depende de los tres
 (`requires: [test-linux, test-windows, test-macos]`), de modo que la suite se ejercita en
-los tres SO nativos antes de compilar. Así, un bug específico de plataforma —Windows
+los tres SO nativos antes de compilar. A la triple puerta de la suite pytest se suman,
+también como `requires` de los 4 builds, los dos smoke-tests de los instaladores de una
+línea: `test-installer-linux` (bats sobre `install.sh`) y `test-installer-windows`
+(Pester sobre `install.ps1`). Así, un bug específico de plataforma —Windows
 (pycaw/COM, winsound, generación del `.iss`) o macOS (afplay/sounddevice, rutas y señales
 POSIX)— se detecta en el gate en lugar de llegar al usuario. La cobertura es equivalente
 para los tres SO **por familia de SO**: el mismo `pytest tests/` corre en cada uno. La

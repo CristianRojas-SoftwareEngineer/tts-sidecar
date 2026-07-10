@@ -188,7 +188,7 @@ La implementación está completa únicamente cuando:
 - [x] **docs/DESIGN.md** corresponde al estado implementado
 - [x] El daemon mode está implementado y funciona correctamente
 - [x] Los logs están normalizados con estructura consistente
-- [x] Los tests pytest pasan (280/280)
+- [x] Los tests pytest pasan (296/296)
 
 ---
 
@@ -208,14 +208,18 @@ validación E2E" arriba):
   [docs/DISTRIBUTION.md](DISTRIBUTION.md))
 - Descarga automática del modelo Chatterbox desde HuggingFace
 - CLI completa con todos los comandos
-- Tests pytest (280 tests: timing, protocolo, daemon, CLI, voces, rutas, caché de modelo, audio y utilidades de build)
+- **Instalación auto-hospedada de una línea por SO**: `install.sh` (`curl | sh`)
+  en Linux, Cask de Homebrew propio en macOS e `install.ps1` (`irm | iex`) en
+  Windows (instalador Inno Setup per-user, sin UAC); ver
+  [docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md)
+- Tests pytest (296 tests: timing, protocolo, daemon, CLI, voces, rutas, caché de modelo, audio y utilidades de build), más los smoke-tests de instaladores (bats y Pester) en CI
 - Documentación sincronizada
 
 ---
 
 ## Roadmap (compromisos a futuro)
 
-### Instalación auto-hospedada por SO (Linux y macOS)
+### Instalación auto-hospedada por SO — cumplido
 
 **Motivación**: además del canal nativo (descarga directa del artefacto) y el
 canal PyPI, el proyecto ofrece una instalación auto-hospedada por SO que resuelve
@@ -224,15 +228,20 @@ modelo y desinstalación en un flujo guiado, reutilizando los artefactos que el
 canal nativo ya publica. La especificación completa está en
 [docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md).
 
-**Compromiso**:
+**Cumplido** (Linux y macOS en v0.3.0; Windows en v0.4.0):
 - **Linux**: un script `install.sh` servido por el propio repo, ejecutable con
   `curl … | sh` sobre el `.AppImage` del release.
 - **macOS**: un tap de Homebrew propio con un Cask que instala el CLI desde el
   `.dmg` del release, actualizado automáticamente en cada publicación por un job
   de CI.
+- **Windows**: un script `install.ps1` servido por el propio repo, ejecutable con
+  `irm … | iex` sobre el instalador Inno Setup per-user del release (sin UAC).
+  Entró en alcance al refutarse la premisa de SmartScreen (la descarga por CLI
+  no aplica el Mark-of-the-Web; ver el registro de cambio de decisión en
+  [docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md)).
 
-**Publicación autónoma**: ambos canales publican sin aprobación ni pull request a
-terceros; se apoyan en repos propios y en la automatización de CI sobre el propio
+**Publicación autónoma**: los tres canales publican sin aprobación ni pull request
+a terceros; se apoyan en repos propios y en la automatización de CI sobre el propio
 repo.
 
 ### Firma de código Windows (SignPath) y notarización Apple (macOS)

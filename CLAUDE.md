@@ -230,8 +230,11 @@ src/tts_sidecar/         # Código fuente Python
 └── daemon/              # Daemon mode
 # Las voces de USUARIO viven en el user-data-dir por SO (no en el repo)
 
-tests/                   # Tests pytest (280 tests)
+tests/                   # Tests pytest (296 tests) + smoke-tests de instaladores
 ├── conftest.py
+├── installer/           # Smoke-tests de los instaladores de una línea (corren en CI, no en pytest)
+│   ├── install.bats     # install.sh (bats, job test-installer-linux)
+│   └── install.tests.ps1 # install.ps1 (Pester v5, job test-installer-windows)
 ├── test_audio.py
 ├── test_build_linux.py
 ├── test_build_macos.py
