@@ -40,7 +40,7 @@ trade-offs en [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md)): el binario
 pre-compilado por SO (audiencia general, sin Python) y el paquete PyPI
 (audiencia técnica con Python 3.13+).
 
-### Instalación de una línea (Linux)
+### Instalación de una línea (Linux y Windows)
 
 En Linux, `install.sh` automatiza la Opción 1 completa: resuelve el último
 Release, descarga el `.AppImage` de tu arquitectura, verifica su checksum
@@ -51,11 +51,21 @@ contra `SHA256SUMS.txt`, lo instala en `~/.local/opt/tts-sidecar/` y ejecuta
 curl -fsSL https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install.sh | sh
 ```
 
-El script aborta la instalación si el checksum descargado no coincide con
+En Windows, `install.ps1` hace lo análogo desde PowerShell: descarga el
+instalador del último Release, verifica su checksum, lo ejecuta en silencio
+(instalación per-user, sin UAC) y corre `tts-sidecar setup`:
+
+```powershell
+irm https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install.ps1 | iex
+```
+
+Ambos scripts abortan la instalación si el checksum descargado no coincide con
 `SHA256SUMS.txt` (ver [SECURITY.md](SECURITY.md#nota-sobre-el-instalador-de-una-línea-de-linux)).
-Para desinstalar: `tts-sidecar setup --remove-path` (revierte el symlink de
-PATH), borra `~/.local/opt/tts-sidecar/` y `tts-sidecar cleanup --all` (borra
-la caché del modelo y los datos de usuario).
+Para desinstalar en Linux: `tts-sidecar setup --remove-path` (revierte el
+symlink de PATH), borra `~/.local/opt/tts-sidecar/` y `tts-sidecar cleanup
+--all` (borra la caché del modelo y los datos de usuario). En Windows:
+desinstalador de Inno Setup (Configuración → Aplicaciones, sin admin) más
+`tts-sidecar cleanup --all`.
 
 ### Opción 1: Descargar binario pre-compilado
 
@@ -63,8 +73,8 @@ Descarga el ejecutable para tu plataforma desde [Releases](https://github.com/Cr
 
 ```bash
 # Windows: ejecuta el instalador tts-sidecar-<versión>-x86_64-setup.exe.
-# Requiere privilegios de administrador: instala en Program Files y escribe el
-# PATH del sistema en HKLM (aparecerá el prompt de Control de cuentas de usuario).
+# Instala en tu perfil (%LOCALAPPDATA%\Programs\tts-sidecar) y escribe el PATH
+# de usuario (HKCU), sin privilegios de administrador ni prompt de UAC.
 # Agrega tts-sidecar al PATH, muestra una página informativa sobre el modelo y
 # ofrece una casilla para descargarlo (ejecuta 'tts-sidecar setup') al terminar.
 
@@ -94,13 +104,16 @@ verifica tu descarga contra él antes de ejecutar el instalador (ver
 
 ### Primer arranque: SmartScreen / Gatekeeper
 
-Al ejecutar el instalador por primera vez, **es esperable** que el sistema lo
-bloquee con una advertencia («Windows protegió tu PC» / «no se puede verificar
-el desarrollador»). **No indica malware**: los binarios distribuidos no están
-firmados con un certificado de código (los certificados son de pago y el
-proyecto aún no los financia), así que el sistema muestra «editor desconocido»
-y, al ser cada release un archivo nuevo sin historial de descargas, carece de
-reputación acumulada ante SmartScreen.
+Al ejecutar por primera vez el instalador **descargado desde el navegador**,
+**es esperable** que el sistema lo bloquee con una advertencia («Windows
+protegió tu PC» / «no se puede verificar el desarrollador»). **No indica
+malware**: los binarios distribuidos no están firmados con un certificado de
+código (los certificados son de pago y el proyecto aún no los financia), así
+que el sistema muestra «editor desconocido» y, al ser cada release un archivo
+nuevo sin historial de descargas, carece de reputación acumulada ante
+SmartScreen. La advertencia depende del *Mark-of-the-Web*, que solo aplica el
+navegador: el instalador de una línea (`irm | iex`) descarga por CLI, sin la
+marca, y no la dispara.
 
 - **Windows (SmartScreen)**: pulsa **Más información** → **Ejecutar de todas
   formas**.

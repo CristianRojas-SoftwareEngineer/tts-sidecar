@@ -33,28 +33,27 @@ Ver [README.md](../README.md#instalación) y [USAGE.md](../USAGE.md#instalación
 para el detalle completo por SO (instalador de Windows, AppImage de Linux,
 `.dmg` de macOS).
 
-Dos de las tres plataformas tienen además una **instalación auto-hospedada de
+Las tres plataformas tienen además una **instalación auto-hospedada de
 una línea**, capa adicional sobre el mismo artefacto nativo (no un canal
 nuevo): en Linux, `install.sh` (`curl | sh`) automatiza la descarga,
 verificación de checksum e instalación del `.AppImage`; en macOS, un Cask de
 Homebrew propio (`brew tap CristianRojas-SoftwareEngineer/tts-sidecar &&
 brew install --cask tts-sidecar`) instala desde el `.dmg` del release y
 resuelve la integración de PATH, la desinstalación y la limpieza del atributo
-de cuarentena sin intervención manual. El `.dmg` descargado a mano (con sus
-scripts `.command` de instalación/desinstalación) sigue siendo un canal
-válido en paralelo. Windows no tiene una vía auto-hospedada equivalente (ver
-«Fuera de alcance» en [docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md)):
-mientras el proyecto no tenga firma de código Authenticode, el instalador
-descargado desde el **navegador** sigue disparando SmartScreen, sin aportar
-valor frente al canal pip. El matiz es el *Mark of the Web* (MOTW): el
-navegador sí sella el `.exe` con la marca de Internet (`ZoneId=3`), pero la
-descarga por CLI (`curl`, `gh`, PowerShell `Invoke-WebRequest`/`WebClient`)
-**no** la aplica, así que un instalador bajado por script no dispara
-SmartScreen al ejecutarse. Esa distinción es solo un artefacto del medio de
-descarga, no un canal recomendado: el binario sigue sin firmar (sujeto a
-Microsoft Defender Antivirus; ver runbook WDSI en `SECURITY.md`) y la
-instalación Inno Setup exige elevación (UAC) salvo en contexto ya
-administrativo. Diseño completo de ambos instaladores en
+de cuarentena sin intervención manual; en Windows, `install.ps1` (`irm | iex`)
+descarga el instalador Inno Setup del release, verifica su checksum y lo
+ejecuta en silencio (instalación per-user: `%LOCALAPPDATA%\Programs`, PATH de
+usuario en HKCU, sin UAC), terminando con `tts-sidecar setup`. El `.dmg`
+descargado a mano (con sus scripts `.command` de instalación/desinstalación)
+sigue siendo un canal válido en paralelo. La justificación técnica de la vía
+de Windows es el *Mark of the Web* (MOTW): el navegador sí sella el `.exe`
+con la marca de Internet (`ZoneId=3`) y dispara SmartScreen, pero la descarga
+por CLI (`curl`, `gh`, PowerShell `Invoke-WebRequest`/`WebClient`) **no** la
+aplica, así que el instalador bajado por `install.ps1` no dispara SmartScreen
+al ejecutarse. El binario sigue sin firmar: Microsoft Defender Antivirus es
+independiente del MOTW y puede marcarlo (ver runbook WDSI en `SECURITY.md`);
+la advertencia de SmartScreen para la descarga por navegador solo la resuelve
+la firma de código Authenticode. Diseño completo de los tres instaladores en
 [docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md).
 
 ### Canal PyPI (`uv tool install` / `pipx`)

@@ -5,6 +5,34 @@ Todos los cambios notables de TTS Sidecar se documentan en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
+## [0.4.0] — Sin publicar
+
+Extiende la instalación auto-hospedada de una línea a Windows y migra el
+instalador Inno Setup a per-user, sin tocar el contrato del CLI (códigos de
+salida, esquemas `--json`). MINOR: cambia el comportamiento de instalación
+en Windows.
+
+### Añadido
+
+- **Instalador Windows de una línea** (`install.ps1`, `irm | iex`): resuelve
+  el release más reciente, descarga el instalador x86_64 y `SHA256SUMS.txt`,
+  verifica el checksum SHA-256 antes de instalar (aborta si no coincide),
+  instala en silencio sin UAC y ejecuta `tts-sidecar setup`. La descarga por
+  CLI no aplica el Mark-of-the-Web, así que no dispara SmartScreen (detalle
+  en `docs/SELF-HOSTED-INSTALL.md` y `SECURITY.md`). Smoke-test Pester en CI
+  (`test-installer-windows`) como puerta de los 4 builds.
+
+### Cambiado
+
+- **Instalador de Windows per-user**: Inno Setup pasa de per-machine a
+  per-user — `PrivilegesRequired=lowest` (sin prompt de UAC), instalación en
+  `%LOCALAPPDATA%\Programs\tts-sidecar` (antes Program Files) y PATH de
+  usuario en `HKCU\Environment` (antes HKLM), incluida su reversión al
+  desinstalar. **Nota de migración**: si tienes instalada una versión
+  per-machine (anterior a 0.4.0), desinstálala primero desde el Panel de
+  control (con admin) antes de instalar 0.4.0+; instalar la per-user encima
+  puede dejar dos instalaciones y PATH duplicado.
+
 ## [0.3.0] — 2026-07-10
 
 Extiende el canal nativo con instalación auto-hospedada por SO y reduce los

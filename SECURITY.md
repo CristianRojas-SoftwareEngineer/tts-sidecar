@@ -74,6 +74,22 @@ invocarlo; un checksum que no coincide aborta la instalación sin ejecutar
 nada. El propio `install.sh` no requiere privilegios elevados: instala en
 `~/.local/opt/tts-sidecar/`, sin `sudo`.
 
+### Nota sobre el instalador de una línea de Windows
+
+`install.ps1` (raíz del repo) se sirve por `raw.githubusercontent.com` y se
+ejecuta con `irm | iex`, el equivalente PowerShell del patrón anterior. La
+mitigación es la misma: **el propio script verifica el checksum SHA-256** del
+instalador descargado contra `SHA256SUMS.txt` **antes** de ejecutarlo; un
+checksum que no coincide aborta la instalación sin ejecutar nada. El script no
+requiere privilegios elevados: la instalación es per-user
+(`%LOCALAPPDATA%\Programs\tts-sidecar`, PATH en `HKCU\Environment`), sin UAC.
+La descarga por CLI (`Invoke-WebRequest`) no aplica el Mark-of-the-Web, por lo
+que el instalador descargado por el script no dispara SmartScreen; Microsoft
+Defender **Antivirus** es independiente del MOTW y puede marcar el binario sin
+firma — en ese caso aplica el runbook WDSI de más abajo. Como `irm | iex` no
+escribe un `.ps1` en disco, no pasa por la Execution Policy; la alternativa
+inspeccionable es `iwr <url> -OutFile install.ps1; .\install.ps1`.
+
 ## Artefactos sin firmar
 
 Los binarios distribuidos **no están firmados ni notarizados**: Gatekeeper (macOS) y

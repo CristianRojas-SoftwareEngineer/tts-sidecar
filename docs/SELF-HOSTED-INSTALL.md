@@ -7,21 +7,32 @@ instalar → comando disponible en el PATH → provisión guiada del modelo → 
 
 ## Alcance
 
-Se implementan tres piezas:
+Se implementan cuatro piezas:
 
 1. **Instalador Linux** — un script `install.sh` servido por el propio repo, que se
    ejecuta con `curl … | sh` sobre el `.AppImage` del release.
 2. **Cask de macOS** — un tap de Homebrew propio que instala el CLI desde el `.dmg`
    del release, actualizado automáticamente en cada publicación.
-3. **Endurecimiento del build** — ajustes al empaquetado que reducen los falsos
+3. **Instalador Windows** — un script `install.ps1` servido por el propio repo, que
+   se ejecuta con `irm … | iex` sobre el instalador Inno Setup (per-user) del release.
+4. **Endurecimiento del build** — ajustes al empaquetado que reducen los falsos
    positivos de antivirus en el ejecutable de Windows y en el resto de artefactos.
 
-**Fuera de alcance.** No se construye un instalador auto-hospedado para Windows
-(fuente winget). Mientras Windows no cuente con firma de código (Authenticode), un
-instalador descargado seguiría disparando SmartScreen, por lo que no aporta valor
-frente a los canales ya disponibles. En Windows, la instalación sin alertas la provee
-hoy el **canal pip** (`pip`/`uv`/`pipx`), que genera el ejecutable en la máquina del
-usuario y no arrastra la marca de descarga (ver «Comportamiento frente a antivirus»).
+**Registro de cambio de decisión (Windows).** La versión inicial de este documento
+declaró el instalador auto-hospedado de Windows «fuera de alcance», bajo la premisa
+de que todo instalador descargado dispararía SmartScreen mientras el proyecto no
+tuviera firma de código (Authenticode). La investigación empírica posterior refutó
+esa premisa: **la descarga por CLI (`curl`, `Invoke-WebRequest`, `WebClient`, `gh`)
+no aplica el Mark-of-the-Web**, así que un instalador bajado por script no dispara
+SmartScreen; solo la descarga por navegador lo sella con `ZoneId=3`. El obstáculo
+restante era el UAC del instalador per-machine original, eliminado al migrar el
+Inno Setup a **per-user** (`PrivilegesRequired=lowest`,
+`%LOCALAPPDATA%\Programs\tts-sidecar`, PATH en `HKCU\Environment`). Con ambas
+premisas caídas, la vía auto-hospedada de Windows sí aporta valor y entra en
+alcance. La reserva que persiste: Microsoft Defender **Antivirus** es independiente
+del MOTW y puede marcar el binario sin firma (runbook WDSI en `SECURITY.md`); la
+solución de SmartScreen para la descarga por navegador sigue siendo la firma de
+código (`docs/GOAL.md`).
 
 ## Principios
 
@@ -151,6 +162,47 @@ cubiertos por test, y existe el runbook en `SECURITY.md`.
   se propaga a la sesión actual (el CLI ya lo avisa; el script no modifica
   `.bashrc`/`.zshrc` sin consentimiento).
 
+## Instalador Windows (`irm | iex`)
+
+- **Entregable**: `install.ps1` en la raíz del repo, servido desde
+  `raw.githubusercontent.com/<owner>/TTS-Sidecar/main/install.ps1`. Uso:
+  `irm <url> | iex`. Al no ser un `.ps1` en disco, `irm | iex` no pasa por la
+  Execution Policy; la alternativa inspeccionable es
+  `iwr <url> -OutFile install.ps1; .\install.ps1`.
+- **Flujo del script**: resolver `releases/latest` de la GitHub Releases API →
+  seleccionar el asset `tts-sidecar-*-x86_64-setup.exe` (solo hay build x86_64
+  para Windows: sin selección de arquitectura) → descargar el instalador y
+  `SHA256SUMS.txt` con `Invoke-WebRequest` (sin MOTW: no dispara SmartScreen) →
+  verificar el checksum (`Get-FileHash`; aborta si no coincide) → ejecutar el
+  instalador en silencio (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`, sin
+  `-Verb RunAs`: la instalación es per-user, sin UAC) → recomponer el PATH de la
+  sesión desde el registro (el `HKCU\Environment` nuevo no llega solo a la sesión
+  en curso) → ejecutar `tts-sidecar setup` (necesario porque `skipifsilent` omite
+  el checkbox de setup en instalación silenciosa; `-NoSetup` lo desactiva).
+- **Cambio de código**: el Inno Setup generado por
+  `scripts/create_installer_windows.py` migra de per-machine a **per-user**:
+  `PrivilegesRequired=lowest`, instalación en `%LOCALAPPDATA%\Programs\tts-sidecar`
+  (patrón convencional, p. ej. VS Code) y PATH en `HKCU\Environment` en lugar de
+  HKLM, con la reversión del PATH al desinstalar sobre la misma clave. Nota de
+  migración: quien tenga la versión per-machine debe desinstalarla primero (Panel
+  de control, con admin); instalar la per-user encima puede dejar dos
+  instalaciones y PATH duplicado.
+- **Docs**: línea de instalación en `README.md` y `USAGE.md`; nota en `SECURITY.md`
+  espejo de la de Linux (checksum previo, sin privilegios, sin MOTW por CLI,
+  remisión al runbook WDSI).
+- **Tests**: smoke-test Pester (`tests/installer/install.tests.ps1`) que hace
+  dot-source de `install.ps1` y mockea sus funciones propias, en el job de CI
+  `test-installer-windows` (espejo de `test-installer-linux`). Cubre el flujo
+  exitoso, el aborto ante checksum corrupto y el release sin asset de Windows.
+  El generador `.iss` per-user se cubre en `tests/test_create_installer_windows.py`.
+- **Cierre** (automatizado, sin intervención humana): el smoke-test Pester y los
+  tests del generador `.iss` pasan en CI; la desinstalación limpia la provee el
+  desinstalador de Inno Setup (revierte PATH HKCU) más `cleanup --all`.
+- **Riesgos residuales**: Defender Antivirus puede marcar el binario sin firma
+  (independiente del MOTW; runbook WDSI); el instalador descargado por navegador
+  sí lleva MOTW y dispara SmartScreen (lo resuelve la firma de código, no este
+  script).
+
 ## Cask de macOS
 
 - **Entregables**:
@@ -199,6 +251,10 @@ binario, la integración de PATH, la caché del modelo y los datos de usuario.
   la caché del modelo y los datos de usuario.
 - **macOS**: `brew uninstall --cask tts-sidecar` quita el binario y el enlace, y la
   stanza `zap trash:` borra la caché del modelo y los datos de usuario.
+- **Windows**: el desinstalador de Inno Setup (Configuración → Aplicaciones, sin
+  admin en la instalación per-user) elimina los binarios y revierte la entrada de
+  PATH en `HKCU\Environment`; `tts-sidecar cleanup --all` elimina la caché del
+  modelo y los datos de usuario.
 
 El cierre de cada instalador exige que este mecanismo esté implementado y cubierto por
 test; la comprobación de que no queda ningún residuo en un sistema real pertenece a la
@@ -215,11 +271,17 @@ salvo el Cask en macOS. El panorama real por sistema operativo:
 - **macOS**: el Cask elimina el atributo de cuarentena al instalar, lo que mitiga
   Gatekeeper de forma estructural. Descargar el `.dmg` a mano, en cambio, sigue
   requiriendo notarización (firma de código).
-- **Windows**: el canal pip evita las alertas de raíz, porque genera el ejecutable en
-  la máquina del usuario, sin MOTW. El ejecutable nativo descargado seguirá disparando
-  SmartScreen y, ocasionalmente, Defender, hasta que el proyecto tenga firma de código
-  (Authenticode); el endurecimiento del build reduce los falsos positivos de Defender
-  pero no toca SmartScreen.
+- **Windows**: SmartScreen depende del MOTW, y el MOTW depende del **medio de
+  descarga**: el navegador sella el archivo con `ZoneId=3` y dispara SmartScreen;
+  la descarga por CLI o script (`curl`, `Invoke-WebRequest`, `WebClient`, `gh`) no
+  aplica la marca, así que el instalador bajado por `install.ps1` no dispara
+  SmartScreen al ejecutarse. Microsoft Defender **Antivirus** es independiente del
+  MOTW: puede marcar el binario sin firma venga de donde venga; el endurecimiento
+  del build reduce esos falsos positivos y el runbook WDSI da la vía de
+  remediación. El canal pip evita ambas alertas de raíz, porque genera el
+  ejecutable en la máquina del usuario. El instalador descargado por navegador
+  seguirá disparando SmartScreen hasta que el proyecto tenga firma de código
+  (Authenticode).
 
 Las dos vías que eliminan las alertas de raíz son estructurales (el canal pip) o de
 firma de código (compromiso a futuro, `docs/GOAL.md`).
@@ -233,9 +295,11 @@ firma de código (compromiso a futuro, `docs/GOAL.md`).
 2. **Instalador Linux** — independiente, sin infraestructura nueva.
 3. **Cask de macOS** — introduce el job `publish-metadata` en CircleCI y se apoya en
    los requisitos previos de Homebrew.
+4. **Instalador Windows** — depende de la migración per-user del `.iss` (el script
+   requiere instalación silenciosa sin elevación); sin infraestructura nueva.
 
-Los dos instaladores son entregables independientes: se pueden publicar y anunciar por
-separado, y ninguno bloquea los canales nativo o pip existentes.
+Los tres instaladores son entregables independientes: se pueden publicar y anunciar
+por separado, y ninguno bloquea los canales nativo o pip existentes.
 
 ## Validación E2E (fase final del proyecto)
 

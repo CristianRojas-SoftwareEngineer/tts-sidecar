@@ -20,17 +20,25 @@ dependencias Python). Matriz de trade-offs completa entre los dos primeros en
 ### Usuario del binario
 
 Instala el ejecutable de tu plataforma desde Releases y déjalo accesible en el
-PATH (en Windows el instalador lo agrega automáticamente). Luego invoca:
+PATH (en Windows el instalador lo agrega automáticamente al PATH de usuario,
+HKCU). Luego invoca:
 
 ```bash
 tts-sidecar <comando>
 ```
 
 En **Linux**, `install.sh` automatiza toda la descarga/verificación/instalación
-con una sola línea (detalle en [README.md](README.md#instalación-de-una-línea-linux)):
+con una sola línea (detalle en [README.md](README.md#instalación-de-una-línea-linux-y-windows)):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install.sh | sh
+```
+
+En **Windows**, `install.ps1` hace lo análogo desde PowerShell (instalación
+per-user, sin UAC; termina ejecutando `tts-sidecar setup`):
+
+```powershell
+irm https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install.ps1 | iex
 ```
 
 **Desinstalación limpia (Linux)**, en tres pasos: `tts-sidecar setup --remove-path`
@@ -111,8 +119,9 @@ Provisión completa. No hay nada que descargar.
 
 **Provisión por SO** (experiencia homóloga):
 
-- **Windows**: el instalador agrega `tts-sidecar` al PATH y ofrece una casilla
-  post-instalación que ejecuta `setup` en tu contexto de usuario.
+- **Windows**: el instalador agrega `tts-sidecar` al PATH de usuario (HKCU) y
+  ofrece una casilla post-instalación que ejecuta `setup` en tu contexto de
+  usuario (con `install.ps1`, el propio script ejecuta `setup` al terminar).
 - **Linux**: `setup` es el punto único de provisión. Ejecutado desde el AppImage,
   además de descargar el modelo crea el symlink `~/.local/bin/tts-sidecar`
   apuntando al AppImage, dejando el comando invocable por nombre:
@@ -552,8 +561,9 @@ voces de usuario. Todo es recuperable: `setup` reprovisiona el modelo y
    de usuario sin confirmación interactiva (los datos que la desinstalación del
    binario/paquete no toca; usa `cleanup --all` sin `--yes` si prefieres confirmar).
 2. Desinstala según tu canal:
-   - **Windows (binario)**: desinstalador de Inno Setup (Panel de control →
-     Aplicaciones); revierte PATH y registro.
+   - **Windows (binario)**: desinstalador de Inno Setup (Configuración →
+     Aplicaciones), sin privilegios de administrador (instalación per-user);
+     revierte la entrada de PATH en HKCU.
    - **Linux (binario)**: `tts-sidecar setup --remove-path` (quita el symlink) y
      borra el `.AppImage`.
    - **macOS (binario)**: `Desinstalar (quitar del PATH).command` del `.dmg` y
@@ -569,8 +579,12 @@ manualmente sobre (o junto a) la anterior. El modelo y las voces en el
 directorio de datos de usuario no se ven afectados por la actualización del
 binario.
 
-- **Windows**: descarga el nuevo instalador y ejecútalo; Inno Setup reemplaza
-  la instalación anterior en el mismo directorio y conserva el PATH.
+- **Windows**: descarga el nuevo instalador y ejecútalo (o repite el one-liner
+  `irm | iex`); Inno Setup reemplaza la instalación per-user anterior en el
+  mismo directorio y conserva el PATH. Si vienes de una versión per-machine
+  (anterior a 0.4.0, instalada en Program Files), desinstálala primero desde el
+  Panel de control (con admin): instalar la per-user encima dejaría dos
+  instalaciones y PATH duplicado.
 - **Linux**: descarga el nuevo `.AppImage`, hazlo ejecutable, y vuelve a correr
   `setup` **desde el archivo nuevo**: `./tts-sidecar-<versión-nueva>-x86_64.AppImage setup`.
   Esto reapunta el symlink `~/.local/bin/tts-sidecar` al AppImage nuevo — si
