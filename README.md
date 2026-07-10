@@ -300,6 +300,7 @@ desde código fuente con ese lock. El detalle completo y verificado está en
 - [docs/DAEMON-MODE.md](docs/DAEMON-MODE.md) - Daemon mode (servidor persistente)
 - [docs/BUILD.md](docs/BUILD.md) - Guía de compilación PyInstaller
 - [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) - Canales de distribución (nativo + PyPI)
+- [docs/PARITY.md](docs/PARITY.md) - Estado de paridad de experiencia entre Windows, Linux y macOS
 
 ## Comunidad y soporte
 

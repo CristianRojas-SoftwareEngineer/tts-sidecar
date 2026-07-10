@@ -219,7 +219,7 @@ internet, que llevan la Mark of the Web — un build local no la dispara).
 Firmar/notarizar con identidad propia requiere certificados de pago (Apple
 Developer ID, certificado Authenticode) y queda fuera del alcance actual del
 pipeline; la ruta prevista para Windows y macOS está registrada como
-compromiso de roadmap en [docs/GOAL.md](GOAL.md#roadmap-compromisos-a-futuro)
+goal a largo plazo en [docs/GOAL.md](GOAL.md#goal-a-largo-plazo)
 (ver también `SECURITY.md` §«Artefactos sin firmar»).
 
 Como mitigación aditiva ya implementada (no sustituye a la firma), el proyecto

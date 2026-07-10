@@ -272,6 +272,7 @@ tests/                   # Tests pytest (296 tests) + smoke-tests de instaladore
 - `docs/DAEMON-MODE.md` - Daemon mode (servidor persistente)
 - `docs/BUILD.md` - Guía de compilación PyInstaller
 - `docs/DISTRIBUTION.md` - Canales de distribución (nativo + PyPI)
+- `docs/PARITY.md` - Estado de paridad de experiencia entre los 3 SO y brechas pendientes
 - `docs/RELEASING.md` - Publicación de una versión (release + PyPI)
 - `docs/ARCHITECTURE.md` - Arquitectura del sistema
 - `scripts/build_windows.py` - Build PyInstaller para Windows

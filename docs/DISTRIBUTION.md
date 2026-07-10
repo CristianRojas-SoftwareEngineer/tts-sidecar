@@ -135,7 +135,7 @@ Foundation + Apple Developer ID).
   con herramientas ya disponibles (PyPI, `uv`).
 - A y B en paralelo (decisión tomada): A se implementa ahora como canal
   alternativo inmediato para la audiencia técnica; B queda registrado como
-  compromiso de roadmap en [docs/GOAL.md](GOAL.md#roadmap-compromisos-a-futuro)
+  goal a largo plazo en [docs/GOAL.md](GOAL.md#goal-a-largo-plazo)
   para cuando se cumplan sus condiciones de entrada.
 
 **Decisión**: implementar A en este ciclo (este documento y el job

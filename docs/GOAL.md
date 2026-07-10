@@ -1,18 +1,96 @@
 # Goal: Sistema TTS con Chatterbox Multilingual V3
 
+## Introducción
+
+Este documento es la **especificación ideal** de `tts-sidecar`: describe el
+producto meta que guía todo el desarrollo — un sistema de síntesis de voz
+**100% local**, con clonación de voz en **español latinoamericano**,
+consumible por línea de comandos desde cualquier lenguaje, y con una
+experiencia de usuario **equivalente en Windows, Linux y macOS**.
+
+Es la fuente de verdad contra la que se evalúa cualquier cambio: si una
+propuesta acerca el proyecto a lo aquí especificado, avanza el goal; si no,
+queda fuera de alcance. Para mantener esa función sin frenar el desarrollo,
+el documento se declara en **dos partes**:
+
+- **[Goal inmediato](#goal-inmediato)** — la especificación y el diseño del
+  objetivo completo, redactados como el ideal que se sigue **como si ya
+  estuviese implementado**. Todo cambio sin impedimentos se trabaja contra
+  esta parte, de forma inmediata.
+- **[Goal a largo plazo](#goal-a-largo-plazo)** — las especificaciones **no
+  comprometidas** para el goal actual, separadas para no frenar el desarrollo
+  que no tiene impedimentos. Cada spec diferida lleva su justificación y su
+  condición de entrada; al cumplirse la condición, se promueve al goal
+  inmediato.
+
+## Tabla de contenidos
+
+- [Goal inmediato](#goal-inmediato)
+  - [Objetivo](#objetivo)
+  - [Alcance](#alcance)
+  - [Restricciones](#restricciones)
+  - [Especificación](#especificación)
+    - [Requisitos del instalador (canal nativo)](#requisitos-del-instalador-canal-nativo)
+    - [Paridad de experiencia entre sistemas operativos](#paridad-de-experiencia-entre-sistemas-operativos)
+    - [Comandos CLI objetivo](#comandos-cli-objetivo-invocable-desde-cualquier-lenguaje)
+    - [Estructura del proyecto](#estructura-del-proyecto)
+  - [Criterios de aceptación](#criterios-de-aceptación)
+    - [Decisión de validación E2E](#decisión-de-validación-e2e)
+  - [Condición de finalización](#condición-de-finalización)
+  - [Estado actual](#estado-actual)
+- [Goal a largo plazo](#goal-a-largo-plazo)
+  - [Firma de código Windows (SignPath) y notarización Apple (macOS)](#firma-de-código-windows-signpath-y-notarización-apple-macos)
+
 ---
+
+# Goal inmediato
 
 ## Objetivo
 
-Obtener un sistema TTS **100% local** con audio nativo por sistema operativo, para transformar texto a audio en **español latino** de la mejor calidad disponible, distribuido bajo **licencia GPL-3.0-or-later** (con dependencias y modelo bajo licencias permisivas compatibles).
+Obtener un sistema TTS **100% local** con audio nativo por sistema operativo,
+para transformar texto a audio en **español latino** de la mejor calidad
+disponible, distribuido bajo **licencia GPL-3.0-or-later** (con dependencias y
+modelo bajo licencias permisivas compatibles).
 
-Motor TTS: **Chatterbox Multilingual V3** (ResembleAI) — 23+ idiomas, clonación de voz, licencia MIT.
+Motor TTS: **Chatterbox Multilingual V3** (ResembleAI) — 23+ idiomas,
+clonación de voz, licencia MIT.
 
-**El sistema debe ser consumible via línea de comandos** para que cualquier aplicación en cualquier lenguaje de programación pueda invocarlo (Python, JavaScript/Node, Rust, Go, Java, C#, etc.)
+**El sistema debe ser consumible via línea de comandos** para que cualquier
+aplicación en cualquier lenguaje de programación pueda invocarlo (Python,
+JavaScript/Node, Rust, Go, Java, C#, etc.)
 
----
+**La experiencia del usuario final debe ser equivalente en Windows, Linux y
+macOS**: instalar, usar, actualizar y desinstalar con la misma cantidad de
+fricción, privilegios y residuo en los tres SO. Las diferencias tecnológicas
+idiomáticas por SO (Inno Setup, AppImage, `.dmg`/Cask) son aceptables; las
+diferencias de experiencia no. El estado de esta equivalencia y las brechas
+pendientes se registran en [docs/PARITY.md](PARITY.md).
 
-## Requisitos del instalador
+## Alcance
+
+Implementar y validar la síntesis en español latinoamericano con voz propia
+del usuario usando Chatterbox Multilingual V3, distribuida con **equivalencia
+funcional completa** entre Windows, Linux y macOS: el cierre de las brechas
+registradas en [docs/PARITY.md](PARITY.md) es parte del alcance del goal
+inmediato.
+
+## Restricciones
+
+- **100% local**: Sin APIs externas ni conexiones a internet para síntesis
+- **Instalador único por SO (canal nativo)**: Un archivo ejecutable por
+  plataforma; el canal PyPI complementario (ver
+  [docs/DISTRIBUTION.md](DISTRIBUTION.md)) no está sujeto a esta restricción
+- **Sin dependencias externas (canal nativo)**: El usuario final no necesita
+  instalar nada más; el canal PyPI requiere Python 3.13+ y, en Linux,
+  `libportaudio2` del sistema
+- **Licencia**: El código propio se distribuye bajo GPL-3.0-or-later; todas
+  las dependencias y el modelo usados deben tener licencias compatibles con
+  GPLv3 (permisivas — MIT/BSD/Apache/ISC/PSF — o copyleft compatible, como
+  LGPL-2.1+/MPL-2.0)
+
+## Especificación
+
+### Requisitos del instalador (canal nativo)
 
 Estos requisitos aplican al **canal nativo** (binarios PyInstaller por SO),
 que sigue siendo el canal recomendado para usuarios sin Python instalado:
@@ -21,6 +99,10 @@ que sigue siendo el canal recomendado para usuarios sin Python instalado:
 - **Cero dependencias externas**: El usuario final no instala Python, Node, Rust ni nada más
 - **Descarga + instalación + configuración** en un solo paso
 - **Audio nativo**: playback usando APIs nativas de cada SO
+- **Paridad de ciclo de vida entre SO**: instalación de una línea sin
+  privilegios de administrador, modelo provisionado al terminar, actualización
+  sin residuo y desinstalación con residuo cero, en los tres sistemas
+  operativos por igual (ver [docs/PARITY.md](PARITY.md))
 
 El proyecto distribuye además un **canal PyPI** complementario
 (`uv tool install tts-sidecar` / `pipx install tts-sidecar`) para audiencia
@@ -29,51 +111,22 @@ técnica con Python 3.13+ ya instalado, que no está sujeto a estos requisitos
 [docs/DISTRIBUTION.md](DISTRIBUTION.md) para la matriz de trade-offs completa
 entre ambos canales.
 
----
+### Paridad de experiencia entre sistemas operativos
 
-## Alcance
+El ideal de paridad que persigue el goal inmediato, por fase del ciclo de
+vida (el estado real y el registro de brechas viven en
+[docs/PARITY.md](PARITY.md)):
 
-Implementar y validar la síntesis en español latinoamericano con voz propia del usuario usando Chatterbox Multilingual V3.
+| Fase | Ideal en los 3 SO |
+|---|---|
+| Instalación | Una línea, sin prerequisitos de terceros, sin privilegios de admin, checksum verificado |
+| Primer arranque | Sin advertencias de reputación en la vía de una línea |
+| Provisión | Modelo descargado al terminar la instalación (`setup` encadenado u ofrecido) |
+| Uso | CLI, daemon, voces y contratos `--json` idénticos |
+| Actualización | Reemplaza la versión anterior sin residuo ni pasos-trampa |
+| Desinstalación | Datos (`cleanup --all`) + binario, con residuo cero |
 
----
-
-## Estructura del proyecto migrado
-
-```
-TTS-Sidecar/
-├── src/
-│   └── tts_sidecar/       # Paquete Python (publicable en PyPI)
-│       ├── __init__.py       # Fuente única de versión (__version__)
-│       ├── __main__.py       # Entry point de `python -m tts_sidecar`
-│       ├── bootstrap.py      # apply() idempotente: warnings, env vars, mock pkg_resources
-│       ├── engine.py         # Wrapper de Chatterbox
-│       ├── audio.py          # Reproducción de audio nativa
-│       ├── cli.py            # Interfaz CLI (invoca bootstrap.apply())
-│       ├── timing.py         # Instrumentación y timing
-│       ├── voices.py         # Resolución de voces usuario→fábrica
-│       ├── paths.py          # Rutas: fábrica relativa al paquete, datos en user-data-dir por SO
-│       ├── model_cache.py    # Detección del modelo en la caché de HF
-│       ├── voices/           # Voces de FÁBRICA (empaquetadas en wheel y bundle)
-│       │   └── default/      # reference.wav + speech.wav
-│       └── daemon/           # Daemon mode (FastAPI + IPC)
-│           ├── daemon.py    # Gestor del ciclo de vida
-│           ├── server.py    # Endpoints FastAPI
-│           ├── ipc.py       # Cliente HTTP
-│           ├── protocol.py  # Modelos Pydantic
-│           └── run.py       # Entry point (usa bootstrap.apply())
-├── bin/
-│   └── tts-sidecar          # Script de entry point (modo fuente)
-├── scripts/                  # Scripts de build por SO
-├── tests/                    # Suite de tests pytest
-└── docs/
-```
-
-> El modelo `es-mx-latam` no se almacena en el repo: reside en la caché de
-> HuggingFace del usuario (`~/.cache/huggingface/hub`) tras `tts-sidecar setup`.
-
----
-
-## Comandos CLI objetivo (invocable desde cualquier lenguaje)
+### Comandos CLI objetivo (invocable desde cualquier lenguaje)
 
 Los comandos están ordenados en secuencia de dependencia: cada paso solo
 requiere que los anteriores hayan funcionado. El daemon es el camino principal
@@ -111,22 +164,41 @@ sesión: se arranca antes de sintetizar y se detiene al final.
 ./tts-sidecar daemon stop
 ```
 
----
+### Estructura del proyecto
 
-## Restricciones
+```
+TTS-Sidecar/
+├── src/
+│   └── tts_sidecar/       # Paquete Python (publicable en PyPI)
+│       ├── __init__.py       # Fuente única de versión (__version__)
+│       ├── __main__.py       # Entry point de `python -m tts_sidecar`
+│       ├── bootstrap.py      # apply() idempotente: warnings, env vars, mock pkg_resources
+│       ├── engine.py         # Wrapper de Chatterbox
+│       ├── audio.py          # Reproducción de audio nativa
+│       ├── cli.py            # Interfaz CLI (invoca bootstrap.apply())
+│       ├── timing.py         # Instrumentación y timing
+│       ├── voices.py         # Resolución de voces usuario→fábrica
+│       ├── paths.py          # Rutas: fábrica relativa al paquete, datos en user-data-dir por SO
+│       ├── model_cache.py    # Detección del modelo en la caché de HF
+│       ├── voices/           # Voces de FÁBRICA (empaquetadas en wheel y bundle)
+│       │   └── default/      # reference.wav + speech.wav
+│       └── daemon/           # Daemon mode (FastAPI + IPC)
+│           ├── daemon.py    # Gestor del ciclo de vida
+│           ├── server.py    # Endpoints FastAPI
+│           ├── ipc.py       # Cliente HTTP
+│           ├── protocol.py  # Modelos Pydantic
+│           └── run.py       # Entry point (usa bootstrap.apply())
+├── bin/
+│   └── tts-sidecar          # Script de entry point (modo fuente)
+├── scripts/                  # Scripts de build por SO
+├── tests/                    # Suite de tests pytest
+└── docs/
+```
 
-- **100% local**: Sin APIs externas ni conexiones a internet para síntesis
-- **Instalador único por SO (canal nativo)**: Un archivo ejecutable por
-  plataforma; el canal PyPI complementario (ver
-  [docs/DISTRIBUTION.md](DISTRIBUTION.md)) no está sujeto a esta restricción
-- **Sin dependencias externas (canal nativo)**: El usuario final no necesita
-  instalar nada más; el canal PyPI requiere Python 3.13+ y, en Linux,
-  `libportaudio2` del sistema
-- **Licencia**: El código propio se distribuye bajo GPL-3.0-or-later; todas las dependencias y el modelo usados deben tener licencias compatibles con GPLv3 (permisivas — MIT/BSD/Apache/ISC/PSF — o copyleft compatible, como LGPL-2.1+/MPL-2.0)
+> El modelo `es-mx-latam` no se almacena en el repo: reside en la caché de
+> HuggingFace del usuario (`~/.cache/huggingface/hub`) tras `tts-sidecar setup`.
 
----
-
-## Criterios de Aceptación
+## Criterios de aceptación
 
 <!-- Los criterios 1-3 y 9 son claims de ejecución por SO: el pipeline de build
 (CI + scripts/build_*.py) produce los instaladores y un smoke test automatizado
@@ -143,6 +215,10 @@ E2E" más abajo). -->
 7. [x] El español latinoamericano suena natural y con buena prosodia
 8. [x] La síntesis funciona sin conexión a internet (modelo en local)
 9. [ ] El instalador incluye todo lo necesario (no requiere instalaciones adicionales) (validación E2E por SO, ver "Decisión de validación E2E" más abajo)
+10. [ ] **Equivalencia funcional completa entre los 3 SO**: todas las brechas
+    del registro de [docs/PARITY.md](PARITY.md) están cerradas (instalación de
+    una línea sin admin, provisión encadenada, actualización sin residuo y
+    desinstalación con residuo cero, en las tres plataformas)
 
 ### Decisión de validación E2E
 
@@ -172,9 +248,7 @@ ejercitar la matriz de hardware/SO real. Cualquier issue reportado en estos
 criterios se incorpora al ciclo de desarrollo como bug prioritario y motiva
 fixes versionados.
 
----
-
-## Condición de Finalización
+## Condición de finalización
 
 La implementación está completa únicamente cuando:
 
@@ -184,19 +258,20 @@ La implementación está completa únicamente cuando:
 - [x] El español latinoamericano suena natural
 - [x] Hay scripts de build e instalador por cada SO (Windows, Linux, macOS) en el pipeline de CI
 - [ ] Los instaladores funcionan sin ninguna dependencia externa (validación E2E por SO, ver "Decisión de validación E2E" arriba: smoke test automatizado en CI + validación manual Windows del propietario + feedback de usuarios reales en Linux y macOS)
+- [ ] La experiencia de instalación, uso, actualización y desinstalación es
+  equivalente en los 3 SO: [docs/PARITY.md](PARITY.md) sin brechas abiertas
 - [x] **README.md** refleja la nueva arquitectura con Chatterbox
 - [x] **docs/DESIGN.md** corresponde al estado implementado
 - [x] El daemon mode está implementado y funciona correctamente
 - [x] Los logs están normalizados con estructura consistente
 - [x] Los tests pytest pasan (296/296)
 
----
-
-## Estado Actual
+## Estado actual
 
 **Implementado y verificable en el repo** (la validación end-to-end de los
 instaladores por SO es externa al pipeline por diseño; ver "Decisión de
 validación E2E" arriba):
+
 - Motor Chatterbox Multilingual V3 implementado (Python)
 - Sistema de audio playback nativo por SO (pycaw/winsound/sounddevice/afplay)
 - Daemon mode con IPC HTTP (FastAPI, puerto 8765)
@@ -208,68 +283,64 @@ validación E2E" arriba):
   [docs/DISTRIBUTION.md](DISTRIBUTION.md))
 - Descarga automática del modelo Chatterbox desde HuggingFace
 - CLI completa con todos los comandos
-- **Instalación auto-hospedada de una línea por SO**: `install.sh` (`curl | sh`)
-  en Linux, Cask de Homebrew propio en macOS e `install.ps1` (`irm | iex`) en
-  Windows (instalador Inno Setup per-user, sin UAC); ver
-  [docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md)
+- **Instalación auto-hospedada de una línea por SO** (Linux y macOS en v0.3.0;
+  Windows en v0.4.0): `install.sh` (`curl | sh`) en Linux, Cask de Homebrew
+  propio en macOS e `install.ps1` (`irm | iex`) en Windows (instalador Inno
+  Setup per-user, sin UAC; entró en alcance al refutarse la premisa de
+  SmartScreen — la descarga por CLI no aplica el Mark-of-the-Web). Los tres
+  canales publican de forma autónoma, sin aprobación ni pull request a
+  terceros. Ver [docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md)
 - Tests pytest (296 tests: timing, protocolo, daemon, CLI, voces, rutas, caché de modelo, audio y utilidades de build), más los smoke-tests de instaladores (bats y Pester) en CI
 - Documentación sincronizada
 
+**Trabajo pendiente del goal inmediato**: cerrar las brechas de paridad entre
+SO registradas en [docs/PARITY.md](PARITY.md) (registro priorizado con impacto
+y esfuerzo por brecha). En síntesis: one-liner de instalación macOS sin
+Homebrew ni `sudo`, `zap` del Cask completo, limpieza de AppImages anteriores
+en `install.sh`, desinstalador de un paso en Linux, y visibilidad del Cask en
+el README.
+
 ---
 
-## Roadmap (compromisos a futuro)
+# Goal a largo plazo
 
-### Instalación auto-hospedada por SO — cumplido
+Especificaciones **no comprometidas** para el goal inmediato. No se trabajan
+ahora — cada una registra por qué se difiere y qué condición la promueve al
+goal inmediato.
 
-**Motivación**: además del canal nativo (descarga directa del artefacto) y el
-canal PyPI, el proyecto ofrece una instalación auto-hospedada por SO que resuelve
-descubrimiento, instalación, disponibilidad del comando en el PATH, provisión del
-modelo y desinstalación en un flujo guiado, reutilizando los artefactos que el
-canal nativo ya publica. La especificación completa está en
-[docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md).
-
-**Cumplido** (Linux y macOS en v0.3.0; Windows en v0.4.0):
-- **Linux**: un script `install.sh` servido por el propio repo, ejecutable con
-  `curl … | sh` sobre el `.AppImage` del release.
-- **macOS**: un tap de Homebrew propio con un Cask que instala el CLI desde el
-  `.dmg` del release, actualizado automáticamente en cada publicación por un job
-  de CI.
-- **Windows**: un script `install.ps1` servido por el propio repo, ejecutable con
-  `irm … | iex` sobre el instalador Inno Setup per-user del release (sin UAC).
-  Entró en alcance al refutarse la premisa de SmartScreen (la descarga por CLI
-  no aplica el Mark-of-the-Web; ver el registro de cambio de decisión en
-  [docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md)).
-
-**Publicación autónoma**: los tres canales publican sin aprobación ni pull request
-a terceros; se apoyan en repos propios y en la automatización de CI sobre el propio
-repo.
-
-### Firma de código Windows (SignPath) y notarización Apple (macOS)
+## Firma de código Windows (SignPath) y notarización Apple (macOS)
 
 **Motivación**: los binarios del canal nativo no están firmados, por lo que
-Windows SmartScreen y macOS Gatekeeper bloquean el primer arranque (ver
-`SECURITY.md` §"Artefactos sin firmar" y `docs/BUILD.md` §"Limitación
-conocida: firma de código y notarización"). El canal PyPI (ver
-[docs/DISTRIBUTION.md](DISTRIBUTION.md)) ya mitiga esta fricción para
-audiencia técnica, pero no la elimina para el canal nativo, que sigue siendo
-el recomendado para usuarios no técnicos.
+Windows SmartScreen y macOS Gatekeeper bloquean el primer arranque cuando el
+artefacto se descarga por navegador (ver `SECURITY.md` §"Artefactos sin
+firmar" y `docs/BUILD.md` §"Limitación conocida: firma de código y
+notarización"). Los instaladores de una línea y el canal PyPI ya mitigan esta
+fricción (descarga por CLI sin Mark-of-the-Web / launcher generado
+localmente), pero no la eliminan para la descarga directa desde el navegador.
 
-**Compromiso**:
+**Justificación del diferimiento**: la firma es un gate que solo vale la pena
+cuando el proyecto/producto esté **cristalizado y completo** — idealmente sin
+bugs y con funcionalidad completa y equivalente entre los 3 sistemas
+operativos ([docs/PARITY.md](PARITY.md) sin brechas abiertas). El producto aún
+está en desarrollo: firmar ahora significaría re-tramitar la confianza externa
+(aprobación de SignPath OSS, cuenta Apple Developer de pago) sobre artefactos
+que siguen cambiando de forma. Solo entonces se iniciará el proceso de firma.
+
+**Especificación diferida**:
+
 - **Windows**: firma Authenticode vía [SignPath Foundation](https://signpath.org/)
   (firma gratuita para proyectos open source), integrada al job de CI que
   produce el instalador `.exe`.
 - **macOS**: notarización con una cuenta Apple Developer ID, integrada al job
   de CI que produce el `.dmg`.
 
-**Condiciones de entrada**:
+**Condiciones de entrada** (promueven esta spec al goal inmediato):
+
+- El goal inmediato está cumplido: producto cristalizado, con equivalencia
+  funcional completa entre los 3 SO ([docs/PARITY.md](PARITY.md) cerrado).
 - Windows: aprobación del proyecto por el programa SignPath OSS.
 - macOS: alta de una cuenta Apple Developer (de pago).
 
 **Criterio de cierre**: los instaladores de Windows y macOS generados por CI
-arrancan sin disparar SmartScreen ni Gatekeeper en una instalación limpia.
-
-Una vez disponible la firma Authenticode, esta habilita además un canal de
-instalación auto-hospedada en Windows análogo a los de Linux y macOS (ver
-[docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md)). Sin firma, la instalación
-sin alertas en Windows la provee el canal PyPI, que genera el ejecutable en la
-máquina del usuario.
+arrancan sin disparar SmartScreen ni Gatekeeper en una instalación limpia,
+incluso descargados por navegador.
