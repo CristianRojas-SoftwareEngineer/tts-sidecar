@@ -44,9 +44,17 @@ de cuarentena sin intervención manual. El `.dmg` descargado a mano (con sus
 scripts `.command` de instalación/desinstalación) sigue siendo un canal
 válido en paralelo. Windows no tiene una vía auto-hospedada equivalente (ver
 «Fuera de alcance» en [docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md)):
-mientras el proyecto no tenga firma de código Authenticode, un instalador
-descargado seguiría disparando SmartScreen sin aportar valor frente al canal
-pip. Diseño completo de ambos instaladores en
+mientras el proyecto no tenga firma de código Authenticode, el instalador
+descargado desde el **navegador** sigue disparando SmartScreen, sin aportar
+valor frente al canal pip. El matiz es el *Mark of the Web* (MOTW): el
+navegador sí sella el `.exe` con la marca de Internet (`ZoneId=3`), pero la
+descarga por CLI (`curl`, `gh`, PowerShell `Invoke-WebRequest`/`WebClient`)
+**no** la aplica, así que un instalador bajado por script no dispara
+SmartScreen al ejecutarse. Esa distinción es solo un artefacto del medio de
+descarga, no un canal recomendado: el binario sigue sin firmar (sujeto a
+Microsoft Defender Antivirus; ver runbook WDSI en `SECURITY.md`) y la
+instalación Inno Setup exige elevación (UAC) salvo en contexto ya
+administrativo. Diseño completo de ambos instaladores en
 [docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md).
 
 ### Canal PyPI (`uv tool install` / `pipx`)
