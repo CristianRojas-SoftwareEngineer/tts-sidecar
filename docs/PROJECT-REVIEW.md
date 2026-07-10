@@ -672,12 +672,20 @@ independientes del orden de las Fases 1-2 (H-7):
     tras revisión de un analista, Microsoft **borra globalmente** para todos los
     Defender). **No** apaga **SmartScreen**, que es reputación (no una firma de
     malware) y solo la resuelve la firma de código de la Línea B; ningún reporte
-    WDSI lo desactiva. Además, la reputación **no se hereda entre versiones**: cada
-    release puede volver a marcarse, por lo que el reporte **puede requerir
-    repetirse en cada versión** hasta que exista la firma real.
+    WDSI lo desactiva. El reporte WDSI es **independiente de la firma** en dos
+    sentidos: se puede reportar un binario sin firmar, y firmar por sí solo **no**
+    borra una detección ya existente (solo el reporte lo hace). Lo que **sí** cambia
+    con la firma es la **frecuencia** con la que hay que reportar: sin firma, la
+    reputación se acumula **por archivo**, así que cada versión nueva parte de cero,
+    puede volver a marcarse y el reporte **puede requerir repetirse en cada
+    release** (cinta de correr); con la firma de la Línea B, la reputación pasa a
+    acumularse **por editor/certificado** y las versiones nuevas la heredan, lo que
+    **reduce mucho —sin eliminar del todo— esa recurrencia** (un binario firmado aún
+    puede recibir algún falso positivo de la nube que haya que reportar).
   - **Criterio de cierre**: el `.exe` lleva metadata PE y `--noupx`; existe la guía
-    de reporte a WDSI (con su alcance —Defender Antivirus, no SmartScreen— y la
-    necesidad de re-reporte por versión documentados).
+    de reporte a WDSI (con su alcance —Defender Antivirus, no SmartScreen— y las
+    expectativas de recurrencia —re-reporte por release sin firma, decreciente con
+    la firma de la Línea B— documentados).
 - **Línea B — firma de código / notarización (= estrategia B, ya comprometida)**
   (`docs/GOAL.md:216-241`): Authenticode vía SignPath (Windows) + notarización
   Apple (macOS). Es la mitigación de fondo del canal nativo que se descarga a
