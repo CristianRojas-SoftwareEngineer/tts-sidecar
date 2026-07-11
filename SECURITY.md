@@ -62,33 +62,33 @@ limitada, pero conviene explicitar sus supuestos:
   no una vulnerabilidad; ver «Uso ético y responsable» en
   [README.md](README.md)/[USAGE.md](USAGE.md).
 
-### Nota sobre el instalador de una línea de Linux
+### Nota sobre los instaladores de una línea
 
-`install.sh` (raíz del repo) se sirve por `raw.githubusercontent.com` y se
-ejecuta con `curl | sh`, el patrón habitual de instalación de una línea. La
-mitigación de ese patrón —ejecutar contenido remoto sin inspeccionarlo antes—
-es que **el propio script verifica el checksum SHA-256** del `.AppImage`
-descargado contra `SHA256SUMS.txt` (publicado junto al Release, ver
-«Artefactos sin firmar» abajo) **antes** de darle permisos de ejecución o de
-invocarlo; un checksum que no coincide aborta la instalación sin ejecutar
-nada. El propio `install.sh` no requiere privilegios elevados: instala en
-`~/.local/opt/tts-sidecar/`, sin `sudo`.
+Los tres instaladores de una línea (`install.sh` en Linux, `install-macos.sh`
+en macOS, `install.ps1` en Windows; raíz del repo) se sirven por
+`raw.githubusercontent.com` y se ejecutan con `curl | sh` / `irm | iex`, el
+patrón habitual de instalación de una línea. La mitigación de ese patrón
+—ejecutar contenido remoto sin inspeccionarlo antes— es común a los tres: **el
+propio script verifica el checksum SHA-256** del artefacto descargado (el
+`.AppImage`, el `.dmg` o el `.exe`) contra `SHA256SUMS.txt` (publicado junto al
+Release, ver «Artefactos sin firmar» abajo) **antes** de darle permisos de
+ejecución, montarlo o invocarlo; un checksum que no coincide aborta la
+instalación sin ejecutar nada. Ninguno requiere privilegios elevados:
 
-### Nota sobre el instalador de una línea de Windows
-
-`install.ps1` (raíz del repo) se sirve por `raw.githubusercontent.com` y se
-ejecuta con `irm | iex`, el equivalente PowerShell del patrón anterior. La
-mitigación es la misma: **el propio script verifica el checksum SHA-256** del
-instalador descargado contra `SHA256SUMS.txt` **antes** de ejecutarlo; un
-checksum que no coincide aborta la instalación sin ejecutar nada. El script no
-requiere privilegios elevados: la instalación es per-user
-(`%LOCALAPPDATA%\Programs\tts-sidecar`, PATH en `HKCU\Environment`), sin UAC.
-La descarga por CLI (`Invoke-WebRequest`) no aplica el Mark-of-the-Web, por lo
-que el instalador descargado por el script no dispara SmartScreen; Microsoft
-Defender **Antivirus** es independiente del MOTW y puede marcar el binario sin
-firma — en ese caso aplica el runbook WDSI de más abajo. Como `irm | iex` no
-escribe un `.ps1` en disco, no pasa por la Execution Policy; la alternativa
-inspeccionable es `iwr <url> -OutFile install.ps1; .\install.ps1`.
+- **Linux** (`install.sh`): instala en `~/.local/opt/tts-sidecar/`, sin `sudo`.
+- **macOS** (`install-macos.sh`): verifica con `shasum -a 256 -c`, copia el
+  `.app` a `~/Applications` y crea el symlink en `~/.local/bin`, sin `sudo`.
+  Limpia el atributo `com.apple.quarantine` del `.app` copiado (legítimo: el
+  usuario ya expresó intención al ejecutar el script), lo que evita la
+  advertencia de Gatekeeper en el primer arranque.
+- **Windows** (`install.ps1`): instalación per-user
+  (`%LOCALAPPDATA%\Programs\tts-sidecar`, PATH en `HKCU\Environment`), sin UAC.
+  La descarga por CLI (`Invoke-WebRequest`) no aplica el Mark-of-the-Web, por lo
+  que el instalador descargado por el script no dispara SmartScreen; Microsoft
+  Defender **Antivirus** es independiente del MOTW y puede marcar el binario sin
+  firma — en ese caso aplica el runbook WDSI de más abajo. Como `irm | iex` no
+  escribe un `.ps1` en disco, no pasa por la Execution Policy; la alternativa
+  inspeccionable es `iwr <url> -OutFile install.ps1; .\install.ps1`.
 
 ## Artefactos sin firmar
 

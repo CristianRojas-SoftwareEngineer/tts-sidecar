@@ -5,6 +5,54 @@ Todos los cambios notables de TTS Sidecar se documentan en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
+## [0.5.0] — 2026-07-10
+
+Cierra las brechas de paridad de experiencia entre los 3 SO registradas en
+`docs/PARITY.md`: iguala macOS y Linux con la experiencia objetivo de Windows
+(instalación de una línea sin admin, actualización sin residuo, desinstalación
+con residuo cero). MINOR: añade capacidades y cambia el comportamiento de
+instalación en macOS. Solo la brecha 4 (Gatekeeper, cuyo fondo es la firma de
+código) queda diferida al goal a largo plazo.
+
+### Añadido
+
+- **Instalador macOS de una línea** (`install-macos.sh`, `curl | sh`): vía sin
+  Homebrew ni `sudo`, homóloga a `install.sh`. Descarga el `.dmg` de arm64 y
+  `SHA256SUMS.txt`, verifica el checksum con `shasum -a 256 -c` (aborta si no
+  coincide), monta con `hdiutil`, copia el `.app` a `~/Applications` con
+  `ditto`, limpia la cuarentena de Gatekeeper con `xattr`, crea el symlink
+  per-user en `~/.local/bin` (con aviso de PATH) y encadena `setup`. Guard de
+  arquitectura arm64 (Mac Intel no soportado). Smoke-test `bats` en el job CI
+  `test-installer-macos` (executor macOS) como puerta de los 4 builds.
+- **Desinstalador Linux de un paso** (`tts-sidecar setup --uninstall`): quita
+  el symlink de PATH, borra `~/.local/opt/tts-sidecar/` y encadena `cleanup
+  --all` (con confirmación; `--yes` la omite). Mutuamente excluyente con
+  `--remove-path`/`--force-update`, con guard de SO y contrato `--json`
+  (requiere `--yes`). Reemplaza los tres pasos manuales anteriores.
+
+### Cambiado
+
+- **Scripts `.command` del `.dmg` sin `sudo`**: la instalación y desinstalación
+  incluidas en el `.dmg` de macOS crean/eliminan el symlink per-user en
+  `~/.local/bin` en lugar de `/usr/local/bin` con `sudo`. Ninguna vía de
+  instalación del proyecto pide ya la contraseña de administrador. **Nota de
+  transición**: quien tenga un symlink legado en `/usr/local/bin` (de una
+  versión anterior a 0.5.0) verá en el script de desinstalación la instrucción
+  para quitarlo (`sudo rm /usr/local/bin/tts-sidecar`).
+- **`install.sh` limpia los AppImages anteriores**: tras instalar y dar
+  permisos al AppImage nuevo, elimina los `tts-sidecar-*.AppImage` previos de
+  `~/.local/opt/tts-sidecar/`, que antes se acumulaban (~1-2 GB por versión).
+  Re-ejecutar el one-liner es ahora la vía de actualización limpia de Linux.
+
+### Corregido
+
+- **`zap` del Cask completo**: la stanza `zap trash:` del Cask de Homebrew ahora
+  lista los **dos** repos del modelo en la caché de HuggingFace (el multilingüe
+  `Chatterbox-Multilingual-es-mx-latam` y el base `chatterbox` del Voice
+  Encoder); antes omitía el segundo, dejando cientos de MB de residuo a quien
+  desinstalara con `brew uninstall --zap`. Se propaga al tap con este release
+  vía `publish-metadata`.
+
 ## [0.4.0] — 2026-07-10
 
 Extiende la instalación auto-hospedada de una línea a Windows y migra el

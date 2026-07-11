@@ -40,15 +40,25 @@ trade-offs en [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md)): el binario
 pre-compilado por SO (audiencia general, sin Python) y el paquete PyPI
 (audiencia técnica con Python 3.13+).
 
-### Instalación de una línea (Linux y Windows)
+### Instalación de una línea
 
 En Linux, `install.sh` automatiza la Opción 1 completa: resuelve el último
 Release, descarga el `.AppImage` de tu arquitectura, verifica su checksum
-contra `SHA256SUMS.txt`, lo instala en `~/.local/opt/tts-sidecar/` y ejecuta
-`setup` (integra el PATH y ofrece descargar el modelo):
+contra `SHA256SUMS.txt`, lo instala en `~/.local/opt/tts-sidecar/` (eliminando
+la versión anterior si existe) y ejecuta `setup` (integra el PATH y ofrece
+descargar el modelo):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install.sh | sh
+```
+
+En macOS (Apple Silicon), `install-macos.sh` hace lo análogo sin `sudo` ni
+Homebrew: descarga el `.dmg` de arm64, verifica su checksum, monta el volumen,
+copia el `.app` a `~/Applications`, limpia la cuarentena de Gatekeeper, crea el
+symlink de PATH en `~/.local/bin` y ejecuta `setup`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install-macos.sh | sh
 ```
 
 En Windows, `install.ps1` hace lo análogo desde PowerShell: descarga el
@@ -59,13 +69,27 @@ instalador del último Release, verifica su checksum, lo ejecuta en silencio
 irm https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install.ps1 | iex
 ```
 
-Ambos scripts abortan la instalación si el checksum descargado no coincide con
-`SHA256SUMS.txt` (ver [SECURITY.md](SECURITY.md#nota-sobre-el-instalador-de-una-línea-de-linux)).
-Para desinstalar en Linux: `tts-sidecar setup --remove-path` (revierte el
-symlink de PATH), borra `~/.local/opt/tts-sidecar/` y `tts-sidecar cleanup
---all` (borra la caché del modelo y los datos de usuario). En Windows:
-desinstalador de Inno Setup (Configuración → Aplicaciones, sin admin) más
-`tts-sidecar cleanup --all`.
+Los tres scripts abortan la instalación si el checksum descargado no coincide
+con `SHA256SUMS.txt` (ver [SECURITY.md](SECURITY.md#nota-sobre-los-instaladores-de-una-línea)).
+
+**Alternativa para usuarios de Homebrew (macOS)**: el Cask del tap propio
+automatiza checksum, PATH y cuarentena (pero exige tener Homebrew y no
+provisiona el modelo: hay que correr `tts-sidecar setup` aparte):
+
+```bash
+brew tap CristianRojas-SoftwareEngineer/tts-sidecar
+brew install --cask tts-sidecar
+```
+
+**Desinstalación** (datos primero con `cleanup --all`, binario después):
+
+- **Linux**: `tts-sidecar setup --uninstall` lo hace en un paso (quita el
+  symlink de PATH, borra `~/.local/opt/tts-sidecar/` y encadena `cleanup --all`).
+- **macOS**: ejecuta el `.command` de desinstalación (o borra el symlink de
+  `~/.local/bin`), arrastra el `.app` a la Papelera y corre `tts-sidecar cleanup
+  --all`; o `brew uninstall --cask --zap tts-sidecar` si instalaste con Homebrew.
+- **Windows**: desinstalador de Inno Setup (Configuración → Aplicaciones, sin
+  admin) más `tts-sidecar cleanup --all`.
 
 ### Opción 1: Descargar binario pre-compilado
 

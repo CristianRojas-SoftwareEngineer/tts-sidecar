@@ -270,7 +270,9 @@ jobs:
           name: Run install.sh smoke-test (bats)
           command: |
             echo "[STEP] Run install.sh smoke-test (bats) - INICIO"
-            bats tests/installer/*.bats
+            # Acotado a install.bats: install-macos.bats corre en el executor
+            # macOS (job test-installer-macos), no en este runner Linux.
+            bats tests/installer/install.bats
             echo "[STEP] Run install.sh smoke-test (bats) - FIN"
 
   test-installer-windows:
@@ -298,6 +300,31 @@ jobs:
             Invoke-Pester tests/installer/install.tests.ps1 -CI
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Write-Host "[STEP] Run install.ps1 smoke-test (Pester) - FIN"
+
+  test-installer-macos:
+    # Smoke-test de install-macos.sh (docs/SELF-HOSTED-INSTALL.md): valida el
+    # script sin red ni .dmg reales, mockeando curl/uname/hdiutil/xattr/ditto
+    # por PATH (tests/installer/install-macos.bats) — espejo de
+    # test-installer-linux/-windows. Corre en el executor macOS real (mismo que
+    # test-macos) para validar sobre el shell nativo de la plataforma, la única
+    # validación posible sin un Mac físico del propietario.
+    macos:
+      xcode: "26.4.0"
+    resource_class: m4pro.medium
+    steps:
+      - checkout
+      - run:
+          name: Install bats-core
+          command: |
+            echo "[STEP] Install bats-core - INICIO"
+            brew install bats-core
+            echo "[STEP] Install bats-core - FIN"
+      - run:
+          name: Run install-macos.sh smoke-test (bats)
+          command: |
+            echo "[STEP] Run install-macos.sh smoke-test (bats) - INICIO"
+            bats tests/installer/install-macos.bats
+            echo "[STEP] Run install-macos.sh smoke-test (bats) - FIN"
 
   build-windows-x64:
     executor: win/server-2022
@@ -1039,6 +1066,12 @@ workflows:
               only: /^v.*/
             branches:
               ignore: /.*/
+      - test-installer-macos:
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
       - build-windows-x64:
           filters:
             tags:
@@ -1051,6 +1084,7 @@ workflows:
             - test-macos
             - test-installer-linux
             - test-installer-windows
+            - test-installer-macos
       - build-linux-x64:
           filters:
             tags:
@@ -1063,6 +1097,7 @@ workflows:
             - test-macos
             - test-installer-linux
             - test-installer-windows
+            - test-installer-macos
       - build-linux-arm64:
           filters:
             tags:
@@ -1075,6 +1110,7 @@ workflows:
             - test-macos
             - test-installer-linux
             - test-installer-windows
+            - test-installer-macos
       - build-darwin-arm64:
           filters:
             tags:
@@ -1087,6 +1123,7 @@ workflows:
             - test-macos
             - test-installer-linux
             - test-installer-windows
+            - test-installer-macos
       - publish-release:
           context:
             - github-release

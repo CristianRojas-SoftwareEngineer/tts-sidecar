@@ -241,25 +241,27 @@ def _path_install_script(app_name: str) -> str:
     """Genera el script de instalación del .dmg: PATH + oferta de provisión.
 
     Se incluye en el volumen del .dmg con doble función: enlaza tts-sidecar en
-    /usr/local/bin y a continuación ofrece ejecutar `tts-sidecar setup` (descarga
-    del modelo) como el usuario actual, replicando el checkbox post-instalación
-    del instalador de Windows.
+    ~/.local/bin (per-user, SIN `sudo`) y a continuación ofrece ejecutar
+    `tts-sidecar setup` (descarga del modelo) como el usuario actual, replicando
+    el checkbox post-instalación del instalador de Windows.
 
-    Superficie de `sudo` (SUGGESTION-07): el script pide privilegios de administrador
-    solo para `mkdir -p /usr/local/bin` y `ln -sf` — nunca se ejecuta con privilegios
-    elevados como parte del build en CI; el usuario final lo ejecuta manualmente y ve
-    el prompt de contraseña del sistema, igual que cualquier post-instalador de macOS
-    que publique un binario fuera del propio bundle `.app`. `setup` se ejecuta SIN
-    sudo para que la caché de HuggingFace quede en el perfil del usuario real.
+    Instalación per-user, sin privilegios de admin: el symlink se crea en
+    `~/.local/bin`, propiedad del usuario, así que ninguna vía de instalación del
+    proyecto pide ya la contraseña de administrador (paridad con el per-user de
+    Windows y el `~/.local` de Linux). Como `~/.local/bin` no está en el PATH por
+    defecto de zsh en macOS, el script detecta su ausencia y emite la línea exacta
+    para el shell profile (mismo patrón que `cli.py::_integrate_linux_path`).
+    `setup` se ejecuta SIN sudo para que la caché de HuggingFace quede en el
+    perfil del usuario real.
     """
     return f"""#!/bin/bash
-# Expone tts-sidecar en el PATH creando un symlink en /usr/local/bin y
-# ofrece descargar el modelo de voz (tts-sidecar setup).
+# Expone tts-sidecar en el PATH creando un symlink per-user en ~/.local/bin
+# (sin privilegios de administrador) y ofrece descargar el modelo (setup).
 set -e
 
 APP="/Applications/{app_name}"
 TARGET="$APP/Contents/MacOS/tts-sidecar"
-LINK="/usr/local/bin/tts-sidecar"
+LINK="$HOME/.local/bin/tts-sidecar"
 
 if [ ! -x "$TARGET" ]; then
     echo "No se encontró {app_name} en /Applications."
@@ -267,9 +269,20 @@ if [ ! -x "$TARGET" ]; then
     exit 1
 fi
 
-sudo mkdir -p /usr/local/bin
-sudo ln -sf "$TARGET" "$LINK"
+mkdir -p "$HOME/.local/bin"
+ln -sf "$TARGET" "$LINK"
 echo "Listo: 'tts-sidecar' está disponible en la terminal (via $LINK)."
+
+case ":$PATH:" in
+    *":$HOME/.local/bin:"*)
+        ;;
+    *)
+        echo
+        echo "AVISO: ~/.local/bin no está en tu PATH."
+        echo "Añade esta línea a tu shell profile (~/.zshrc) y reinicia la terminal:"
+        echo '    export PATH="$HOME/.local/bin:$PATH"'
+        ;;
+esac
 echo
 echo "El modelo de voz (es-mx-latam, varios cientos de MB) no viene incluido:"
 echo "se descarga una sola vez con 'tts-sidecar setup'."
@@ -288,18 +301,21 @@ esac
 def _path_uninstall_script() -> str:
     """Genera el script de desinstalación del .dmg: revierte el symlink de PATH.
 
-    Elimina /usr/local/bin/tts-sidecar (con sudo) solo si es un symlink; si no
-    existe lo informa y termina sin error, y si es un archivo regular homónimo
-    lo rechaza sin tocarlo. El .app se elimina arrastrándolo a la Papelera.
+    Elimina ~/.local/bin/tts-sidecar (per-user, SIN `sudo`) solo si es un symlink;
+    si no existe lo informa y termina sin error, y si es un archivo regular
+    homónimo lo rechaza sin tocarlo. Además detecta un symlink legado en
+    /usr/local/bin (de versiones anteriores, que sí usaban `sudo`) e instruye
+    cómo quitarlo manualmente. El .app se elimina arrastrándolo a la Papelera.
     """
     return """#!/bin/bash
-# Quita el symlink de tts-sidecar de /usr/local/bin (reversión de la instalación).
+# Quita el symlink per-user de tts-sidecar de ~/.local/bin (reversión de la
+# instalación), sin sudo.
 set -e
 
-LINK="/usr/local/bin/tts-sidecar"
+LINK="$HOME/.local/bin/tts-sidecar"
 
 if [ -L "$LINK" ]; then
-    sudo rm "$LINK"
+    rm "$LINK"
     echo "Symlink eliminado: $LINK"
     echo "Para completar la desinstalación, arrastra tts-sidecar.app a la Papelera."
 elif [ -e "$LINK" ]; then
@@ -307,6 +323,16 @@ elif [ -e "$LINK" ]; then
     exit 1
 else
     echo "No hay nada que quitar: $LINK no existe."
+fi
+
+# Transición desde versiones anteriores: aquellas creaban el symlink en
+# /usr/local/bin con sudo. Si existe, se informa cómo quitarlo (requiere sudo).
+LEGACY="/usr/local/bin/tts-sidecar"
+if [ -L "$LEGACY" ]; then
+    echo
+    echo "AVISO: se detectó un symlink legado en $LEGACY (de una versión anterior)."
+    echo "Elimínalo manualmente con:"
+    echo "    sudo rm $LEGACY"
 fi
 """
 

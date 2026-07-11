@@ -126,3 +126,28 @@ EOF
     [[ "$output" == *"checksum"* ]]
     [ ! -d "$HOME/.local/opt/tts-sidecar" ]
 }
+
+@test "al actualizar elimina el AppImage anterior y deja solo el nuevo" {
+    mock_uname x86_64
+    mock_curl x86_64
+
+    # Pre-siembra un AppImage de una versión anterior en el directorio de
+    # instalación, como si viniera de una instalación previa.
+    install_dir="$HOME/.local/opt/tts-sidecar"
+    mkdir -p "$install_dir"
+    old_appimage="$install_dir/tts-sidecar-0.9.0-x86_64.AppImage"
+    printf 'viejo' > "$old_appimage"
+    chmod +x "$old_appimage"
+
+    run sh "$INSTALL_SH"
+
+    [ "$status" -eq 0 ]
+    # El viejo fue eliminado y el nuevo existe y es ejecutable.
+    [ ! -e "$old_appimage" ]
+    new_appimage="$install_dir/tts-sidecar-1.0.0-x86_64.AppImage"
+    [ -f "$new_appimage" ]
+    [ -x "$new_appimage" ]
+    # Solo queda un AppImage en el directorio.
+    count="$(ls "$install_dir"/tts-sidecar-*.AppImage | wc -l)"
+    [ "$count" -eq 1 ]
+}

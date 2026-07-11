@@ -114,6 +114,19 @@ mv "$work_dir/$appimage_name" "$final_path"
 chmod +x "$final_path"
 log "Instalado en: $final_path"
 
+# --- Limpieza de versiones anteriores -------------------------------------
+# El directorio de instalación es propiedad exclusiva del proyecto. Tras
+# instalar y dar permisos al AppImage nuevo (nunca antes: no puede quedar el
+# directorio sin ningún AppImage funcional), eliminar los AppImages previos
+# para no acumular ~1-2 GB por versión en silencio. Solo borra archivos
+# tts-sidecar-*.AppImage distintos del recién instalado.
+for old in "$INSTALL_DIR"/tts-sidecar-*.AppImage; do
+    [ -e "$old" ] || continue
+    if [ "$old" != "$final_path" ]; then
+        rm -f "$old" && log "Eliminada versión anterior: $old"
+    fi
+done
+
 # --- Integración de PATH + provisión del modelo ---------------------------
 # APPIMAGE es el contrato oficial que _integrate_linux_path() (cli.py) usa
 # para crear el symlink en ~/.local/bin; exportarla aquí, fuera de un runtime

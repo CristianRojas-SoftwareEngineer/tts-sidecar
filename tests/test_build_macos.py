@@ -47,29 +47,44 @@ def test_minimum_system_version_uses_deployment_target(monkeypatch):
     assert build_macos._minimum_system_version() == "12.0"
 
 
-def test_install_script_shebang_set_e_sudo_symlink_and_setup_offer():
-    """El .command de instalación: set -e, sudo ln -sf, y oferta de setup."""
+def test_install_script_per_user_symlink_no_sudo_and_setup_offer():
+    """El .command de instalación: symlink per-user en ~/.local/bin, SIN sudo,
+    aviso de PATH y oferta de setup."""
     script = _path_install_script("tts-sidecar-arm64.app")
     assert script.startswith("#!/bin/bash\n")
     assert "set -e" in script
-    assert "sudo mkdir -p /usr/local/bin" in script
-    assert "sudo ln -sf" in script
-    assert "/usr/local/bin/tts-sidecar" in script
+    # Per-user, sin privilegios de admin: nada de sudo ni /usr/local/bin.
+    assert "sudo" not in script
+    assert "/usr/local/bin" not in script
+    assert '$HOME/.local/bin/tts-sidecar' in script
+    assert 'mkdir -p "$HOME/.local/bin"' in script
+    assert "ln -sf" in script
+    # Aviso de PATH (~/.local/bin no está en el PATH por defecto de zsh en macOS).
+    assert "no está en tu PATH" in script
+    assert 'export PATH="$HOME/.local/bin:$PATH"' in script
     # Oferta de descargar el modelo (tts-sidecar setup) en el contexto del usuario
     assert "tts-sidecar setup" in script
     assert "Descargar ahora el modelo de voz" in script
     assert "s/n" in script  # prompt interactivo
 
 
-def test_uninstall_script_rejects_non_symlink():
-    """Desinstalación: solo elimina si es symlink; rechaza archivo regular homónimo."""
+def test_uninstall_script_per_user_no_sudo_and_legacy_note():
+    """Desinstalación per-user: elimina el symlink de ~/.local/bin sin sudo,
+    rechaza archivo regular homónimo e informa del symlink legado."""
     script = _path_uninstall_script()
     assert script.startswith("#!/bin/bash\n")
     assert "set -e" in script
+    assert 'LINK="$HOME/.local/bin/tts-sidecar"' in script
     assert 'if [ -L "$LINK" ]; then' in script
     assert 'elif [ -e "$LINK" ]; then' in script
     assert "no es un symlink" in script
     assert "exit 1" in script
+    # La eliminación del symlink per-user no usa sudo.
+    assert "rm \"$LINK\"" in script
+    # Detección informativa del symlink legado en /usr/local/bin (transición).
+    assert 'LEGACY="/usr/local/bin/tts-sidecar"' in script
+    assert "symlink legado" in script
+    assert "sudo rm $LEGACY" in script
 
 
 def test_create_dmg_failure_is_fatal(tmp_path, monkeypatch):

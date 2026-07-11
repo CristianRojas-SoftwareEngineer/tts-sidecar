@@ -216,9 +216,14 @@ E2E" más abajo). -->
 8. [x] La síntesis funciona sin conexión a internet (modelo en local)
 9. [ ] El instalador incluye todo lo necesario (no requiere instalaciones adicionales) (validación E2E por SO, ver "Decisión de validación E2E" más abajo)
 10. [ ] **Equivalencia funcional completa entre los 3 SO**: todas las brechas
-    del registro de [docs/PARITY.md](PARITY.md) están cerradas (instalación de
-    una línea sin admin, provisión encadenada, actualización sin residuo y
-    desinstalación con residuo cero, en las tres plataformas)
+    accionables del registro de [docs/PARITY.md](PARITY.md) están cerradas a
+    nivel de código/scripts/tests en v0.5.0 (one-liner macOS `install-macos.sh`,
+    `.command` sin `sudo`, limpieza de AppImages en `install.sh`, `setup
+    --uninstall`, `zap` del Cask completo, README con las tres plataformas). Solo
+    la brecha 4 (Gatekeeper) permanece abierta, diferida por diseño a la firma de
+    código del goal a largo plazo. La marca de este criterio queda pendiente
+    únicamente de la validación por feedback de usuarios reales en Linux y macOS
+    (ver "Decisión de validación E2E" más abajo)
 
 ### Decisión de validación E2E
 
@@ -283,22 +288,30 @@ validación E2E" arriba):
   [docs/DISTRIBUTION.md](DISTRIBUTION.md))
 - Descarga automática del modelo Chatterbox desde HuggingFace
 - CLI completa con todos los comandos
-- **Instalación auto-hospedada de una línea por SO** (Linux y macOS en v0.3.0;
-  Windows en v0.4.0): `install.sh` (`curl | sh`) en Linux, Cask de Homebrew
-  propio en macOS e `install.ps1` (`irm | iex`) en Windows (instalador Inno
-  Setup per-user, sin UAC; entró en alcance al refutarse la premisa de
-  SmartScreen — la descarga por CLI no aplica el Mark-of-the-Web). Los tres
-  canales publican de forma autónoma, sin aprobación ni pull request a
-  terceros. Ver [docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md)
-- Tests pytest (296 tests: timing, protocolo, daemon, CLI, voces, rutas, caché de modelo, audio y utilidades de build), más los smoke-tests de instaladores (bats y Pester) en CI
+- **Instalación auto-hospedada de una línea por SO** (Linux y Cask de macOS en
+  v0.3.0; Windows en v0.4.0; one-liner macOS `install-macos.sh` en v0.5.0):
+  `install.sh` (`curl | sh`) en Linux, `install-macos.sh` (`curl | sh`, sin
+  Homebrew ni `sudo`) y el Cask de Homebrew propio en macOS, e `install.ps1`
+  (`irm | iex`) en Windows (instalador Inno Setup per-user, sin UAC; entró en
+  alcance al refutarse la premisa de SmartScreen — la descarga por CLI no aplica
+  el Mark-of-the-Web). Todos los canales publican de forma autónoma, sin
+  aprobación ni pull request a terceros. Ver
+  [docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md)
+- **Paridad de experiencia entre los 3 SO** (v0.5.0): cerradas a nivel de
+  código/scripts/tests las brechas accionables de [docs/PARITY.md](PARITY.md)
+  (one-liner macOS, `.command` sin `sudo`, limpieza de AppImages, `setup
+  --uninstall`, `zap` del Cask completo, README con las tres plataformas); solo
+  la brecha 4 (Gatekeeper) sigue diferida a la firma de código
+- Tests pytest (305 tests: timing, protocolo, daemon, CLI, voces, rutas, caché de modelo, audio, Cask y utilidades de build), más los smoke-tests de instaladores (bats Linux/macOS y Pester Windows) en CI
 - Documentación sincronizada
 
-**Trabajo pendiente del goal inmediato**: cerrar las brechas de paridad entre
-SO registradas en [docs/PARITY.md](PARITY.md) (registro priorizado con impacto
-y esfuerzo por brecha). En síntesis: one-liner de instalación macOS sin
-Homebrew ni `sudo`, `zap` del Cask completo, limpieza de AppImages anteriores
-en `install.sh`, desinstalador de un paso en Linux, y visibilidad del Cask en
-el README.
+**Trabajo pendiente del goal inmediato**: las brechas de paridad entre SO
+registradas en [docs/PARITY.md](PARITY.md) quedaron cerradas a nivel de
+código/scripts/tests en v0.5.0 (solo la brecha 4, Gatekeeper, sigue diferida a
+la firma del goal a largo plazo). Lo pendiente es la **marca de los criterios de
+aceptación 10, 1-3 y 9 por validación de feedback de usuarios reales** en Linux
+y macOS (la validación E2E automatizable ya corre en CI; ver "Decisión de
+validación E2E").
 
 ---
 

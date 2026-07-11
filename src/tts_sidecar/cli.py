@@ -660,6 +660,107 @@ def _remove_linux_path() -> bool:
         return False
 
 
+def _linux_install_dir() -> Path:
+    """Directorio de instalación del AppImage en Linux (~/.local/opt/tts-sidecar).
+
+    Es propiedad exclusiva del proyecto: lo crea install.sh y solo contiene los
+    AppImages versionados. --uninstall lo borra por completo.
+    """
+    return Path.home() / ".local" / "opt" / "tts-sidecar"
+
+
+def _uninstall_linux(args):
+    """Desinstala tts-sidecar en Linux en un paso (rama setup --uninstall).
+
+    Encadena los tres pasos que antes eran manuales: quita el symlink de PATH,
+    borra el directorio de instalación (~/.local/opt/tts-sidecar/) y ejecuta
+    'cleanup --all'. Con --yes omite la confirmación del cleanup; con stdin
+    cerrado el cleanup se cancela limpiamente (misma política que cmd_cleanup).
+    Con --json emite un payload con schema_version y las rutas eliminadas
+    (requiere --yes, para no contaminar stdout con la confirmación interactiva).
+    """
+    import shutil
+
+    json_mode = getattr(args, "json", False)
+
+    # Guard de SO: --uninstall es específico de la vía AppImage de Linux.
+    if sys.platform != "linux":
+        print(
+            "Error: 'setup --uninstall' solo aplica a la instalación AppImage de Linux.\n"
+            "  - Windows: desinstala desde Configuración → Aplicaciones.\n"
+            "  - macOS: arrastra la app a la Papelera y ejecuta 'tts-sidecar cleanup --all'.",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_INVALID_INPUT)
+
+    if json_mode and not getattr(args, "yes", False):
+        print(
+            "Error: setup --uninstall --json requiere --yes (la confirmación "
+            "interactiva del cleanup contaminaría stdout).",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_INVALID_INPUT)
+
+    removed_paths = []
+
+    # 1. Symlink de PATH (~/.local/bin/tts-sidecar).
+    link = _linux_path_symlink()
+    if link.is_symlink():
+        link.unlink()
+        print(f"Symlink eliminado: {link}", file=sys.stderr)
+        removed_paths.append(link)
+    elif link.exists():
+        print(f"[SKIP] {link} existe pero no es un symlink; no se elimina.", file=sys.stderr)
+    else:
+        print(f"[SKIP] Symlink de PATH: {link} no existe.", file=sys.stderr)
+
+    # 2. Directorio de instalación del AppImage (borrado quirúrgico acotado a
+    # esa ruta exacta). Borrar el AppImage en ejecución es seguro en Linux
+    # (unlink de archivo abierto); ver el docstring de cmd_setup.
+    install_dir = _linux_install_dir()
+    expected = Path.home() / ".local" / "opt" / "tts-sidecar"
+    if install_dir.exists():
+        if install_dir != expected:
+            raise RuntimeError(f"Ruta de instalación inesperada, no se borra: {install_dir}")
+        shutil.rmtree(install_dir)
+        print(f"Directorio de instalación eliminado: {install_dir}", file=sys.stderr)
+        removed_paths.append(install_dir)
+    else:
+        print(f"[SKIP] Directorio de instalación: {install_dir} no existe.", file=sys.stderr)
+
+    # 3. Datos del proyecto: encadena cleanup --all (misma política de
+    # confirmación que cmd_cleanup; --yes la omite, stdin cerrado la cancela).
+    print("\nEliminando los datos del proyecto (modelo y voces de usuario)...", file=sys.stderr)
+    cleanup_args = argparse.Namespace(
+        model=False,
+        voices=False,
+        all=True,
+        dry_run=False,
+        yes=getattr(args, "yes", False),
+        json=False,
+        cleanup_parser=getattr(args, "cleanup_parser", None),
+    )
+    if json_mode:
+        # El cleanup encadenado (json=False) escribe sus líneas informativas a
+        # stdout; en modo --json ese stdout está reservado para el único payload
+        # final, así que se redirige a stderr para no contaminarlo.
+        import contextlib
+        with contextlib.redirect_stdout(sys.stderr):
+            cmd_cleanup(cleanup_args)
+    else:
+        cmd_cleanup(cleanup_args)
+
+    print("\n[PASS] Desinstalación completa.", file=sys.stderr)
+
+    if json_mode:
+        import json
+        print(json.dumps({
+            "schema_version": SCHEMA_VERSION,
+            "uninstall": True,
+            "removed": [str(p) for p in removed_paths],
+        }))
+
+
 def cmd_setup(args):
     """Provisiona el runtime: corre los chequeos de entorno y descarga el modelo si falta.
 
@@ -667,12 +768,23 @@ def cmd_setup(args):
     (symlink de $APPIMAGE en ~/.local/bin); --remove-path revierte ese symlink
     sin correr chequeos ni descargas.
 
+    --uninstall (solo Linux) desinstala en un paso: quita el symlink de PATH,
+    borra el directorio de instalación (~/.local/opt/tts-sidecar/) y encadena
+    'cleanup --all'. Borrar el AppImage en ejecución es seguro: en Linux el
+    unlink de un archivo abierto solo desliga el nombre; el inode sobrevive
+    hasta que el proceso termina, así que la desinstalación se completa sin
+    corromper el binario en curso.
+
     setup es provisión, no diagnóstico: el FAIL del chequeo de audio se degrada
     a WARN y la provisión continúa (la síntesis a archivo con `speak --output`
     funciona sin subsistema de sonido, p. ej. en hosts headless/SSH). Cualquier
     otro FAIL sigue abortando. El rol diagnóstico lo cumple `doctor`, que
     conserva el FAIL de audio con salida 1.
     """
+    if getattr(args, "uninstall", False):
+        _uninstall_linux(args)
+        return
+
     if getattr(args, "remove_path", False):
         removed = _remove_linux_path()
         if getattr(args, "json", False):
@@ -1046,12 +1158,20 @@ def main():
     # comando setup
     setup_parser = subparsers.add_parser("setup", help="Provisiona el runtime: corre chequeos, descarga el modelo si falta "
                                                        "y en Linux (AppImage) integra el comando en el PATH")
-    setup_parser.add_argument("--remove-path", action="store_true",
-                              help="Elimina el symlink de PATH (~/.local/bin/tts-sidecar) creado por setup en Linux "
-                                   "y termina sin correr chequeos ni descargas")
-    setup_parser.add_argument("--force-update", action="store_true",
-                              help="Elimina el modelo en caché y lo vuelve a descargar (fuerza una "
-                                   "re-descarga limpia, p. ej. para actualizarlo)")
+    # --remove-path, --force-update y --uninstall son modos mutuamente
+    # excluyentes de setup: cada uno corta el flujo normal de provisión.
+    setup_mode = setup_parser.add_mutually_exclusive_group()
+    setup_mode.add_argument("--remove-path", action="store_true",
+                            help="Elimina el symlink de PATH (~/.local/bin/tts-sidecar) creado por setup en Linux "
+                                 "y termina sin correr chequeos ni descargas")
+    setup_mode.add_argument("--force-update", action="store_true",
+                            help="Elimina el modelo en caché y lo vuelve a descargar (fuerza una "
+                                 "re-descarga limpia, p. ej. para actualizarlo)")
+    setup_mode.add_argument("--uninstall", action="store_true",
+                            help="Desinstala tts-sidecar en Linux en un paso: quita el symlink de PATH, "
+                                 "borra ~/.local/opt/tts-sidecar/ y encadena 'cleanup --all'")
+    setup_parser.add_argument("--yes", "-y", action="store_true",
+                              help="Omite la confirmación interactiva del cleanup encadenado por --uninstall")
     setup_parser.add_argument("--json", action="store_true", help="Emitir JSON legible por máquina")
     setup_parser.set_defaults(func=cmd_setup)
 

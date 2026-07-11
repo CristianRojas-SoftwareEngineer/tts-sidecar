@@ -59,6 +59,17 @@ class TestRenderCask:
         contenido = render_cask("1.2.3", DMG_SHA)
         assert "zap trash:" in contenido
 
+    def test_zap_trash_lists_both_model_repos(self):
+        # La desinstalación con residuo cero requiere borrar los dos repos que
+        # `setup` descarga: el modelo multilingüe y el repo base `chatterbox`
+        # (Voice Encoder, ve.safetensors).
+        contenido = render_cask("1.2.3", DMG_SHA)
+        assert (
+            "~/.cache/huggingface/hub/models--ResembleAI--Chatterbox-Multilingual-es-mx-latam"
+            in contenido
+        )
+        assert "~/.cache/huggingface/hub/models--ResembleAI--chatterbox" in contenido
+
     def test_caveats_suggest_setup(self):
         contenido = render_cask("1.2.3", DMG_SHA)
         assert "tts-sidecar setup" in contenido

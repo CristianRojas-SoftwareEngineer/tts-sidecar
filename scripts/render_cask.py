@@ -44,6 +44,7 @@ cask "{cask_name}" do
   zap trash: [
     "~/Library/Application Support/tts-sidecar",
     "~/.cache/huggingface/hub/models--ResembleAI--Chatterbox-Multilingual-es-mx-latam",
+    "~/.cache/huggingface/hub/models--ResembleAI--chatterbox",
   ]
 
   caveats <<~EOS

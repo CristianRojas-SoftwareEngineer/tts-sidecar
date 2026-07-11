@@ -16,8 +16,8 @@ fricción del primer arranque.
 | **Tamaño** | ~1-2 GB (bundle onedir autocontenido) | Descarga las dependencias desde PyPI (torch, etc.) al instalar |
 | **Dependencias del sistema** | Ninguna (autocontenido) | Linux: requiere `libportaudio2` del sistema (`sounddevice` no trae wheels con PortAudio embebido) |
 | **SmartScreen / Gatekeeper** | Bloquea el primer arranque (ver más abajo) | No aplica: el launcher lo genera `pip`/`uv` localmente, sin Mark-of-the-Web |
-| **Actualización** | Reinstalar el paquete nuevo (ver `USAGE.md`) | `uv tool upgrade tts-sidecar` / `pipx upgrade tts-sidecar` |
-| **Desinstalación** | Desinstalador/borrar el `.AppImage` (ver `USAGE.md`) | `uv tool uninstall tts-sidecar` / `pipx uninstall tts-sidecar` |
+| **Actualización** | Re-ejecutar el one-liner por SO (Linux/macOS `curl \| sh`, Windows `irm \| iex`; limpia la versión anterior) o `brew upgrade --cask` (ver `USAGE.md`) | `uv tool upgrade tts-sidecar` / `pipx upgrade tts-sidecar` |
+| **Desinstalación** | Linux: `setup --uninstall` (un paso); macOS: `.command` sin `sudo` + Papelera o `brew uninstall --cask --zap`; Windows: desinstalador Inno Setup — todos + `cleanup --all` (ver `USAGE.md`) | `uv tool uninstall tts-sidecar` / `pipx uninstall tts-sidecar` |
 | **Publicación en CI** | Job `publish-release` → GitHub Release directo | Job `publish-pypi` → publicación directa a PyPI |
 | **Reversibilidad de la publicación** | El Release es público al publicarse: revertir implica borrar un Release ya público | Irreversible: un paquete subido no se puede sobrescribir, solo yankear |
 
@@ -34,26 +34,36 @@ para el detalle completo por SO (instalador de Windows, AppImage de Linux,
 `.dmg` de macOS).
 
 Las tres plataformas tienen además una **instalación auto-hospedada de
-una línea**, capa adicional sobre el mismo artefacto nativo (no un canal
-nuevo): en Linux, `install.sh` (`curl | sh`) automatiza la descarga,
-verificación de checksum e instalación del `.AppImage`; en macOS, un Cask de
-Homebrew propio (`brew tap CristianRojas-SoftwareEngineer/tts-sidecar &&
-brew install --cask tts-sidecar`) instala desde el `.dmg` del release y
-resuelve la integración de PATH, la desinstalación y la limpieza del atributo
-de cuarentena sin intervención manual; en Windows, `install.ps1` (`irm | iex`)
-descarga el instalador Inno Setup del release, verifica su checksum y lo
-ejecuta en silencio (instalación per-user: `%LOCALAPPDATA%\Programs`, PATH de
-usuario en HKCU, sin UAC), terminando con `tts-sidecar setup`. El `.dmg`
-descargado a mano (con sus scripts `.command` de instalación/desinstalación)
-sigue siendo un canal válido en paralelo. La justificación técnica de la vía
-de Windows es el *Mark of the Web* (MOTW): el navegador sí sella el `.exe`
-con la marca de Internet (`ZoneId=3`) y dispara SmartScreen, pero la descarga
-por CLI (`curl`, `gh`, PowerShell `Invoke-WebRequest`/`WebClient`) **no** la
-aplica, así que el instalador bajado por `install.ps1` no dispara SmartScreen
-al ejecutarse. El binario sigue sin firmar: Microsoft Defender Antivirus es
-independiente del MOTW y puede marcarlo (ver runbook WDSI en `SECURITY.md`);
-la advertencia de SmartScreen para la descarga por navegador solo la resuelve
-la firma de código Authenticode. Diseño completo de los tres instaladores en
+una línea** (`curl | sh` / `irm | iex`), capa adicional sobre el mismo
+artefacto nativo (no un canal nuevo), con un script por SO:
+
+- **Linux** — `install.sh` (`curl | sh`) automatiza la descarga, verificación
+  de checksum e instalación del `.AppImage` (eliminando la versión anterior al
+  actualizar) y encadena `setup`.
+- **macOS** — `install-macos.sh` (`curl | sh`) descarga el `.dmg` de arm64,
+  verifica el checksum con `shasum`, copia el `.app` a `~/Applications` sin
+  `sudo`, limpia la cuarentena de Gatekeeper, crea el symlink per-user en
+  `~/.local/bin` y encadena `setup`. **Vía complementaria** para usuarios de
+  Homebrew: el Cask del tap propio (`brew tap
+  CristianRojas-SoftwareEngineer/tts-sidecar && brew install --cask
+  tts-sidecar`), que resuelve PATH, desinstalación (`--zap`) y cuarentena sin
+  intervención manual, pero exige Homebrew y no provisiona el modelo.
+- **Windows** — `install.ps1` (`irm | iex`) descarga el instalador Inno Setup
+  del release, verifica su checksum y lo ejecuta en silencio (instalación
+  per-user: `%LOCALAPPDATA%\Programs`, PATH de usuario en HKCU, sin UAC),
+  terminando con `tts-sidecar setup`.
+
+El `.dmg` descargado a mano (con sus scripts `.command` de
+instalación/desinstalación, ahora per-user sin `sudo`) sigue siendo un canal
+válido en paralelo. La justificación técnica de la vía de Windows es el *Mark of
+the Web* (MOTW): el navegador sí sella el `.exe` con la marca de Internet
+(`ZoneId=3`) y dispara SmartScreen, pero la descarga por CLI (`curl`, `gh`,
+PowerShell `Invoke-WebRequest`/`WebClient`) **no** la aplica, así que el
+instalador bajado por `install.ps1` no dispara SmartScreen al ejecutarse. El
+binario sigue sin firmar: Microsoft Defender Antivirus es independiente del MOTW
+y puede marcarlo (ver runbook WDSI en `SECURITY.md`); la advertencia de
+SmartScreen para la descarga por navegador solo la resuelve la firma de código
+Authenticode. Diseño completo de los tres instaladores en
 [docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md).
 
 ### Canal PyPI (`uv tool install` / `pipx`)

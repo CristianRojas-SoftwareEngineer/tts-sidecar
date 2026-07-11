@@ -41,10 +41,11 @@ per-user, sin UAC; termina ejecutando `tts-sidecar setup`):
 irm https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install.ps1 | iex
 ```
 
-**Desinstalación limpia (Linux)**, en tres pasos: `tts-sidecar setup --remove-path`
-(revierte el symlink de PATH en `~/.local/bin`), borrar el AppImage instalado en
-`~/.local/opt/tts-sidecar/`, y `tts-sidecar cleanup --all` (borra la caché del
-modelo y los datos de usuario).
+**Desinstalación limpia (Linux)**, en **un paso**: `tts-sidecar setup --uninstall`
+quita el symlink de PATH en `~/.local/bin`, borra el AppImage instalado en
+`~/.local/opt/tts-sidecar/` y encadena `tts-sidecar cleanup --all` (borra la
+caché del modelo y los datos de usuario). Añade `--yes` para omitir la
+confirmación del cleanup.
 
 ### Usuario de PyPI (`uv tool install` / `pipx`)
 
@@ -135,17 +136,21 @@ Provisión completa. No hay nada que descargar.
   # Desde entonces, en una terminal nueva:
   tts-sidecar speak --text "Hola"
 
-  # Reversión del symlink (desinstalación limpia):
+  # Desinstalación limpia en un paso (symlink + AppImage + datos):
+  tts-sidecar setup --uninstall
+  # Reversión fina de solo el symlink de PATH (sin borrar nada más):
   tts-sidecar setup --remove-path
   ```
 
   Si `~/.local/bin` no está en tu PATH, `setup` te lo advierte con la línea a
   añadir al shell profile.
 - **macOS**: el `.dmg` incluye `Instalar (PATH + modelo).command`, que enlaza
-  `tts-sidecar` en `/usr/local/bin` (pide sudo) y a continuación ofrece ejecutar
-  `setup` como tu usuario. Para desinstalar, el mismo `.dmg` trae
-  `Desinstalar (quitar del PATH).command`, que elimina el symlink; el `.app` se
-  borra arrastrándolo a la Papelera.
+  `tts-sidecar` en `~/.local/bin` (per-user, **sin sudo**), avisa si esa ruta no
+  está en tu PATH y a continuación ofrece ejecutar `setup` como tu usuario. Para
+  desinstalar, el mismo `.dmg` trae `Desinstalar (quitar del PATH).command`, que
+  elimina el symlink (y detecta un symlink legado en `/usr/local/bin` de
+  versiones anteriores a 0.5.0, indicando cómo quitarlo); el `.app` se borra
+  arrastrándolo a la Papelera.
 
 > **Importante**: hasta que el modelo esté provisionado, `speak` y `daemon start`
 > **abortan de inmediato** con un mensaje que remite a `tts-sidecar setup`. Nunca
@@ -235,6 +240,10 @@ las tablas por brevedad: está presente en todos.
 
 Con `--remove-path` (Linux), el payload es distinto: `remove_path` (boolean,
 siempre `true`) y `removed` (boolean, `true` si el symlink existía y se quitó).
+
+Con `--uninstall` (Linux; requiere `--yes`, como `cleanup --json`), el payload
+es: `uninstall` (boolean, siempre `true`) y `removed` (lista de las rutas
+eliminadas: el symlink de PATH y el directorio de instalación).
 
 **`cleanup --json`** — requiere `--yes` o `--dry-run` (la confirmación
 interactiva contaminaría stdout); sin ellos, error en stderr y exit 4. Los
@@ -564,10 +573,19 @@ voces de usuario. Todo es recuperable: `setup` reprovisiona el modelo y
    - **Windows (binario)**: desinstalador de Inno Setup (Configuración →
      Aplicaciones), sin privilegios de administrador (instalación per-user);
      revierte la entrada de PATH en HKCU.
-   - **Linux (binario)**: `tts-sidecar setup --remove-path` (quita el symlink) y
-     borra el `.AppImage`.
-   - **macOS (binario)**: `Desinstalar (quitar del PATH).command` del `.dmg` y
-     arrastra el `.app` a la Papelera.
+   - **Linux (binario)**: `tts-sidecar setup --uninstall` lo hace en **un paso**:
+     quita el symlink de PATH, borra `~/.local/opt/tts-sidecar/` y encadena
+     `cleanup --all` (con confirmación; `--yes` la omite). Reemplaza los tres
+     pasos manuales que hacían falta antes. (`setup --remove-path` se conserva
+     como reversión fina de solo el symlink de PATH, sin borrar nada más.) Con
+     `--json` (que requiere `--yes`) emite un payload con `schema_version` y las
+     rutas eliminadas, igual que `--remove-path`.
+   - **macOS (binario)**: ejecuta `Desinstalar (quitar del PATH).command` del
+     `.dmg` (ahora **sin `sudo`**: elimina el symlink per-user de `~/.local/bin`)
+     y arrastra el `.app` a la Papelera. **Nota de transición**: si instalaste
+     una versión anterior a 0.5.0, el symlink vivía en `/usr/local/bin`; el
+     script de desinstalación lo detecta e indica cómo quitarlo (`sudo rm
+     /usr/local/bin/tts-sidecar`).
    - **PyPI**: `uv tool uninstall tts-sidecar` / `pipx uninstall tts-sidecar`.
 
 ---
@@ -585,15 +603,21 @@ binario.
   (anterior a 0.4.0, instalada en Program Files), desinstálala primero desde el
   Panel de control (con admin): instalar la per-user encima dejaría dos
   instalaciones y PATH duplicado.
-- **Linux**: descarga el nuevo `.AppImage`, hazlo ejecutable, y vuelve a correr
-  `setup` **desde el archivo nuevo**: `./tts-sidecar-<versión-nueva>-x86_64.AppImage setup`.
-  Esto reapunta el symlink `~/.local/bin/tts-sidecar` al AppImage nuevo — si
-  solo reemplazas el archivo sin volver a ejecutar `setup`, el symlink sigue
-  apuntando a la ruta del AppImage viejo (que puede haber borrado) y el comando
-  deja de funcionar. Borra el `.AppImage` anterior una vez confirmado que el
-  nuevo funciona.
-- **macOS**: monta el `.dmg` nuevo, arrastra el `.app` a Aplicaciones
-  (sobrescribiendo el anterior) y vuelve a ejecutar el script
+- **Linux**: repite el one-liner `curl -fsSL …/install.sh | sh`. Instala el
+  `.AppImage` nuevo, reapunta el symlink `~/.local/bin/tts-sidecar` y **elimina
+  los AppImages anteriores** de `~/.local/opt/tts-sidecar/` (ya no acumulan
+  gigabytes). En la vía manual (descargar el `.AppImage` a mano), vuelve a
+  correr `setup` **desde el archivo nuevo**:
+  `./tts-sidecar-<versión-nueva>-x86_64.AppImage setup`; esto reapunta el
+  symlink — si solo reemplazas el archivo sin volver a ejecutar `setup`, el
+  symlink sigue apuntando a la ruta del AppImage viejo y el comando deja de
+  funcionar. Borra el `.AppImage` anterior una vez confirmado que el nuevo
+  funciona.
+- **macOS**: repite el one-liner `curl -fsSL …/install-macos.sh | sh` (opción
+  primaria: descarga, verifica, reemplaza el `.app` en `~/Applications` y
+  reapunta el symlink); o `brew upgrade --cask tts-sidecar` si instalaste con
+  Homebrew. En la vía manual, monta el `.dmg` nuevo, arrastra el `.app` a
+  Aplicaciones (sobrescribiendo el anterior) y vuelve a ejecutar el script
   `Instalar (PATH + modelo).command` del volumen nuevo.
 - **PyPI**: `uv tool upgrade tts-sidecar` / `pipx upgrade tts-sidecar`.
 

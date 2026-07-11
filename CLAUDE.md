@@ -156,8 +156,9 @@ además integra el PATH creando el symlink `~/.local/bin/tts-sidecar → $APPIMA
 `speak` y `daemon start` **fallan rápido** (vía `is_model_cached`) si el modelo no
 está cacheado, remitiendo a `tts-sidecar setup` sin disparar descargas. En Windows
 el instalador agrega `{app}` al PATH y ofrece una casilla que ejecuta `setup`; en
-macOS el `.dmg` incluye scripts de instalación (symlink en `/usr/local/bin` +
-oferta de `setup`) y desinstalación.
+macOS el `.dmg` incluye scripts de instalación (symlink per-user en `~/.local/bin`,
+sin `sudo`, + oferta de `setup`) y desinstalación, y existe además el one-liner
+`install-macos.sh` (`curl | sh`) homólogo a `install.sh`.
 <!-- </model_provisioning> -->
 
 <!-- <license> -->
@@ -179,6 +180,8 @@ GPLv3 (LGPL-2.1+, MPL-2.0, GPLv3+ de pykakasi); sus atribuciones están en
 # En Linux (AppImage) también crea el symlink de PATH en ~/.local/bin.
 tts-sidecar setup
 tts-sidecar setup --remove-path   # revierte el symlink de PATH (Linux)
+tts-sidecar setup --uninstall     # desinstala Linux en un paso: symlink + dir + cleanup --all
+tts-sidecar setup --uninstall --yes   # omite la confirmación del cleanup encadenado
 
 # Desaprovisionamiento (borrado quirúrgico: solo las carpetas del proyecto)
 tts-sidecar cleanup --model       # elimina el modelo descargado
@@ -234,6 +237,7 @@ tests/                   # Tests pytest (296 tests) + smoke-tests de instaladore
 ├── conftest.py
 ├── installer/           # Smoke-tests de los instaladores de una línea (corren en CI, no en pytest)
 │   ├── install.bats     # install.sh (bats, job test-installer-linux)
+│   ├── install-macos.bats # install-macos.sh (bats, job test-installer-macos, executor macOS)
 │   └── install.tests.ps1 # install.ps1 (Pester v5, job test-installer-windows)
 ├── test_audio.py
 ├── test_build_linux.py

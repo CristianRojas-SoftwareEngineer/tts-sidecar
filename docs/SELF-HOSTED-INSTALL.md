@@ -7,15 +7,19 @@ instalar → comando disponible en el PATH → provisión guiada del modelo → 
 
 ## Alcance
 
-Se implementan cuatro piezas:
+Se implementan cinco piezas:
 
 1. **Instalador Linux** — un script `install.sh` servido por el propio repo, que se
    ejecuta con `curl … | sh` sobre el `.AppImage` del release.
 2. **Cask de macOS** — un tap de Homebrew propio que instala el CLI desde el `.dmg`
-   del release, actualizado automáticamente en cada publicación.
-3. **Instalador Windows** — un script `install.ps1` servido por el propio repo, que
+   del release, actualizado automáticamente en cada publicación (vía complementaria
+   para usuarios de Homebrew).
+3. **Instalador macOS (`curl | sh`)** — un script `install-macos.sh` servido por el
+   propio repo, homólogo a `install.sh`, que instala desde el `.dmg` del release sin
+   Homebrew ni `sudo`. Es la vía de una línea sin prerequisitos para macOS.
+4. **Instalador Windows** — un script `install.ps1` servido por el propio repo, que
    se ejecuta con `irm … | iex` sobre el instalador Inno Setup (per-user) del release.
-4. **Endurecimiento del build** — ajustes al empaquetado que reducen los falsos
+5. **Endurecimiento del build** — ajustes al empaquetado que reducen los falsos
    positivos de antivirus en el ejecutable de Windows y en el resto de artefactos.
 
 **Registro de cambio de decisión (Windows).** La versión inicial de este documento
@@ -241,16 +245,59 @@ cubiertos por test, y existe el runbook en `SECURITY.md`.
   existir); a partir de ahí el job lo mantiene. Verificar que el nombre del Cask sea
   único y que `livecheck` resuelva bien contra los GitHub Releases.
 
+## Instalador macOS (`curl | sh`)
+
+- **Entregable**: `install-macos.sh` en la raíz del repo, servido desde
+  `raw.githubusercontent.com/<owner>/TTS-Sidecar/main/install-macos.sh`. Uso:
+  `curl -fsSL <url> | sh`. Es la vía de una línea de macOS sin prerequisitos:
+  ni Homebrew (a diferencia del Cask) ni `sudo` (a diferencia del `.dmg` manual).
+- **Herramientas del host**: solo binarios del sistema base de macOS. No existe
+  `sha256sum` (se usa `shasum -a 256 -c`) ni `jq` (parseo con `grep`/`sed`, como
+  `install.sh`); montaje con `hdiutil`, copia con `ditto`, limpieza de cuarentena
+  con `xattr`.
+- **Flujo del script**: resolver `releases/latest` de la GitHub Releases API →
+  **guard de arquitectura** `uname -m` = `arm64` (Mac Intel no soportado; mensaje
+  claro) → seleccionar el asset `tts-sidecar-*-arm64.dmg` → descargar el `.dmg` y
+  `SHA256SUMS.txt` → verificar el checksum con `shasum` (aborta si no coincide) →
+  `hdiutil attach -nobrowse -readonly -mountpoint <tmp>` → localizar el `.app` en
+  el volumen → copiar a `~/Applications` con `ditto` (reemplazando la versión
+  anterior si existe) → `hdiutil detach` → `xattr -dr com.apple.quarantine` sobre
+  el `.app` copiado (legítimo: el usuario ya expresó intención ejecutando el
+  script) → crear el symlink de PATH `~/.local/bin/tts-sidecar → <app>/Contents/
+  MacOS/tts-sidecar` → invocar `"<app>/Contents/MacOS/tts-sidecar" setup`.
+- **Integración de PATH per-user**: `~/.local/bin` **no** está en el PATH por
+  defecto de zsh en macOS; el script detecta esa ausencia y emite el aviso con la
+  línea exacta para `~/.zshrc`, sin mutar dotfiles (mismo patrón que
+  `_integrate_linux_path`). Sin cambios de código en el CLI: la integración vive
+  en el propio script.
+- **Docs**: línea de instalación en `README.md` y `USAGE.md`; nota en
+  `SECURITY.md` generalizada a los tres scripts (checksum previo).
+- **Tests**: smoke-test `bats` (`tests/installer/install-macos.bats`) que mockea
+  `curl`/`uname`/`hdiutil`/`xattr`/`ditto` por PATH (`shasum` real), en el job de
+  CI `test-installer-macos` que corre en el executor macOS real (mismo que
+  `test-macos`). Cubre el rechazo de arquitectura no-arm64, la selección del
+  asset, el aborto ante checksum corrupto, la instalación feliz y el reemplazo de
+  una instalación anterior.
+- **Cierre** (automatizado): el smoke-test `bats` pasa en CI; la validación E2E
+  real, sin un Mac del propietario, se difiere al circuito de feedback de usuarios
+  (ver `docs/GOAL.md` §«Decisión de validación E2E»).
+- **Riesgos residuales**: solo Apple Silicon (el guard aborta en Intel); la firma
+  de código/notarización sigue diferida (goal a largo plazo), pero la limpieza de
+  cuarentena elimina la fricción de Gatekeeper para quien use el one-liner.
+
 ## Desinstalación limpia
 
-Ambos instaladores dejan el sistema idéntico a antes de instalar: se eliminan el
+Todos los instaladores dejan el sistema idéntico a antes de instalar: se eliminan el
 binario, la integración de PATH, la caché del modelo y los datos de usuario.
 
-- **Linux**: `tts-sidecar setup --remove-path` revierte el symlink de PATH, y se
-  borra el AppImage de `~/.local/opt/tts-sidecar/`; `tts-sidecar cleanup --all` elimina
-  la caché del modelo y los datos de usuario.
-- **macOS**: `brew uninstall --cask tts-sidecar` quita el binario y el enlace, y la
-  stanza `zap trash:` borra la caché del modelo y los datos de usuario.
+- **Linux**: `tts-sidecar setup --uninstall` lo hace en un paso — revierte el
+  symlink de PATH, borra `~/.local/opt/tts-sidecar/` y encadena `cleanup --all`.
+  (`setup --remove-path` sigue disponible como reversión fina de solo el symlink.)
+- **macOS**: el `.command` de desinstalación del `.dmg` (per-user, sin `sudo`)
+  quita el symlink de `~/.local/bin` y el `.app` se arrastra a la Papelera;
+  `tts-sidecar cleanup --all` borra la caché del modelo y los datos de usuario. Con
+  Homebrew, `brew uninstall --cask --zap tts-sidecar` lo hace todo (el `zap trash:`
+  incluye los **dos** repos del modelo: el multilingüe y el base `chatterbox`).
 - **Windows**: el desinstalador de Inno Setup (Configuración → Aplicaciones, sin
   admin en la instalación per-user) elimina los binarios y revierte la entrada de
   PATH en `HKCU\Environment`; `tts-sidecar cleanup --all` elimina la caché del
