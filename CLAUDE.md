@@ -273,6 +273,7 @@ tests/                   # Tests pytest (296 tests) + smoke-tests de instaladore
 - `USAGE.md` - Guía de uso detallada
 - `docs/DESIGN.md` - Diseño del motor
 - `docs/GOAL.md` - Meta del proyecto
+- `docs/ROADMAP.md` - Estado actual y roadmap al goal inmediato
 - `docs/DAEMON-MODE.md` - Daemon mode (servidor persistente)
 - `docs/BUILD.md` - Guía de compilación PyInstaller
 - `docs/DISTRIBUTION.md` - Canales de distribución (nativo + PyPI)

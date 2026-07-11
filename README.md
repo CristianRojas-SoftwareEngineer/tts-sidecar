@@ -319,6 +319,7 @@ desde código fuente con ese lock. El detalle completo y verificado está en
 ## Documentación
 
 - [docs/GOAL.md](docs/GOAL.md) - Meta del proyecto
+- [docs/ROADMAP.md](docs/ROADMAP.md) - Estado actual y roadmap al goal inmediato
 - [docs/DESIGN.md](docs/DESIGN.md) - Diseño técnico
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - Arquitectura del sistema
 - [docs/DAEMON-MODE.md](docs/DAEMON-MODE.md) - Daemon mode (servidor persistente)
