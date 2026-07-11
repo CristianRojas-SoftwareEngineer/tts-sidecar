@@ -1033,7 +1033,7 @@ class TestCmdCleanup:
 
 
 class TestSetupUninstall:
-    """setup --uninstall: desinstalación Linux de un paso (brecha 7)."""
+    """setup --uninstall: desinstalación Linux de un paso (brecha de *desinstalador de Linux*)."""
 
     def _fake_home_linux(self, monkeypatch, tmp_path):
         home = tmp_path / "home"

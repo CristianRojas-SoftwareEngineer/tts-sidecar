@@ -11,8 +11,8 @@ Cierra las brechas de paridad de experiencia entre los 3 SO registradas en
 `docs/PARITY.md`: iguala macOS y Linux con la experiencia objetivo de Windows
 (instalación de una línea sin admin, actualización sin residuo, desinstalación
 con residuo cero). MINOR: añade capacidades y cambia el comportamiento de
-instalación en macOS. Solo la brecha 4 (Gatekeeper, cuyo fondo es la firma de
-código) queda diferida al goal a largo plazo.
+instalación en macOS. Solo la brecha de *firma de código* (SmartScreen/Gatekeeper,
+binarios sin firmar) queda diferida al goal a largo plazo.
 
 ### Añadido
 

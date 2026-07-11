@@ -22,13 +22,13 @@ El [criterio de clasificación](#clasificación-de-specs) decide a cuál de las 
     - [Instalador (canal nativo)](#instalador-canal-nativo)
     - [Paridad de experiencia](#paridad-de-experiencia)
     - [Comandos CLI](#comandos-cli)
+    - [Desinstalación en un comando](#desinstalación-en-un-comando)
     - [Estructura del proyecto](#estructura-del-proyecto)
   - [Criterios de aceptación](#criterios-de-aceptación)
     - [Validación E2E](#validación-e2e)
   - [Condición de finalización](#condición-de-finalización)
 - [Goal a largo plazo](#goal-a-largo-plazo)
   - [Firma de código y notarización](#firma-de-código-y-notarización)
-  - [Desinstalación en un comando (multiplataforma)](#desinstalación-en-un-comando-multiplataforma)
 
 ---
 
@@ -132,6 +132,16 @@ Los comandos están ordenados en secuencia de dependencia: cada paso solo requie
 ./tts-sidecar daemon stop
 ```
 
+### Desinstalación en un comando
+
+La desinstalación es **equivalente en esfuerzo a la instalación de una línea**: un único comando elimina binario, PATH integrado y datos del modelo, con residuo cero, en los tres SO. `tts-sidecar setup --uninstall` es multiplataforma y espeja la instalación one-line de cada plataforma:
+
+- **Linux**: quita el symlink `~/.local/bin/tts-sidecar`, borra `~/.local/opt/tts-sidecar/` y encadena `cleanup --all`. Sin `sudo`.
+- **macOS**: detecta el `.app` en `~/Applications` o `/Applications`, lo elimina (`rm -rf` seguro sobre el bundle en ejecución), quita el symlink `~/.local/bin/tts-sidecar` y encadena `cleanup --all`. Sin `sudo`.
+- **Windows**: lee `UninstallString` de `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\{AppId}_is1`, invoca el desinstalador de Inno Setup (per-user, sin admin) y encadena `cleanup --all`.
+
+Las vías idiomáticas por SO (desinstalador de Inno en Configuración → Aplicaciones, `brew uninstall --cask --zap` en macOS vía Homebrew) se conservan en paralelo como alternativas; `setup --uninstall` es la vía equivalente de un comando en las tres plataformas. El estado real de esta paridad vive en [docs/PARITY.md](PARITY.md).
+
 ### Estructura del proyecto
 
 ```
@@ -179,7 +189,7 @@ TTS-Sidecar/
 7. [x] El español latinoamericano suena natural y con buena prosodia
 8. [x] La síntesis funciona sin conexión a internet (modelo en local)
 9. [ ] El instalador incluye todo lo necesario (no requiere instalaciones adicionales) (validación E2E por SO, ver "Validación E2E" más abajo)
-10. [ ] **Equivalencia funcional completa entre los 3 SO**: todas las brechas accionables del registro de [docs/PARITY.md](PARITY.md) están cerradas a nivel de código/scripts/tests en v0.5.0 (one-liner macOS `install-macos.sh`, `.command` sin `sudo`, limpieza de AppImages en `install.sh`, `setup --uninstall`, `zap` del Cask completo, README con las tres plataformas). Solo la brecha 4 (SmartScreen/Gatekeeper, binarios sin firmar, cross-SO) y la brecha 8 (desinstalación de un comando en la vía one-liner de macOS) permanecen abiertas, diferidas por diseño —la 4 a la firma de código y la 8 a `setup --uninstall` multiplataforma (pendiente)— del goal a largo plazo. La marca de este criterio queda pendiente únicamente de la validación por feedback de usuarios reales en Linux y macOS (ver "Validación E2E" más abajo)
+10. [ ] **Equivalencia funcional completa entre los 3 SO**: todas las brechas accionables del registro de [docs/PARITY.md](PARITY.md) están cerradas a nivel de código/scripts/tests (one-liner macOS `install-macos.sh`, `.command` sin `sudo`, limpieza de AppImages en `install.sh`, `zap` del Cask completo, README con las tres plataformas — cerradas en v0.5.0 — y `setup --uninstall` multiplataforma — brecha de *desinstalación en un comando*, accionable pendiente). Solo la brecha de *firma de código* (SmartScreen/Gatekeeper, binarios sin firmar, cross-SO) permanece diferida por diseño al goal a largo plazo. La marca de este criterio queda pendiente de cerrar la brecha de *desinstalación en un comando* y de la validación por feedback de usuarios reales en Linux y macOS (ver "Validación E2E" más abajo)
 
 ### Validación E2E
 
@@ -233,44 +243,3 @@ Especificaciones **no comprometidas** para el goal inmediato. No se trabajan aho
 - macOS: alta de una cuenta Apple Developer (de pago).
 
 **Criterio de cierre**: los instaladores de Windows y macOS generados por CI arrancan sin disparar SmartScreen ni Gatekeeper en una instalación limpia, incluso descargados por navegador.
-
-## Desinstalación en un comando (multiplataforma)
-
-**Motivación**: Linux ya ofrece `tts-sidecar setup --uninstall` (un comando, todo
-encadenado). macOS vía Cask también (`brew uninstall --cask --zap`). Pero macOS
-vía one-liner/`.dmg` y Windows no disponen de un único comando que desinstale el
-binario **más** los datos; Windows requiere usar el desinstalador de Inno Setup,
-y macOS requiere ejecutar el `.command`, arrastrar a la Papelera y correr
-`cleanup --all` manualmente. Esto rompe la equivalencia de esfuerzo con la
-instalación one-line.
-
-**Justificación del diferimiento**: la brecha 8 es una mejora de usabilidad sobre
-una funcionalidad que ya existe por canales alternativos (Cask en macOS, Inno en
-Windows). No bloquea la síntesis, la clonación de voz ni la actualización. Se
-prioriza cerrar otras brechas (la 4, origen cross-SO) antes de invertir en una
-experiencia refinada cuando el producto aún está en desarrollo.
-
-**Especificación diferida**:
-
-- **Linux**: `tts-sidecar setup --uninstall` ya existe (un paso, sin sudo,
-  `cleanup --all` encadenado).
-- **macOS**: `setup --uninstall` detecta el `.app` en `~/Applications` o
-  `/Applications`, lo elimina (`rm -rf` seguro sobre bundle en ejecución), quita el
-  symlink `~/.local/bin/tts-sidecar` y encadena `cleanup --all`. Sin `sudo`.
-- **Windows**: `setup --uninstall` lee `UninstallString` de la clave del registro
-  `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\{AppId}_is1`,
-  invoca el desinstalador de Inno Setup (per-user, sin admin) y encadena
-  `cleanup --all`.
-
-**Condiciones de entrada** (promueven esta spec al goal inmediato):
-
-- La brecha 4 (cross-SO) está cerrada o el dueño del proyecto decide priorizar esta
-  mejora de usabilidad antes.
-- Confirmación de que la self-remoción del `.app` de macOS y la invocación del
-  desinstalador de Inno en Windows no introducirán regresiones (tests manuales en
-  los ejecutores macOS/Windows, o feedback de usuarios reales).
-
-**Criterio de cierre**: `tts-sidecar setup --uninstall` funciona en los tres SO
-sin errores, elimina binario, symlink/PATH integrado y datos del modelo, y el
-suite pytest pasa (test nuevo o extendido que cubra Linux/macOS/Windows en la
-sección `TestSetupUninstall`).
