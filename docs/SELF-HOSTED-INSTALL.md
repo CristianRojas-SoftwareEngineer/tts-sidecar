@@ -287,21 +287,26 @@ cubiertos por test, y existe el runbook en `SECURITY.md`.
 
 ## Desinstalación limpia
 
-Todos los instaladores dejan el sistema idéntico a antes de instalar: se eliminan el
-binario, la integración de PATH, la caché del modelo y los datos de usuario.
+`tts-sidecar setup --uninstall` deja el sistema idéntico a antes de instalar **en
+un comando en los tres SO**: encadena `cleanup --all` (caché del modelo + datos de
+usuario), revierte la integración de PATH y borra el binario, **en ese orden**
+(datos independientes primero, ancla al final). Es un dispatch por SO sobre un
+contrato compartido: cancelar el cleanup aborta la desinstalación sin borrar nada
+(cancelación atómica, salida 0), y solo aplica al canal nativo (guard `is_frozen`;
+desde fuente o pip/uv remite a `pip uninstall`).
 
-- **Linux**: `tts-sidecar setup --uninstall` lo hace en un paso — revierte el
-  symlink de PATH, borra `~/.local/opt/tts-sidecar/` y encadena `cleanup --all`.
+- **Linux**: quita el symlink de PATH y borra `~/.local/opt/tts-sidecar/`.
   (`setup --remove-path` sigue disponible como reversión fina de solo el symlink.)
-- **macOS**: el `.command` de desinstalación del `.dmg` (per-user, sin `sudo`)
-  quita el symlink de `~/.local/bin` y el `.app` se arrastra a la Papelera;
-  `tts-sidecar cleanup --all` borra la caché del modelo y los datos de usuario. Con
-  Homebrew, `brew uninstall --cask --zap tts-sidecar` lo hace todo (el `zap trash:`
-  incluye los **dos** repos del modelo: el multilingüe y el base `chatterbox`).
-- **Windows**: el desinstalador de Inno Setup (Configuración → Aplicaciones, sin
-  admin en la instalación per-user) elimina los binarios y revierte la entrada de
-  PATH en `HKCU\Environment`; `tts-sidecar cleanup --all` elimina la caché del
-  modelo y los datos de usuario.
+- **macOS**: quita el symlink de `~/.local/bin` y borra el `.app` (resuelto desde
+  el ejecutable, cubre `~/Applications`, `/Applications` y el Cask). Con **Homebrew
+  Cask** el comando lo detecta por la metadata del Caskroom y **difiere a `brew
+  uninstall --cask --zap tts-sidecar`** sin borrar nada (borrar el `.app` a mano
+  dejaría el Caskroom inconsistente; su `zap trash:` incluye los **dos** repos del
+  modelo: el multilingüe y el base `chatterbox`).
+- **Windows**: borra los datos en proceso y **delega** el binario y la reversión
+  del PATH (`HKCU\Environment`) al desinstalador de Inno, lanzado desacoplado con
+  el `QuietUninstallString` del registro (el SO mantiene el lock del `.exe`). La
+  vía idiomática (Configuración → Aplicaciones, sin admin) sigue como alternativa.
 
 El cierre de cada instalador exige que este mecanismo esté implementado y cubierto por
 test; la comprobación de que no queda ningún residuo en un sistema real pertenece a la

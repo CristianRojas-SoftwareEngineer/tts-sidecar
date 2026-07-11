@@ -589,8 +589,13 @@ def cmd_doctor(args):
         sys.exit(EXIT_ERROR)
 
 
-def _linux_path_symlink() -> Path:
-    """Ruta del symlink de PATH que setup gestiona en Linux (~/.local/bin/tts-sidecar)."""
+def _path_symlink() -> Path:
+    """Ruta del symlink de PATH que setup gestiona en Unix (~/.local/bin/tts-sidecar).
+
+    Es la misma ubicación en Linux (integración de $APPIMAGE) y en macOS
+    (symlink del one-liner install-macos.sh), por lo que las ramas Linux y macOS
+    del uninstall la comparten.
+    """
     return Path.home() / ".local" / "bin" / "tts-sidecar"
 
 
@@ -619,7 +624,7 @@ def _integrate_linux_path():
         )
         return
 
-    link = _linux_path_symlink()
+    link = _path_symlink()
     link.parent.mkdir(parents=True, exist_ok=True)
     if link.is_symlink():
         link.unlink()
@@ -644,7 +649,7 @@ def _remove_linux_path() -> bool:
     Devuelve True si el symlink existía y se eliminó, False si no había nada
     que quitar (el caso de error — un archivo regular homónimo — aborta).
     """
-    link = _linux_path_symlink()
+    link = _path_symlink()
     if link.is_symlink():
         link.unlink()
         print(f"Symlink eliminado: {link}", file=sys.stderr)
@@ -669,67 +674,24 @@ def _linux_install_dir() -> Path:
     return Path.home() / ".local" / "opt" / "tts-sidecar"
 
 
-def _uninstall_linux(args):
-    """Desinstala tts-sidecar en Linux en un paso (rama setup --uninstall).
+def _uninstall_cleanup_data(args, json_mode):
+    """Paso «datos independientes» del uninstall, compartido por las tres ramas.
 
-    Encadena los tres pasos que antes eran manuales: quita el symlink de PATH,
-    borra el directorio de instalación (~/.local/opt/tts-sidecar/) y ejecuta
-    'cleanup --all'. Con --yes omite la confirmación del cleanup; con stdin
-    cerrado el cleanup se cancela limpiamente (misma política que cmd_cleanup).
-    Con --json emite un payload con schema_version y las rutas eliminadas
-    (requiere --yes, para no contaminar stdout con la confirmación interactiva).
+    Encadena `cleanup --all` (modelo + voces de usuario) —siempre el primer
+    borrado del orden unificado— y, tras un cleanup no cancelado, elimina el
+    directorio raíz de datos (`data_root()`) si quedó vacío. `cleanup` solo borra
+    `voices/` dentro de esa raíz, y `voices_root()` la re-crea al resolverse
+    (`mkdir` incondicional en paths.py), así que sin este paso quedaría un
+    directorio vacío, contra el residuo cero de la spec.
+
+    Devuelve `(removed_paths, cancelled)`. Con `cancelled=True` (respuesta
+    negativa o stdin cerrado, misma política que cmd_cleanup) el llamador aborta
+    la desinstalación completa sin tocar el PATH ni el binario: es la
+    cancelación atómica que habilita el orden unificado. El camino «no hay nada
+    que limpiar» NO es una cancelación (rutas vacías, `cancelled=False`) y la
+    desinstalación continúa. Bajo `--json` el stdout informativo del cleanup se
+    redirige a stderr para no contaminar el único payload final.
     """
-    import shutil
-
-    json_mode = getattr(args, "json", False)
-
-    # Guard de SO: --uninstall es específico de la vía AppImage de Linux.
-    if sys.platform != "linux":
-        print(
-            "Error: 'setup --uninstall' solo aplica a la instalación AppImage de Linux.\n"
-            "  - Windows: desinstala desde Configuración → Aplicaciones.\n"
-            "  - macOS: arrastra la app a la Papelera y ejecuta 'tts-sidecar cleanup --all'.",
-            file=sys.stderr,
-        )
-        sys.exit(EXIT_INVALID_INPUT)
-
-    if json_mode and not getattr(args, "yes", False):
-        print(
-            "Error: setup --uninstall --json requiere --yes (la confirmación "
-            "interactiva del cleanup contaminaría stdout).",
-            file=sys.stderr,
-        )
-        sys.exit(EXIT_INVALID_INPUT)
-
-    removed_paths = []
-
-    # 1. Symlink de PATH (~/.local/bin/tts-sidecar).
-    link = _linux_path_symlink()
-    if link.is_symlink():
-        link.unlink()
-        print(f"Symlink eliminado: {link}", file=sys.stderr)
-        removed_paths.append(link)
-    elif link.exists():
-        print(f"[SKIP] {link} existe pero no es un symlink; no se elimina.", file=sys.stderr)
-    else:
-        print(f"[SKIP] Symlink de PATH: {link} no existe.", file=sys.stderr)
-
-    # 2. Directorio de instalación del AppImage (borrado quirúrgico acotado a
-    # esa ruta exacta). Borrar el AppImage en ejecución es seguro en Linux
-    # (unlink de archivo abierto); ver el docstring de cmd_setup.
-    install_dir = _linux_install_dir()
-    expected = Path.home() / ".local" / "opt" / "tts-sidecar"
-    if install_dir.exists():
-        if install_dir != expected:
-            raise RuntimeError(f"Ruta de instalación inesperada, no se borra: {install_dir}")
-        shutil.rmtree(install_dir)
-        print(f"Directorio de instalación eliminado: {install_dir}", file=sys.stderr)
-        removed_paths.append(install_dir)
-    else:
-        print(f"[SKIP] Directorio de instalación: {install_dir} no existe.", file=sys.stderr)
-
-    # 3. Datos del proyecto: encadena cleanup --all (misma política de
-    # confirmación que cmd_cleanup; --yes la omite, stdin cerrado la cancela).
     print("\nEliminando los datos del proyecto (modelo y voces de usuario)...", file=sys.stderr)
     cleanup_args = argparse.Namespace(
         model=False,
@@ -741,23 +703,311 @@ def _uninstall_linux(args):
         cleanup_parser=getattr(args, "cleanup_parser", None),
     )
     if json_mode:
-        # El cleanup encadenado (json=False) escribe sus líneas informativas a
-        # stdout; en modo --json ese stdout está reservado para el único payload
-        # final, así que se redirige a stderr para no contaminarlo.
         import contextlib
         with contextlib.redirect_stdout(sys.stderr):
-            cmd_cleanup(cleanup_args)
+            result = cmd_cleanup(cleanup_args)
     else:
-        cmd_cleanup(cleanup_args)
+        result = cmd_cleanup(cleanup_args)
+
+    if result.cancelled:
+        return [], True
+
+    removed = list(result.removed)
+
+    from . import paths
+    root = Path(paths.data_root())
+    if root.exists() and not any(root.iterdir()):
+        root.rmdir()
+        print(f"Directorio de datos eliminado: {root}", file=sys.stderr)
+        removed.append(root)
+
+    return removed, False
+
+
+def _uninstall(args):
+    """Despacha `setup --uninstall` por SO sobre el contrato compartido.
+
+    El guard de canal nativo (`is_frozen`) y el gate `--json`/`--yes` son comunes
+    a las tres plataformas y viven solo aquí (no en las ramas). Luego despacha a
+    la rama de la plataforma. Proceso no congelado (fuente o pip/uv) o plataforma
+    fuera del dispatch → EXIT_INVALID_INPUT.
+    """
+    from . import paths
+
+    # Guard de canal nativo: --uninstall solo aplica al AppImage / .app / Inno.
+    if not paths.is_frozen():
+        print(
+            "Error: 'setup --uninstall' solo aplica al canal nativo "
+            "(AppImage de Linux, .app de macOS o instalador de Windows).\n"
+            "  Si instalaste vía pip/uv, desinstala con: pip uninstall tts-sidecar",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_INVALID_INPUT)
+
+    # Gate --json/--yes: la confirmación interactiva del cleanup contaminaría
+    # stdout, reservado para el único payload JSON.
+    if getattr(args, "json", False) and not getattr(args, "yes", False):
+        print(
+            "Error: setup --uninstall --json requiere --yes (la confirmación "
+            "interactiva del cleanup contaminaría stdout).",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_INVALID_INPUT)
+
+    if sys.platform == "linux":
+        _uninstall_linux(args)
+    elif sys.platform == "darwin":
+        _uninstall_macos(args)
+    elif sys.platform == "win32":
+        _uninstall_windows(args)
+    else:
+        print(
+            f"Error: 'setup --uninstall' no soporta la plataforma '{sys.platform}'.",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_INVALID_INPUT)
+
+
+def _uninstall_linux(args):
+    """Desinstala tts-sidecar en Linux en un paso (rama setup --uninstall).
+
+    Sigue el orden unificado del contrato compartido: datos independientes
+    (cleanup --all + data_root vacío) → integración de PATH (symlink) →
+    componente ancla (directorio de instalación del AppImage). Con ese orden,
+    cancelar el cleanup aborta la desinstalación sin borrar nada (salida 0). Con
+    --yes se omite la confirmación del cleanup; con --json se emite un payload
+    con las rutas eliminadas (incluidas las de datos y data_root si quedó vacío).
+
+    Borrar el AppImage en ejecución es seguro en Linux: el unlink de un archivo
+    abierto solo desliga el nombre; el inode sobrevive hasta que el proceso
+    termina, así que la desinstalación se completa sin corromper el binario en
+    curso.
+    """
+    import shutil
+    # Pre-import del contrato compartido: los imports usados tras borrar el ancla
+    # se resuelven antes (en Linux el squashfs sobrevive al unlink, pero se
+    # mantiene el patrón unificado con macOS).
+    import json
+
+    json_mode = getattr(args, "json", False)
+    removed_paths = []
+
+    # 1. Datos independientes (helper compartido): cleanup --all + data_root vacío.
+    data_removed, cancelled = _uninstall_cleanup_data(args, json_mode)
+    if cancelled:
+        print("\nDesinstalación cancelada: no se borró nada.", file=sys.stderr)
+        return
+    removed_paths.extend(data_removed)
+
+    # 2. Integración de PATH: symlink ~/.local/bin/tts-sidecar.
+    link = _path_symlink()
+    if link.is_symlink():
+        link.unlink()
+        print(f"Symlink eliminado: {link}", file=sys.stderr)
+        removed_paths.append(link)
+    elif link.exists():
+        print(f"[SKIP] {link} existe pero no es un symlink; no se elimina.", file=sys.stderr)
+    else:
+        print(f"[SKIP] Symlink de PATH: {link} no existe.", file=sys.stderr)
+
+    # 3. Componente ancla: directorio de instalación del AppImage (borrado
+    # quirúrgico acotado a esa ruta exacta), al final del orden unificado.
+    install_dir = _linux_install_dir()
+    expected = Path.home() / ".local" / "opt" / "tts-sidecar"
+    if install_dir.exists():
+        if install_dir != expected:
+            raise RuntimeError(f"Ruta de instalación inesperada, no se borra: {install_dir}")
+        shutil.rmtree(install_dir)
+        print(f"Directorio de instalación eliminado: {install_dir}", file=sys.stderr)
+        removed_paths.append(install_dir)
+    else:
+        print(f"[SKIP] Directorio de instalación: {install_dir} no existe.", file=sys.stderr)
 
     print("\n[PASS] Desinstalación completa.", file=sys.stderr)
 
     if json_mode:
-        import json
         print(json.dumps({
             "schema_version": SCHEMA_VERSION,
             "uninstall": True,
             "removed": [str(p) for p in removed_paths],
+        }))
+
+
+def _uninstall_macos(args):
+    """Desinstala tts-sidecar en macOS en un paso (rama setup --uninstall).
+
+    Espeja install-macos.sh y los .command del .dmg, siguiendo el orden unificado
+    (datos → PATH → binario). El `.app` se resuelve desde sys.executable, no se
+    adivina: en modo congelado el binario corre en <app>/Contents/MacOS/, así que
+    la raíz del bundle es parents[2]; el resolve() es obligatorio porque si el
+    proceso se invocó vía el symlink ~/.local/bin/tts-sidecar, la ruta del
+    ejecutable podría ser la del symlink y parents[2] apuntaría a $HOME. Un guard
+    estructural (la ruta termina en .app) reemplaza al guard de ruta exacta de
+    Linux, que aquí no aplica porque hay tres ubicaciones válidas (~/Applications
+    del one-liner, /Applications del .dmg y del Cask).
+
+    La instalación por Homebrew Cask se difiere a `brew uninstall --cask --zap`:
+    el Cask mueve el bundle a la misma ruta que la vía .dmg, así que la ubicación
+    no las distingue; la señal fiable es la metadata del Caskroom. Borrar el .app
+    a mano dejaría esa metadata inconsistente, y una desinstalación parcial, un
+    estado híbrido; por eso, si el Caskroom existe, se aborta sin tocar nada.
+
+    Borrar el bundle en ejecución es seguro en macOS: el inode mapeado en memoria
+    sobrevive hasta que el proceso termina (igual que el unlink de Linux). Los
+    imports usados tras el rmtree (json) se resuelven antes: en el .app onedir no
+    hay un squashfs que sobreviva al borrado, así que un import perezoso posterior
+    se resolvería contra archivos ya inexistentes.
+    """
+    import shutil
+    # Pre-imports del contrato: se resuelven antes de borrar el bundle (paso 5).
+    import json
+
+    json_mode = getattr(args, "json", False)
+
+    # 1. Localizar el .app desde sys.executable (se borra al final; se valida ya).
+    app_bundle = Path(sys.executable).resolve().parents[2]
+    if app_bundle.suffix != ".app":
+        print(
+            f"Error: el ejecutable no reside en un bundle .app ({app_bundle}).\n"
+            "  'setup --uninstall' solo aplica a la instalación nativa de macOS.",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_INVALID_INPUT)
+
+    # 2. Detección de Homebrew Cask por metadata del Caskroom (no por ruta del
+    # .app). Si existe, la desinstalación no aplica: se difiere a brew --zap.
+    brew_prefix = os.environ.get("HOMEBREW_PREFIX", "/opt/homebrew")
+    caskroom_meta = Path(brew_prefix) / "Caskroom" / "tts-sidecar"
+    if caskroom_meta.exists():
+        print(
+            "Error: tts-sidecar está instalado vía Homebrew Cask.\n"
+            "  Desinstálalo con: brew uninstall --cask --zap tts-sidecar\n"
+            "  (su 'zap' ya borra los datos; hacerlo a mano dejaría el Caskroom "
+            "inconsistente).",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_INVALID_INPUT)
+
+    removed_paths = []
+
+    # 3. Datos independientes (helper compartido): cleanup --all + data_root vacío.
+    data_removed, cancelled = _uninstall_cleanup_data(args, json_mode)
+    if cancelled:
+        print("\nDesinstalación cancelada: no se borró nada.", file=sys.stderr)
+        return
+    removed_paths.extend(data_removed)
+
+    # 4. Integración de PATH: symlink ~/.local/bin/tts-sidecar (misma ruta que Linux).
+    link = _path_symlink()
+    if link.is_symlink():
+        link.unlink()
+        print(f"Symlink eliminado: {link}", file=sys.stderr)
+        removed_paths.append(link)
+    elif link.exists():
+        print(f"[SKIP] {link} existe pero no es un symlink; no se elimina.", file=sys.stderr)
+    else:
+        print(f"[SKIP] Symlink de PATH: {link} no existe.", file=sys.stderr)
+
+    # 5. Componente ancla: el bundle .app, al final. Se re-aserta el guard de
+    # sufijo inmediatamente antes del rmtree como defensa en profundidad.
+    if app_bundle.suffix != ".app":
+        raise RuntimeError(f"Ruta de bundle inesperada, no se borra: {app_bundle}")
+    if app_bundle.exists():
+        shutil.rmtree(app_bundle)
+        print(f"Bundle .app eliminado: {app_bundle}", file=sys.stderr)
+        removed_paths.append(app_bundle)
+    else:
+        print(f"[SKIP] Bundle .app: {app_bundle} no existe.", file=sys.stderr)
+
+    print("\n[PASS] Desinstalación completa.", file=sys.stderr)
+
+    if json_mode:
+        print(json.dumps({
+            "schema_version": SCHEMA_VERSION,
+            "uninstall": True,
+            "removed": [str(p) for p in removed_paths],
+        }))
+
+
+def _uninstall_windows(args):
+    """Desinstala tts-sidecar en Windows en un paso (rama setup --uninstall).
+
+    Windows origina el orden unificado: el SO mantiene un lock sobre el
+    tts-sidecar.exe en ejecución, así que el propio proceso no puede borrar su
+    binario ni esperar a un desinstalador que necesita borrarlo. Por eso el
+    componente ancla se borra al final y de forma delegada:
+
+    1. Se lee y valida `QuietUninstallString` del registro (HKCU, clave
+       {AppId}_is1) primero, sin efectos: si falta (instalación no hecha por el
+       instalador nativo), se aborta antes de borrar nada — análogo Windows de
+       resolver el .app al inicio en macOS.
+    2. `cleanup --all` corre en proceso (datos independientes).
+    3. El desinstalador de Inno se lanza desacoplado con `subprocess.Popen` (sin
+       espera), pasando el QuietUninstallString tal cual (ya incluye comillas y
+       /SILENT): Inno se autocopia a %TEMP% y se relanza para poder borrar {app};
+       revierte también el PATH de HKCU antes de borrar archivos.
+    4. Se emite el payload y se retorna de inmediato para liberar el lock del
+       .exe. La carrera es benigna: el CLI muere en milisegundos y el arranque
+       de Inno (autocopia + relanzamiento) tarda más.
+
+    Asimetría del payload: como el binario se borra *después* de la muerte del
+    proceso, `removed` atestigua solo las rutas de datos (borradas en proceso);
+    el directorio de instalación va en el campo aditivo `delegated`, nunca en
+    `removed` (aún existe cuando se emite el payload; afirmarlo sería falso).
+    """
+    # Pre-import del contrato: json se usa para el payload final.
+    import json
+
+    json_mode = getattr(args, "json", False)
+
+    # 1. Leer y validar QuietUninstallString primero, sin efectos. winreg es
+    # stdlib solo-Windows → import perezoso (no romper el import en Unix/tests).
+    import winreg
+    uninstall_key = (
+        r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
+        r"\{E8A1B2C3-D4F5-6789-ABCD-EF0123456789}_is1"
+    )
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, uninstall_key) as key:
+            quiet_uninstall, _ = winreg.QueryValueEx(key, "QuietUninstallString")
+    except OSError:
+        quiet_uninstall = None
+    if not quiet_uninstall:
+        print(
+            "Error: no se encontró el registro del instalador nativo de Windows.\n"
+            "  'setup --uninstall' solo aplica a la instalación por el instalador "
+            "de Windows; desinstala desde Configuración → Aplicaciones.",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_INVALID_INPUT)
+
+    removed_paths = []
+
+    # 2. Datos independientes (helper compartido) en proceso, antes de delegar.
+    data_removed, cancelled = _uninstall_cleanup_data(args, json_mode)
+    if cancelled:
+        print("\nDesinstalación cancelada: no se borró nada.", file=sys.stderr)
+        return
+    removed_paths.extend(data_removed)
+
+    # 3. Lanzar el desinstalador de Inno desacoplado (sin espera).
+    import subprocess
+    install_dir = Path(sys.executable).resolve().parent
+    subprocess.Popen(quiet_uninstall)
+
+    # 4. Payload y retorno inmediato.
+    print(
+        "\n[PASS] Datos eliminados. El desinstalador de Windows completará el "
+        "borrado del binario y la reversión del PATH.",
+        file=sys.stderr,
+    )
+
+    if json_mode:
+        print(json.dumps({
+            "schema_version": SCHEMA_VERSION,
+            "uninstall": True,
+            "removed": [str(p) for p in removed_paths],
+            "delegated": [str(install_dir)],
         }))
 
 
@@ -768,12 +1018,13 @@ def cmd_setup(args):
     (symlink de $APPIMAGE en ~/.local/bin); --remove-path revierte ese symlink
     sin correr chequeos ni descargas.
 
-    --uninstall (solo Linux) desinstala en un paso: quita el symlink de PATH,
-    borra el directorio de instalación (~/.local/opt/tts-sidecar/) y encadena
-    'cleanup --all'. Borrar el AppImage en ejecución es seguro: en Linux el
-    unlink de un archivo abierto solo desliga el nombre; el inode sobrevive
-    hasta que el proceso termina, así que la desinstalación se completa sin
-    corromper el binario en curso.
+    --uninstall desinstala en un paso en los tres SO (canal nativo): encadena
+    'cleanup --all' (datos), revierte la integración de PATH y borra el binario,
+    en ese orden. Solo aplica a la instalación nativa (AppImage / .app / Inno);
+    desde fuente o pip/uv aborta remitiendo a 'pip uninstall'. En Unix el binario
+    se borra en proceso —seguro: el unlink de un archivo/bundle abierto desliga
+    el nombre pero el inode sobrevive hasta que el proceso termina—; en Windows
+    se delega al desinstalador de Inno (el SO mantiene el lock del .exe).
 
     setup es provisión, no diagnóstico: el FAIL del chequeo de audio se degrada
     a WARN y la provisión continúa (la síntesis a archivo con `speak --output`
@@ -782,7 +1033,7 @@ def cmd_setup(args):
     conserva el FAIL de audio con salida 1.
     """
     if getattr(args, "uninstall", False):
-        _uninstall_linux(args)
+        _uninstall(args)
         return
 
     if getattr(args, "remove_path", False):
@@ -921,12 +1172,35 @@ def cmd_setup(args):
         sys.exit(EXIT_ERROR)
 
 
+from typing import NamedTuple
+
+
+class CleanupResult(NamedTuple):
+    """Resultado observable de cmd_cleanup para los llamadores internos.
+
+    - `removed`: rutas efectivamente eliminadas (vacío en dry-run, en «no hay
+      nada que limpiar» y cuando el usuario cancela).
+    - `cancelled`: True solo cuando el usuario declinó la confirmación
+      interactiva (respuesta negativa o stdin cerrado). El camino «no hay nada
+      que limpiar» y el dry-run NO son cancelaciones (rutas vacías, cancelled
+      apagado). El uninstall usa esta bandera para abortar atómicamente sin
+      borrar el PATH ni el binario.
+    """
+    removed: list
+    cancelled: bool
+
+
 def cmd_cleanup(args):
     """Desaprovisiona los datos del proyecto: modelo en caché y/o voces de usuario.
 
     Borrado quirúrgico: solo las carpetas de los dos repos HF del proyecto
     (model_cache_dirs) y el directorio de voces de usuario; nunca la caché de
     HuggingFace completa ni datos de otros proyectos.
+
+    Devuelve un `CleanupResult` (rutas eliminadas + bandera de cancelación) en
+    todos sus caminos, para que el uninstall encadenado pueda distinguir un
+    borrado exitoso de una cancelación y atestiguar las rutas en su payload. El
+    contrato CLI standalone no cambia: main() ignora el retorno de los comandos.
     """
     import shutil
 
@@ -961,9 +1235,9 @@ def cmd_cleanup(args):
         if json_mode:
             args.cleanup_parser.print_usage(sys.stderr)
             _emit_cleanup_json([])
-            return
+            return CleanupResult([], False)
         args.cleanup_parser.print_help()
-        return
+        return CleanupResult([], False)
 
     targets = []
     if do_model:
@@ -982,7 +1256,7 @@ def cmd_cleanup(args):
     if not existing:
         print("No hay nada que limpiar: ninguna de las rutas del proyecto existe.", file=info_out)
         _emit_cleanup_json([])
-        return
+        return CleanupResult([], False)
 
     print("Rutas a eliminar:", file=info_out)
     for p, kind in existing:
@@ -991,7 +1265,7 @@ def cmd_cleanup(args):
     if getattr(args, "dry_run", False):
         print("\n(dry-run) No se borró nada.", file=info_out)
         _emit_cleanup_json([p for p, _kind in existing])
-        return
+        return CleanupResult([], False)
 
     if not getattr(args, "yes", False):
         # Inalcanzable en modo --json (el gate de arriba exige --yes o --dry-run).
@@ -1001,10 +1275,10 @@ def cmd_cleanup(args):
             # N-03: stdin cerrado (invocado vía subprocess sin --yes) no debe
             # producir un traceback crudo indistinguible de un error real.
             print("\nCancelado: no se borró nada.")
-            return
+            return CleanupResult([], True)
         if respuesta not in ("s", "si", "sí", "y", "yes"):
             print("Cancelado: no se borró nada.")
-            return
+            return CleanupResult([], True)
 
     for p, _kind in existing:
         shutil.rmtree(p)
@@ -1013,7 +1287,9 @@ def cmd_cleanup(args):
         "Limpieza completa. 'tts-sidecar setup' reprovisiona el modelo cuando lo necesites.",
         file=info_out,
     )
-    _emit_cleanup_json([p for p, _kind in existing])
+    removed = [p for p, _kind in existing]
+    _emit_cleanup_json(removed)
+    return CleanupResult(removed, False)
 
 
 def cmd_daemon(args):
@@ -1168,8 +1444,8 @@ def main():
                             help="Elimina el modelo en caché y lo vuelve a descargar (fuerza una "
                                  "re-descarga limpia, p. ej. para actualizarlo)")
     setup_mode.add_argument("--uninstall", action="store_true",
-                            help="Desinstala tts-sidecar en Linux en un paso: quita el symlink de PATH, "
-                                 "borra ~/.local/opt/tts-sidecar/ y encadena 'cleanup --all'")
+                            help="Desinstala tts-sidecar en un paso (canal nativo, los 3 SO): encadena "
+                                 "'cleanup --all', revierte la integración de PATH y borra el binario")
     setup_parser.add_argument("--yes", "-y", action="store_true",
                               help="Omite la confirmación interactiva del cleanup encadenado por --uninstall")
     setup_parser.add_argument("--json", action="store_true", help="Emitir JSON legible por máquina")

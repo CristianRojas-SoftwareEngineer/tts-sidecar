@@ -81,15 +81,17 @@ brew tap CristianRojas-SoftwareEngineer/tts-sidecar
 brew install --cask tts-sidecar
 ```
 
-**Desinstalación** (datos primero con `cleanup --all`, binario después):
+**Desinstalación**: `tts-sidecar setup --uninstall` lo hace en **un comando** en
+los tres SO (encadena `cleanup --all`, revierte la integración de PATH y borra el
+binario, en ese orden). Añade `--yes` para omitir la confirmación del cleanup.
 
-- **Linux**: `tts-sidecar setup --uninstall` lo hace en un paso (quita el
-  symlink de PATH, borra `~/.local/opt/tts-sidecar/` y encadena `cleanup --all`).
-- **macOS**: ejecuta el `.command` de desinstalación (o borra el symlink de
-  `~/.local/bin`), arrastra el `.app` a la Papelera y corre `tts-sidecar cleanup
-  --all`; o `brew uninstall --cask --zap tts-sidecar` si instalaste con Homebrew.
-- **Windows**: desinstalador de Inno Setup (Configuración → Aplicaciones, sin
-  admin) más `tts-sidecar cleanup --all`.
+- **Linux**: quita el symlink de PATH y borra `~/.local/opt/tts-sidecar/`.
+- **macOS**: quita el symlink de `~/.local/bin` y borra el `.app`. Si instalaste
+  con Homebrew, usa en su lugar `brew uninstall --cask --zap tts-sidecar` (el
+  comando lo detecta y te remite ahí para no dejar el Caskroom inconsistente).
+- **Windows**: borra los datos y delega el binario y el PATH al desinstalador de
+  Inno Setup. La vía idiomática (Configuración → Aplicaciones, sin admin) sigue
+  disponible como alternativa.
 
 ### Opción 1: Descargar binario pre-compilado
 

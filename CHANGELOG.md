@@ -5,6 +5,52 @@ Todos los cambios notables de TTS Sidecar se documentan en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
+## [0.6.0] — 2026-07-11
+
+Cierra la última brecha accionable de paridad de experiencia entre los 3 SO
+registrada en `docs/PARITY.md`: la de *desinstalación en un comando*. Con ella,
+`tts-sidecar setup --uninstall` deja de ser solo-Linux y pasa a ser un comando
+único en los tres SO (dispatch por SO sobre un contrato compartido: datos → PATH
+→ binario, con cancelación atómica y guard de canal nativo). MINOR: capacidad
+nueva en macOS y Windows, más un cambio de comportamiento deliberado en Linux.
+Solo la brecha de *firma de código* (SmartScreen/Gatekeeper, binarios sin firmar)
+queda diferida al goal a largo plazo.
+
+### Añadido
+
+- **`setup --uninstall` en macOS** (`_uninstall_macos`): desinstalación de un
+  comando que encadena `cleanup --all`, quita el symlink per-user de
+  `~/.local/bin` y borra el `.app` (localizado desde `sys.executable` con
+  `resolve()`; cubre `~/Applications`, `/Applications` y el Cask con una sola
+  expresión, con guard de sufijo `.app`). Si la instalación proviene de Homebrew
+  (metadata del Caskroom), aborta sin borrar nada y remite a `brew uninstall
+  --cask --zap tts-sidecar` para no dejar el Caskroom inconsistente.
+- **`setup --uninstall` en Windows** (`_uninstall_windows`): valida primero el
+  `QuietUninstallString` del registro (HKCU, clave `{AppId}_is1`) sin efectos,
+  borra los datos en proceso con `cleanup --all` y **delega** el binario y la
+  reversión del PATH al desinstalador de Inno, lanzado desacoplado con
+  `subprocess.Popen` (el SO mantiene el lock del `.exe`). El payload `--json`
+  atestigua las rutas de datos en `removed` y el directorio de instalación en el
+  campo aditivo `delegated`.
+- **Guard de canal nativo** (`is_frozen`) en `setup --uninstall`, común a los
+  tres SO: desde fuente o desde una instalación pip/uv, aborta remitiendo a `pip
+  uninstall tts-sidecar` en lugar de operar sobre rutas que no le pertenecen.
+
+### Cambiado
+
+- **Reorden de la rama Linux de `setup --uninstall`** al orden unificado del
+  contrato compartido (`cleanup --all` → symlink → directorio de instalación, en
+  vez de symlink → directorio → cleanup). Habilita la **cancelación atómica**:
+  cancelar la confirmación del cleanup aborta la desinstalación sin borrar nada
+  (salida 0), imposible con el orden anterior (el binario caía antes de la
+  pregunta). Además el uninstall borra ahora el directorio raíz de datos
+  (`data_root()`) si queda vacío tras el cleanup.
+- **Payload `--json` de `setup --uninstall`**: `removed` incluye ahora las rutas
+  de datos del `cleanup` encadenado (corrección de una omisión de la rama Linux)
+  y el `data_root()` si se eliminó. En Windows se añade el campo `delegated`
+  (directorio de instalación, borrado por Inno tras la salida del proceso).
+  Ambos son cambios aditivos: `schema_version` no cambia.
+
 ## [0.5.0] — 2026-07-10
 
 Cierra las brechas de paridad de experiencia entre los 3 SO registradas en

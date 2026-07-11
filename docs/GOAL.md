@@ -134,11 +134,11 @@ Los comandos están ordenados en secuencia de dependencia: cada paso solo requie
 
 ### Desinstalación en un comando
 
-La desinstalación es **equivalente en esfuerzo a la instalación de una línea**: un único comando elimina binario, PATH integrado y datos del modelo, con residuo cero, en los tres SO. `tts-sidecar setup --uninstall` es multiplataforma y espeja la instalación one-line de cada plataforma:
+La desinstalación es **equivalente en esfuerzo a la instalación de una línea**: un único comando elimina binario, PATH integrado y datos (modelo y voces), con residuo cero, en los tres SO. `tts-sidecar setup --uninstall` es multiplataforma y espeja la instalación one-line de cada plataforma. La desinstalación es atómica de cara al usuario: cancelar la confirmación del borrado aborta el proceso sin eliminar nada. Cada SO elimina el mismo conjunto de componentes; la secuencia interna de borrado y su mecánica son detalle de implementación (ver el plan técnico en [docs/ROADMAP.md](ROADMAP.md)):
 
-- **Linux**: quita el symlink `~/.local/bin/tts-sidecar`, borra `~/.local/opt/tts-sidecar/` y encadena `cleanup --all`. Sin `sudo`.
-- **macOS**: detecta el `.app` en `~/Applications` o `/Applications`, lo elimina (`rm -rf` seguro sobre el bundle en ejecución), quita el symlink `~/.local/bin/tts-sidecar` y encadena `cleanup --all`. Sin `sudo`.
-- **Windows**: lee `UninstallString` de `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\{AppId}_is1`, invoca el desinstalador de Inno Setup (per-user, sin admin) y encadena `cleanup --all`.
+- **Linux**: el symlink `~/.local/bin/tts-sidecar`, el directorio de instalación `~/.local/opt/tts-sidecar/` y los datos (`cleanup --all`). Sin `sudo`.
+- **macOS**: los datos (`cleanup --all`), el symlink `~/.local/bin/tts-sidecar` y el `.app` (`rm -rf` seguro sobre el bundle en ejecución). Si la instalación proviene de Homebrew, la desinstalación completa se remite a `brew uninstall --cask --zap` (que cubre también los datos) en lugar de proceder. Sin `sudo`.
+- **Windows**: los datos (`cleanup --all`) en proceso; el binario y el PATH se delegan al desinstalador de Inno Setup (per-user, sin admin), leído desde `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\{AppId}_is1`.
 
 Las vías idiomáticas por SO (desinstalador de Inno en Configuración → Aplicaciones, `brew uninstall --cask --zap` en macOS vía Homebrew) se conservan en paralelo como alternativas; `setup --uninstall` es la vía equivalente de un comando en las tres plataformas. El estado real de esta paridad vive en [docs/PARITY.md](PARITY.md).
 
@@ -189,7 +189,7 @@ TTS-Sidecar/
 7. [x] El español latinoamericano suena natural y con buena prosodia
 8. [x] La síntesis funciona sin conexión a internet (modelo en local)
 9. [ ] El instalador incluye todo lo necesario (no requiere instalaciones adicionales) (validación E2E por SO, ver "Validación E2E" más abajo)
-10. [ ] **Equivalencia funcional completa entre los 3 SO**: todas las brechas accionables del registro de [docs/PARITY.md](PARITY.md) están cerradas a nivel de código/scripts/tests (one-liner macOS `install-macos.sh`, `.command` sin `sudo`, limpieza de AppImages en `install.sh`, `zap` del Cask completo, README con las tres plataformas — cerradas en v0.5.0 — y `setup --uninstall` multiplataforma — brecha de *desinstalación en un comando*, accionable pendiente). Solo la brecha de *firma de código* (SmartScreen/Gatekeeper, binarios sin firmar, cross-SO) permanece diferida por diseño al goal a largo plazo. La marca de este criterio queda pendiente de cerrar la brecha de *desinstalación en un comando* y de la validación por feedback de usuarios reales en Linux y macOS (ver "Validación E2E" más abajo)
+10. [ ] **Equivalencia funcional completa entre los 3 SO**: todas las brechas accionables del registro de [docs/PARITY.md](PARITY.md) están cerradas a nivel de código/scripts/tests (one-liner macOS `install-macos.sh`, `.command` sin `sudo`, limpieza de AppImages en `install.sh`, `zap` del Cask completo, README con las tres plataformas — cerradas en v0.5.0 — y `setup --uninstall` multiplataforma — brecha de *desinstalación en un comando*, cerrada a nivel de código/scripts/tests en v0.6.0). Solo la brecha de *firma de código* (SmartScreen/Gatekeeper, binarios sin firmar, cross-SO) permanece diferida por diseño al goal a largo plazo. Con ello **todas las brechas accionables están cerradas en código**; la marca de este criterio queda pendiente solo de la validación por feedback de usuarios reales en Linux y macOS (ver "Validación E2E" más abajo)
 
 ### Validación E2E
 
@@ -212,12 +212,12 @@ La implementación está completa únicamente cuando:
 - [x] El español latinoamericano suena natural
 - [x] Hay scripts de build e instalador por cada SO (Windows, Linux, macOS) en el pipeline de CI
 - [ ] Los instaladores funcionan sin ninguna dependencia externa (validación E2E por SO, ver "Validación E2E" arriba: smoke test automatizado en CI + validación manual Windows del propietario + feedback de usuarios reales en Linux y macOS)
-- [ ] La experiencia de instalación, uso, actualización y desinstalación es equivalente en los 3 SO: [docs/PARITY.md](PARITY.md) sin brechas abiertas
+- [ ] La experiencia de instalación, uso, actualización y desinstalación es equivalente en los 3 SO: [docs/PARITY.md](PARITY.md) sin brechas **accionables** abiertas (la de *firma de código* permanece registrada como diferida al goal a largo plazo y no bloquea esta condición)
 - [x] **README.md** refleja la nueva arquitectura con Chatterbox
 - [x] **docs/DESIGN.md** corresponde al estado implementado
 - [x] El daemon mode está implementado y funciona correctamente
 - [x] Los logs están normalizados con estructura consistente
-- [x] Los tests pytest pasan (296/296)
+- [x] Los tests pytest pasan (314/314)
 
 ---
 
@@ -238,7 +238,7 @@ Especificaciones **no comprometidas** para el goal inmediato. No se trabajan aho
 
 **Condiciones de entrada** (promueven esta spec al goal inmediato):
 
-- El goal inmediato está cumplido: producto cristalizado, con equivalencia funcional completa entre los 3 SO ([docs/PARITY.md](PARITY.md) cerrado).
+- El goal inmediato está cumplido: producto cristalizado, con equivalencia funcional completa entre los 3 SO ([docs/PARITY.md](PARITY.md) sin brechas accionables abiertas; la única brecha restante sería esta misma, de *firma de código*).
 - Windows: aprobación del proyecto por el programa SignPath OSS.
 - macOS: alta de una cuenta Apple Developer (de pago).
 

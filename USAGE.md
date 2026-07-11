@@ -41,11 +41,12 @@ per-user, sin UAC; termina ejecutando `tts-sidecar setup`):
 irm https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install.ps1 | iex
 ```
 
-**Desinstalación limpia (Linux)**, en **un paso**: `tts-sidecar setup --uninstall`
-quita el symlink de PATH en `~/.local/bin`, borra el AppImage instalado en
-`~/.local/opt/tts-sidecar/` y encadena `tts-sidecar cleanup --all` (borra la
-caché del modelo y los datos de usuario). Añade `--yes` para omitir la
-confirmación del cleanup.
+**Desinstalación limpia**, en **un comando** en los tres SO: `tts-sidecar setup
+--uninstall` encadena `tts-sidecar cleanup --all` (caché del modelo + datos de
+usuario), revierte la integración de PATH y borra el binario, en ese orden.
+Añade `--yes` para omitir la confirmación del cleanup. En Windows el binario y el
+PATH los borra el desinstalador de Inno; con Homebrew Cask el comando remite a
+`brew uninstall --cask --zap`. Ver «Desinstalación completa» más abajo.
 
 ### Usuario de PyPI (`uv tool install` / `pipx`)
 
@@ -136,7 +137,7 @@ Provisión completa. No hay nada que descargar.
   # Desde entonces, en una terminal nueva:
   tts-sidecar speak --text "Hola"
 
-  # Desinstalación limpia en un paso (symlink + AppImage + datos):
+  # Desinstalación limpia en un comando (datos + symlink + AppImage):
   tts-sidecar setup --uninstall
   # Reversión fina de solo el symlink de PATH (sin borrar nada más):
   tts-sidecar setup --remove-path
@@ -241,9 +242,14 @@ las tablas por brevedad: está presente en todos.
 Con `--remove-path` (Linux), el payload es distinto: `remove_path` (boolean,
 siempre `true`) y `removed` (boolean, `true` si el symlink existía y se quitó).
 
-Con `--uninstall` (Linux; requiere `--yes`, como `cleanup --json`), el payload
-es: `uninstall` (boolean, siempre `true`) y `removed` (lista de las rutas
-eliminadas: el symlink de PATH y el directorio de instalación).
+Con `--uninstall` (los tres SO; requiere `--yes`, como `cleanup --json`), el
+payload es: `uninstall` (boolean, siempre `true`) y `removed` (lista de las rutas
+eliminadas **en proceso**: las de datos del `cleanup` encadenado, el directorio
+raíz de datos si quedó vacío, el symlink de PATH y —en Unix— el binario). En
+**Windows** el binario lo borra el desinstalador de Inno tras la salida del
+proceso, así que no entra en `removed` sino en un campo adicional `delegated`
+(lista con el directorio de instalación); afirmarlo en `removed` sería falso
+porque aún existe cuando se emite el payload.
 
 **`cleanup --json`** — requiere `--yes` o `--dry-run` (la confirmación
 interactiva contaminaría stdout); sin ellos, error en stderr y exit 4. Los
@@ -566,27 +572,33 @@ voces de usuario. Todo es recuperable: `setup` reprovisiona el modelo y
 
 ## Desinstalación completa
 
-1. Ejecuta `tts-sidecar cleanup --all --yes` para eliminar el modelo y las voces
-   de usuario sin confirmación interactiva (los datos que la desinstalación del
-   binario/paquete no toca; usa `cleanup --all` sin `--yes` si prefieres confirmar).
-2. Desinstala según tu canal:
-   - **Windows (binario)**: desinstalador de Inno Setup (Configuración →
-     Aplicaciones), sin privilegios de administrador (instalación per-user);
-     revierte la entrada de PATH en HKCU.
-   - **Linux (binario)**: `tts-sidecar setup --uninstall` lo hace en **un paso**:
-     quita el symlink de PATH, borra `~/.local/opt/tts-sidecar/` y encadena
-     `cleanup --all` (con confirmación; `--yes` la omite). Reemplaza los tres
-     pasos manuales que hacían falta antes. (`setup --remove-path` se conserva
-     como reversión fina de solo el symlink de PATH, sin borrar nada más.) Con
-     `--json` (que requiere `--yes`) emite un payload con `schema_version` y las
-     rutas eliminadas, igual que `--remove-path`.
-   - **macOS (binario)**: ejecuta `Desinstalar (quitar del PATH).command` del
-     `.dmg` (ahora **sin `sudo`**: elimina el symlink per-user de `~/.local/bin`)
-     y arrastra el `.app` a la Papelera. **Nota de transición**: si instalaste
-     una versión anterior a 0.5.0, el symlink vivía en `/usr/local/bin`; el
-     script de desinstalación lo detecta e indica cómo quitarlo (`sudo rm
-     /usr/local/bin/tts-sidecar`).
-   - **PyPI**: `uv tool uninstall tts-sidecar` / `pipx uninstall tts-sidecar`.
+**Canal nativo (los tres SO), en un comando**: `tts-sidecar setup --uninstall`
+encadena `cleanup --all` (modelo + voces), revierte la integración de PATH y
+borra el binario, **en ese orden** (datos independientes primero, ancla al
+final). Cancelar el cleanup aborta la desinstalación sin borrar nada (salida 0).
+Con `--yes` se omite la confirmación; con `--json` (que exige `--yes`) emite un
+payload con `schema_version`, `uninstall` y `removed`. Solo aplica a la
+instalación nativa (AppImage / `.app` / Inno); desde fuente o pip/uv aborta
+remitiendo a `pip uninstall tts-sidecar`.
+
+- **Linux (AppImage)**: quita el symlink de PATH y borra
+  `~/.local/opt/tts-sidecar/`. (`setup --remove-path` se conserva como reversión
+  fina de solo el symlink, sin borrar nada más.)
+- **macOS (`.app`)**: quita el symlink de `~/.local/bin` y borra el `.app`
+  (resuelto desde el ejecutable, cubre `~/Applications`, `/Applications` y el
+  Cask). Si instalaste con **Homebrew Cask**, el comando lo detecta por la
+  metadata del Caskroom y **remite a `brew uninstall --cask --zap tts-sidecar`**
+  sin borrar nada, para no dejar el Caskroom inconsistente (su `zap` ya cubre los
+  datos). **Nota de transición**: si instalaste una versión anterior a 0.5.0, el
+  symlink vivía en `/usr/local/bin`; el `.command` de desinstalación del `.dmg` lo
+  detecta e indica cómo quitarlo (`sudo rm /usr/local/bin/tts-sidecar`).
+- **Windows (Inno)**: borra los datos en proceso y **delega** el binario y la
+  reversión del PATH (HKCU) al desinstalador de Inno, lanzado desacoplado (el SO
+  mantiene el lock del `.exe`). El directorio de instalación se reporta en el
+  campo `delegated` del payload, no en `removed`. La vía idiomática (Configuración
+  → Aplicaciones, sin admin) sigue disponible como alternativa.
+- **PyPI**: `uv tool uninstall tts-sidecar` / `pipx uninstall tts-sidecar` (más
+  `cleanup --all` para los datos, que la desinstalación del paquete no toca).
 
 ---
 

@@ -1033,17 +1033,29 @@ class TestCmdCleanup:
 
 
 class TestSetupUninstall:
-    """setup --uninstall: desinstalación Linux de un paso (brecha de *desinstalador de Linux*)."""
+    """setup --uninstall: desinstalación de un comando en los 3 SO (dispatch por
+    SO sobre el contrato compartido). Ver docs/ROADMAP.md §Plan técnico."""
+
+    # ---- Fixtures compartidos ------------------------------------------------
 
     def _fake_home_linux(self, monkeypatch, tmp_path):
         home = tmp_path / "home"
         home.mkdir()
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
         monkeypatch.setattr(sys, "platform", "linux")
+        # El guard de canal nativo exige modo congelado en las tres ramas.
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
         return home
 
-    def _fake_cleanup_env(self, tmp_path, monkeypatch):
-        """Caché HF sintética + voces de usuario, como en TestCmdCleanup."""
+    def _fake_cleanup_env(self, tmp_path, monkeypatch, voices_inside_root=True):
+        """Caché HF sintética + voces de usuario + data_root mockeado.
+
+        data_root se mockea a un directorio bajo tmp_path para que el borrado del
+        directorio raíz vacío del contrato compartido no toque el HOME real. Con
+        voices_inside_root las voces cuelgan de data_root (como en producción:
+        voices_root() = data_root()/voices), de modo que borrarlas deja data_root
+        vacío y comprobable.
+        """
         hub = tmp_path / "hub"
         propio1 = hub / "models--ResembleAI--Chatterbox-Multilingual-es-mx-latam"
         propio2 = hub / "models--ResembleAI--chatterbox"
@@ -1051,10 +1063,70 @@ class TestSetupUninstall:
             d.mkdir(parents=True)
         from huggingface_hub import constants
         monkeypatch.setattr(constants, "HF_HUB_CACHE", str(hub))
-        voces = tmp_path / "voces"
+
+        data_root = tmp_path / "data_root"
+        if voices_inside_root:
+            voces = data_root / "voices"
+        else:
+            voces = tmp_path / "voces"
         (voces / "mi_voz").mkdir(parents=True)
+        monkeypatch.setattr("tts_sidecar.paths.data_root", lambda: str(data_root))
         monkeypatch.setattr("tts_sidecar.voices.voices_root", lambda: str(voces))
         return propio1, propio2, voces
+
+    def _fake_macos(self, monkeypatch, tmp_path):
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+        monkeypatch.setattr(sys, "platform", "darwin")
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        # Prefijo de Homebrew sin Caskroom por defecto (vía .dmg/one-liner).
+        monkeypatch.setenv("HOMEBREW_PREFIX", str(tmp_path / "brew"))
+        return home
+
+    def _make_fake_app(self, tmp_path, subdir="Applications"):
+        app = tmp_path / subdir / "tts-sidecar.app"
+        exe = app / "Contents" / "MacOS" / "tts-sidecar"
+        exe.parent.mkdir(parents=True)
+        exe.write_bytes(b"bin")
+        return app, exe
+
+    def _fake_windows(self, monkeypatch, tmp_path,
+                      quiet=r'"C:\Programs\tts-sidecar\unins000.exe" /SILENT',
+                      key_present=True):
+        import types
+        monkeypatch.setattr(sys, "platform", "win32")
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        exe = tmp_path / "Programs" / "tts-sidecar" / "tts-sidecar.exe"
+        exe.parent.mkdir(parents=True)
+        exe.write_bytes(b"exe")
+        monkeypatch.setattr(sys, "executable", str(exe))
+
+        fake = types.ModuleType("winreg")
+        fake.HKEY_CURRENT_USER = "HKCU"
+
+        class _Key:
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+
+        if key_present:
+            fake.OpenKey = lambda hive, sub: _Key()
+            fake.QueryValueEx = lambda key, name: (quiet, 1)
+        else:
+            def _missing(*a):
+                raise OSError("clave inexistente")
+            fake.OpenKey = _missing
+            fake.QueryValueEx = _missing
+        monkeypatch.setitem(sys.modules, "winreg", fake)
+
+        import subprocess
+        popen = MagicMock()
+        monkeypatch.setattr(subprocess, "Popen", popen)
+        return exe, popen
+
+    # ---- Parser / dispatch ---------------------------------------------------
 
     @pytest.mark.parametrize("conflicting", ["--remove-path", "--force-update"])
     def test_uninstall_es_mutuamente_excluyente(self, monkeypatch, capsys, conflicting):
@@ -1067,14 +1139,39 @@ class TestSetupUninstall:
         assert exc.value.code == 2
         assert "not allowed with" in capsys.readouterr().err
 
-    def test_uninstall_no_linux_falla(self, monkeypatch, capsys):
+    def test_uninstall_plataforma_no_soportada_falla(self, monkeypatch, capsys):
+        # Con el dispatch, darwin/win32 son ramas válidas; solo una plataforma
+        # realmente fuera del dispatch (freebsd) cae en EXIT_INVALID_INPUT.
         from tts_sidecar.cli import cmd_setup, EXIT_INVALID_INPUT
 
-        monkeypatch.setattr(sys, "platform", "darwin")
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.setattr(sys, "platform", "freebsd")
         with pytest.raises(SystemExit) as exc:
             cmd_setup(MockArgs(uninstall=True))
         assert exc.value.code == EXIT_INVALID_INPUT
-        assert "solo aplica a la instalación AppImage de Linux" in capsys.readouterr().err
+        assert "no soporta la plataforma" in capsys.readouterr().err
+
+    def test_uninstall_guard_canal_nativo(self, monkeypatch, capsys):
+        # Proceso no congelado (fuente o pip/uv) → aborta remitiendo a pip.
+        from tts_sidecar.cli import cmd_setup, EXIT_INVALID_INPUT
+
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr(sys, "frozen", False, raising=False)
+        with pytest.raises(SystemExit) as exc:
+            cmd_setup(MockArgs(uninstall=True))
+        assert exc.value.code == EXIT_INVALID_INPUT
+        assert "pip uninstall" in capsys.readouterr().err
+
+    def test_uninstall_json_requiere_yes(self, monkeypatch, tmp_path, capsys):
+        from tts_sidecar.cli import cmd_setup, EXIT_INVALID_INPUT
+
+        self._fake_home_linux(monkeypatch, tmp_path)
+        with pytest.raises(SystemExit) as exc:
+            cmd_setup(MockArgs(uninstall=True, json=True))
+        assert exc.value.code == EXIT_INVALID_INPUT
+        assert "requiere --yes" in capsys.readouterr().err
+
+    # ---- Contrato compartido (rama Linux como representante) ------------------
 
     def test_uninstall_elimina_symlink_y_directorio(self, monkeypatch, tmp_path, capsys):
         if not _symlinks_supported(tmp_path):
@@ -1114,35 +1211,66 @@ class TestSetupUninstall:
 
         assert not propio1.exists() and not propio2.exists() and not voces.exists()
 
-    def test_uninstall_cleanup_pregunta_sin_yes(self, monkeypatch, tmp_path, capsys):
+    def test_uninstall_cancelacion_atomica(self, monkeypatch, tmp_path, capsys):
+        # El reorden vuelve la cancelación atómica: cancelar el cleanup (primer
+        # paso) aborta la desinstalación sin tocar PATH ni binario.
+        if not _symlinks_supported(tmp_path):
+            pytest.skip("el entorno no permite crear symlinks")
         from tts_sidecar.cli import cmd_setup
 
-        self._fake_home_linux(monkeypatch, tmp_path)
+        home = self._fake_home_linux(monkeypatch, tmp_path)
         propio1, propio2, voces = self._fake_cleanup_env(tmp_path, monkeypatch)
+        link = home / ".local" / "bin" / "tts-sidecar"
+        link.parent.mkdir(parents=True)
+        link.symlink_to(tmp_path)
+        install_dir = home / ".local" / "opt" / "tts-sidecar"
+        install_dir.mkdir(parents=True)
         monkeypatch.setattr("builtins.input", lambda _: "n")
 
         cmd_setup(MockArgs(uninstall=True))
 
-        # Sin --yes, el cleanup pregunta y una respuesta negativa preserva los datos.
+        # Nada borrado: datos, symlink y directorio intactos.
         assert propio1.exists() and propio2.exists() and voces.exists()
+        assert link.exists() and install_dir.exists()
+        assert "cancelada" in capsys.readouterr().err.lower()
 
-    def test_uninstall_json_requiere_yes(self, monkeypatch, tmp_path, capsys):
-        from tts_sidecar.cli import cmd_setup, EXIT_INVALID_INPUT
+    def test_uninstall_nada_que_limpiar_continua(self, monkeypatch, tmp_path, capsys):
+        # «No hay nada que limpiar» NO es cancelación: la desinstalación continúa
+        # y borra symlink + directorio.
+        if not _symlinks_supported(tmp_path):
+            pytest.skip("el entorno no permite crear symlinks")
+        from tts_sidecar.cli import cmd_setup
 
-        self._fake_home_linux(monkeypatch, tmp_path)
-        with pytest.raises(SystemExit) as exc:
-            cmd_setup(MockArgs(uninstall=True, json=True))
-        assert exc.value.code == EXIT_INVALID_INPUT
-        assert "requiere --yes" in capsys.readouterr().err
+        home = self._fake_home_linux(monkeypatch, tmp_path)
+        # Entorno sin caché ni voces preexistentes.
+        hub = tmp_path / "hub"
+        hub.mkdir()
+        from huggingface_hub import constants
+        monkeypatch.setattr(constants, "HF_HUB_CACHE", str(hub))
+        data_root = tmp_path / "data_root"
+        data_root.mkdir()
+        monkeypatch.setattr("tts_sidecar.paths.data_root", lambda: str(data_root))
+        monkeypatch.setattr("tts_sidecar.voices.voices_root", lambda: str(data_root / "voices"))
 
-    def test_uninstall_json_payload(self, monkeypatch, tmp_path, capsys):
+        link = home / ".local" / "bin" / "tts-sidecar"
+        link.parent.mkdir(parents=True)
+        link.symlink_to(tmp_path)
+        install_dir = home / ".local" / "opt" / "tts-sidecar"
+        install_dir.mkdir(parents=True)
+
+        cmd_setup(MockArgs(uninstall=True, yes=True))
+
+        assert not link.exists()
+        assert not install_dir.exists()
+
+    def test_uninstall_json_payload_incluye_rutas_datos(self, monkeypatch, tmp_path, capsys):
         if not _symlinks_supported(tmp_path):
             pytest.skip("el entorno no permite crear symlinks")
         import json as _json
         from tts_sidecar.cli import cmd_setup
 
         home = self._fake_home_linux(monkeypatch, tmp_path)
-        self._fake_cleanup_env(tmp_path, monkeypatch)
+        propio1, propio2, voces = self._fake_cleanup_env(tmp_path, monkeypatch)
         link = home / ".local" / "bin" / "tts-sidecar"
         link.parent.mkdir(parents=True)
         link.symlink_to(tmp_path)
@@ -1153,9 +1281,137 @@ class TestSetupUninstall:
 
         payload = _json.loads(capsys.readouterr().out.strip())
         assert payload["uninstall"] is True
+        assert "schema_version" in payload
+        # Rutas de datos del cleanup encadenado atestiguadas en removed.
+        assert str(propio1) in payload["removed"]
+        assert str(voces) in payload["removed"]
+        # Symlink y directorio de instalación (borrados en proceso).
         assert str(link) in payload["removed"]
         assert str(install_dir) in payload["removed"]
-        assert "schema_version" in payload
+
+    def test_uninstall_data_root_vacio_eliminado(self, monkeypatch, tmp_path, capsys):
+        import json as _json
+        from tts_sidecar.cli import cmd_setup
+
+        self._fake_home_linux(monkeypatch, tmp_path)
+        # Voces dentro de data_root: borrarlas deja data_root vacío.
+        self._fake_cleanup_env(tmp_path, monkeypatch, voices_inside_root=True)
+        data_root = tmp_path / "data_root"
+
+        cmd_setup(MockArgs(uninstall=True, yes=True, json=True))
+
+        payload = _json.loads(capsys.readouterr().out.strip())
+        assert not data_root.exists()
+        assert str(data_root) in payload["removed"]
+
+    # ---- Rama macOS ----------------------------------------------------------
+
+    def test_uninstall_macos_borra_bundle_symlink_cleanup(self, monkeypatch, tmp_path, capsys):
+        if not _symlinks_supported(tmp_path):
+            pytest.skip("el entorno no permite crear symlinks")
+        from tts_sidecar.cli import cmd_setup
+
+        home = self._fake_macos(monkeypatch, tmp_path)
+        propio1, propio2, voces = self._fake_cleanup_env(tmp_path, monkeypatch)
+        app, exe = self._make_fake_app(tmp_path)
+        monkeypatch.setattr(sys, "executable", str(exe))
+        link = home / ".local" / "bin" / "tts-sidecar"
+        link.parent.mkdir(parents=True)
+        link.symlink_to(tmp_path)
+
+        cmd_setup(MockArgs(uninstall=True, yes=True))
+
+        assert not app.exists()
+        assert not link.exists()
+        assert not propio1.exists() and not voces.exists()
+
+    def test_uninstall_macos_resuelve_symlink_del_ejecutable(self, monkeypatch, tmp_path, capsys):
+        if not _symlinks_supported(tmp_path):
+            pytest.skip("el entorno no permite crear symlinks")
+        from tts_sidecar.cli import cmd_setup
+
+        home = self._fake_macos(monkeypatch, tmp_path)
+        self._fake_cleanup_env(tmp_path, monkeypatch)
+        app, exe = self._make_fake_app(tmp_path)
+        # sys.executable apunta al symlink de ~/.local/bin, no al binario real.
+        link = home / ".local" / "bin" / "tts-sidecar"
+        link.parent.mkdir(parents=True)
+        link.symlink_to(exe)
+        monkeypatch.setattr(sys, "executable", str(link))
+
+        cmd_setup(MockArgs(uninstall=True, yes=True))
+
+        # resolve() localizó el .app real pese al symlink del ejecutable.
+        assert not app.exists()
+
+    def test_uninstall_macos_fuera_de_app_falla(self, monkeypatch, tmp_path, capsys):
+        from tts_sidecar.cli import cmd_setup, EXIT_INVALID_INPUT
+
+        self._fake_macos(monkeypatch, tmp_path)
+        exe = tmp_path / "usr" / "local" / "bin" / "tts-sidecar"
+        exe.parent.mkdir(parents=True)
+        exe.write_bytes(b"bin")
+        monkeypatch.setattr(sys, "executable", str(exe))
+
+        with pytest.raises(SystemExit) as exc:
+            cmd_setup(MockArgs(uninstall=True, yes=True))
+        assert exc.value.code == EXIT_INVALID_INPUT
+        assert "bundle .app" in capsys.readouterr().err
+
+    def test_uninstall_macos_homebrew_difiere_a_brew(self, monkeypatch, tmp_path, capsys):
+        from tts_sidecar.cli import cmd_setup, EXIT_INVALID_INPUT
+
+        self._fake_macos(monkeypatch, tmp_path)
+        propio1, propio2, voces = self._fake_cleanup_env(tmp_path, monkeypatch)
+        app, exe = self._make_fake_app(tmp_path)
+        monkeypatch.setattr(sys, "executable", str(exe))
+        # Metadata del Caskroom presente bajo HOMEBREW_PREFIX.
+        (tmp_path / "brew" / "Caskroom" / "tts-sidecar").mkdir(parents=True)
+
+        with pytest.raises(SystemExit) as exc:
+            cmd_setup(MockArgs(uninstall=True, yes=True))
+        assert exc.value.code == EXIT_INVALID_INPUT
+        assert "brew uninstall --cask --zap" in capsys.readouterr().err
+        # Aborta sin borrar nada.
+        assert app.exists()
+        assert propio1.exists() and voces.exists()
+
+    # ---- Rama Windows --------------------------------------------------------
+
+    def test_uninstall_windows_valida_registro_y_desacopla(self, monkeypatch, tmp_path, capsys):
+        import json as _json
+        from tts_sidecar.cli import cmd_setup
+
+        exe, popen = self._fake_windows(monkeypatch, tmp_path)
+        propio1, propio2, voces = self._fake_cleanup_env(tmp_path, monkeypatch)
+
+        cmd_setup(MockArgs(uninstall=True, yes=True, json=True))
+
+        # cleanup corrió en proceso.
+        assert not propio1.exists() and not voces.exists()
+        # Desinstalador lanzado desacoplado, sin espera, con el string tal cual.
+        popen.assert_called_once()
+        assert popen.call_args[0][0] == r'"C:\Programs\tts-sidecar\unins000.exe" /SILENT'
+        popen.return_value.wait.assert_not_called()
+
+        payload = _json.loads(capsys.readouterr().out.strip())
+        install_dir = str(exe.parent)
+        assert str(propio1) in payload["removed"]
+        assert payload["delegated"] == [install_dir]
+        assert install_dir not in payload["removed"]
+
+    def test_uninstall_windows_sin_registro_falla_sin_borrar(self, monkeypatch, tmp_path, capsys):
+        from tts_sidecar.cli import cmd_setup, EXIT_INVALID_INPUT
+
+        exe, popen = self._fake_windows(monkeypatch, tmp_path, key_present=False)
+        propio1, propio2, voces = self._fake_cleanup_env(tmp_path, monkeypatch)
+
+        with pytest.raises(SystemExit) as exc:
+            cmd_setup(MockArgs(uninstall=True, yes=True))
+        assert exc.value.code == EXIT_INVALID_INPUT
+        # La validación del registro precede al cleanup: datos intactos.
+        assert propio1.exists() and voces.exists()
+        popen.assert_not_called()
 
 
 class TestWriteCommandsJSON:

@@ -180,7 +180,11 @@ GPLv3 (LGPL-2.1+, MPL-2.0, GPLv3+ de pykakasi); sus atribuciones están en
 # En Linux (AppImage) también crea el symlink de PATH en ~/.local/bin.
 tts-sidecar setup
 tts-sidecar setup --remove-path   # revierte el symlink de PATH (Linux)
-tts-sidecar setup --uninstall     # desinstala Linux en un paso: symlink + dir + cleanup --all
+# Desinstala en un comando en los 3 SO (canal nativo): encadena cleanup --all,
+# revierte el PATH y borra el binario, en ese orden (datos→PATH→ancla). Dispatch
+# por SO: Linux (symlink+dir), macOS (.app; con Homebrew difiere a brew --zap),
+# Windows (datos en proceso + binario/PATH delegados al desinstalador de Inno).
+tts-sidecar setup --uninstall
 tts-sidecar setup --uninstall --yes   # omite la confirmación del cleanup encadenado
 
 # Desaprovisionamiento (borrado quirúrgico: solo las carpetas del proyecto)
