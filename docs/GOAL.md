@@ -9,23 +9,42 @@ Es la fuente de verdad contra la que se evalúa cualquier cambio: si una propues
 - **[Goal inmediato](#goal-inmediato)** — la especificación y el diseño del objetivo completo, redactados como el ideal que se sigue **como si ya estuviese implementado**. Todo cambio sin impedimentos se trabaja contra esta parte, de forma inmediata.
 - **[Goal a largo plazo](#goal-a-largo-plazo)** — las especificaciones **no comprometidas** para el goal actual, separadas para no frenar el desarrollo que no tiene impedimentos. Cada spec diferida lleva su justificación y su condición de entrada; al cumplirse la condición, se promueve al goal inmediato.
 
+El [criterio de clasificación](#clasificación-de-specs) decide a cuál de las dos partes va cada spec nueva.
+
 ## Tabla de contenidos
 
+- [Clasificación de specs](#clasificación-de-specs)
 - [Goal inmediato](#goal-inmediato)
   - [Objetivo](#objetivo)
   - [Alcance](#alcance)
   - [Restricciones](#restricciones)
   - [Especificación](#especificación)
-    - [Requisitos del instalador (canal nativo)](#requisitos-del-instalador-canal-nativo)
-    - [Paridad de experiencia entre sistemas operativos](#paridad-de-experiencia-entre-sistemas-operativos)
-    - [Comandos CLI objetivo](#comandos-cli-objetivo-invocable-desde-cualquier-lenguaje)
+    - [Instalador (canal nativo)](#instalador-canal-nativo)
+    - [Paridad de experiencia](#paridad-de-experiencia)
+    - [Comandos CLI](#comandos-cli)
     - [Estructura del proyecto](#estructura-del-proyecto)
   - [Criterios de aceptación](#criterios-de-aceptación)
-    - [Decisión de validación E2E](#decisión-de-validación-e2e)
+    - [Validación E2E](#validación-e2e)
   - [Condición de finalización](#condición-de-finalización)
 - [Goal a largo plazo](#goal-a-largo-plazo)
-  - [Firma de código Windows (SignPath) y notarización Apple (macOS)](#firma-de-código-windows-signpath-y-notarización-apple-macos)
-  - [Desinstalación de un comando en `setup --uninstall` (multiplataforma)](#desinstalación-de-un-comando-en-setup---uninstall-multiplataforma)
+  - [Firma de código y notarización](#firma-de-código-y-notarización)
+  - [Desinstalación en un comando (multiplataforma)](#desinstalación-en-un-comando-multiplataforma)
+
+---
+
+# Clasificación de specs
+
+Toda spec nueva se clasifica corriendo este test **antes** de ubicarla, sin heredar la clasificación de specs vecinas. Una spec va al **goal a largo plazo** únicamente si cumple **al menos uno** de estos tres impedimentos objetivos:
+
+1. **Gate externo / dependencia de un tercero**: no puede completarse sin la aprobación o el alta de un tercero (p. ej. aprobación del programa SignPath OSS, cuenta Apple Developer de pago).
+2. **Condición de madurez / cristalización del producto**: solo tiene sentido sobre un producto ya estabilizado, y hacerla antes obligaría a rehacerla mientras el producto sigue cambiando de forma (p. ej. firmar/notarizar artefactos que aún mutan).
+3. **Impedimento activo que bloquea o contamina el desarrollo inmediato**: trabajarla ahora frenaría o ensuciaría la spec que guía el trabajo diario.
+
+Si la spec **no cumple ninguno** de los tres, va al **goal inmediato** y se trabaja ya — **aunque no sea prioritaria**. Reglas para evitar el diferimiento injustificado:
+
+- Una **preferencia de priorización** («prefiero cerrar X antes que Y», «invertir en esto cuando haya tiempo») **no es** un impedimento y **no justifica** diferir. Priorizar es elegir el orden dentro del goal inmediato, no expulsar la spec de él.
+- Una condición de entrada válida es **objetiva y externa** (una aprobación, un alta, un release de un tercero). Si la condición de entrada es «cuando el dueño decida priorizarla», la spec **no** tenía impedimento y pertenece al goal inmediato.
+- Cuando se pida **justificar** un diferimiento ya hecho, re-evaluar si la spec era diferible según este test — **no** rellenar el formato con una racionalización que confirme la decisión previa.
 
 ---
 
@@ -54,7 +73,7 @@ Implementar y validar la síntesis en español latinoamericano con voz propia de
 
 ## Especificación
 
-### Requisitos del instalador (canal nativo)
+### Instalador (canal nativo)
 
 Estos requisitos aplican al **canal nativo** (binarios PyInstaller por SO), que sigue siendo el canal recomendado para usuarios sin Python instalado:
 
@@ -66,7 +85,7 @@ Estos requisitos aplican al **canal nativo** (binarios PyInstaller por SO), que 
 
 El proyecto distribuye además un **canal PyPI** complementario (`uv tool install tts-sidecar` / `pipx install tts-sidecar`) para audiencia técnica con Python 3.13+ ya instalado, que no está sujeto a estos requisitos (sí requiere Python, y en Linux la librería del sistema `libportaudio2`). Ver [docs/DISTRIBUTION.md](DISTRIBUTION.md) para la matriz de trade-offs completa entre ambos canales.
 
-### Paridad de experiencia entre sistemas operativos
+### Paridad de experiencia
 
 El ideal de paridad que persigue el goal inmediato, por fase del ciclo de vida (el estado real y el registro de brechas viven en [docs/PARITY.md](PARITY.md)):
 
@@ -79,7 +98,7 @@ El ideal de paridad que persigue el goal inmediato, por fase del ciclo de vida (
 | Actualización | Reemplaza la versión anterior sin residuo ni pasos-trampa |
 | Desinstalación | Datos (`cleanup --all`) + binario, con residuo cero |
 
-### Comandos CLI objetivo (invocable desde cualquier lenguaje)
+### Comandos CLI
 
 Los comandos están ordenados en secuencia de dependencia: cada paso solo requiere que los anteriores hayan funcionado. El daemon es el camino principal de uso: carga el modelo una sola vez y lo mantiene en memoria, eliminando el overhead de carga en cada invocación. Por eso su ciclo de vida envuelve toda la sesión: se arranca antes de sintetizar y se detiene al final.
 
@@ -149,20 +168,20 @@ TTS-Sidecar/
 
 ## Criterios de aceptación
 
-<!-- Los criterios 1-3 y 9 son claims de ejecución por SO: el pipeline de build (CI + scripts/build_*.py) produce los instaladores y un smoke test automatizado del binario congelado (`tts-sidecar version`), pero la validación end-to-end sobre cada SO es por diseño externa al pipeline (ver "Decisión de validación E2E" más abajo). -->
+<!-- Los criterios 1-3 y 9 son claims de ejecución por SO: el pipeline de build (CI + scripts/build_*.py) produce los instaladores y un smoke test automatizado del binario congelado (`tts-sidecar version`), pero la validación end-to-end sobre cada SO es por diseño externa al pipeline (ver "Validación E2E" más abajo). -->
 
-1. [ ] El instalador de Windows (.exe) funciona en Windows 10/11 sin dependencias (validación E2E por SO, ver "Decisión de validación E2E" más abajo)
-2. [ ] El instalador de Linux funciona en distribuciones principales (validación E2E por SO, ver "Decisión de validación E2E" más abajo)
-3. [ ] El instalador de macOS funciona en el mínimo declarado por `LSMinimumSystemVersion` (Apple Silicon; Mac Intel no soportado) — derivado dinámicamente del `MACOSX_DEPLOYMENT_TARGET` del toolchain de build, no un número fijo (validación E2E por SO, ver "Decisión de validación E2E" más abajo)
+1. [ ] El instalador de Windows (.exe) funciona en Windows 10/11 sin dependencias (validación E2E por SO, ver "Validación E2E" más abajo)
+2. [ ] El instalador de Linux funciona en distribuciones principales (validación E2E por SO, ver "Validación E2E" más abajo)
+3. [ ] El instalador de macOS funciona en el mínimo declarado por `LSMinimumSystemVersion` (Apple Silicon; Mac Intel no soportado) — derivado dinámicamente del `MACOSX_DEPLOYMENT_TARGET` del toolchain de build, no un número fijo (validación E2E por SO, ver "Validación E2E" más abajo)
 4. [x] `tts-sidecar speak --text "Hola mundo"` reproduce audio en español
 5. [x] `tts-sidecar voice add --name test --reference ref.wav --speech speech.wav` clona la voz
 6. [x] El audio generado suena en español con las características de la voz de referencia
 7. [x] El español latinoamericano suena natural y con buena prosodia
 8. [x] La síntesis funciona sin conexión a internet (modelo en local)
-9. [ ] El instalador incluye todo lo necesario (no requiere instalaciones adicionales) (validación E2E por SO, ver "Decisión de validación E2E" más abajo)
-10. [ ] **Equivalencia funcional completa entre los 3 SO**: todas las brechas accionables del registro de [docs/PARITY.md](PARITY.md) están cerradas a nivel de código/scripts/tests en v0.5.0 (one-liner macOS `install-macos.sh`, `.command` sin `sudo`, limpieza de AppImages en `install.sh`, `setup --uninstall`, `zap` del Cask completo, README con las tres plataformas). Solo la brecha 4 (SmartScreen/Gatekeeper, binarios sin firmar, cross-SO) y la brecha 8 (desinstalación de un comando en la vía one-liner de macOS) permanecen abiertas, diferidas por diseño —la 4 a la firma de código y la 8 a `setup --uninstall` multiplataforma (pendiente)— del goal a largo plazo. La marca de este criterio queda pendiente únicamente de la validación por feedback de usuarios reales en Linux y macOS (ver "Decisión de validación E2E" más abajo)
+9. [ ] El instalador incluye todo lo necesario (no requiere instalaciones adicionales) (validación E2E por SO, ver "Validación E2E" más abajo)
+10. [ ] **Equivalencia funcional completa entre los 3 SO**: todas las brechas accionables del registro de [docs/PARITY.md](PARITY.md) están cerradas a nivel de código/scripts/tests en v0.5.0 (one-liner macOS `install-macos.sh`, `.command` sin `sudo`, limpieza de AppImages en `install.sh`, `setup --uninstall`, `zap` del Cask completo, README con las tres plataformas). Solo la brecha 4 (SmartScreen/Gatekeeper, binarios sin firmar, cross-SO) y la brecha 8 (desinstalación de un comando en la vía one-liner de macOS) permanecen abiertas, diferidas por diseño —la 4 a la firma de código y la 8 a `setup --uninstall` multiplataforma (pendiente)— del goal a largo plazo. La marca de este criterio queda pendiente únicamente de la validación por feedback de usuarios reales en Linux y macOS (ver "Validación E2E" más abajo)
 
-### Decisión de validación E2E
+### Validación E2E
 
 La validación end-to-end de los instaladores (instalar → `setup` → `speak` real → desinstalar) **no se ejecuta dentro del pipeline de CI** por una decisión consciente de diseño: requiere cuota de runner significativa (carga del modelo Chatterbox + descarga de ~2 GB de pesos + síntesis real con audio) y reproducirla en cada push no aporta señal proporcional a su coste. El pipeline sí ejecuta un **smoke test automatizado** del binario congelado (`tts-sidecar version`, exit 0) en los cuatro jobs de build, que detecta empaquetados rotos (metadata faltante, `--collect-all` incompleto) sin pagar el coste del modelo.
 
@@ -182,7 +201,7 @@ La implementación está completa únicamente cuando:
 - [x] El audio generado preserva las características de la voz original
 - [x] El español latinoamericano suena natural
 - [x] Hay scripts de build e instalador por cada SO (Windows, Linux, macOS) en el pipeline de CI
-- [ ] Los instaladores funcionan sin ninguna dependencia externa (validación E2E por SO, ver "Decisión de validación E2E" arriba: smoke test automatizado en CI + validación manual Windows del propietario + feedback de usuarios reales en Linux y macOS)
+- [ ] Los instaladores funcionan sin ninguna dependencia externa (validación E2E por SO, ver "Validación E2E" arriba: smoke test automatizado en CI + validación manual Windows del propietario + feedback de usuarios reales en Linux y macOS)
 - [ ] La experiencia de instalación, uso, actualización y desinstalación es equivalente en los 3 SO: [docs/PARITY.md](PARITY.md) sin brechas abiertas
 - [x] **README.md** refleja la nueva arquitectura con Chatterbox
 - [x] **docs/DESIGN.md** corresponde al estado implementado
@@ -194,9 +213,9 @@ La implementación está completa únicamente cuando:
 
 # Goal a largo plazo
 
-Especificaciones **no comprometidas** para el goal inmediato. No se trabajan ahora — cada una registra por qué se difiere y qué condición la promueve al goal inmediato.
+Especificaciones **no comprometidas** para el goal inmediato. No se trabajan ahora — cada una registra por qué se difiere (según el [criterio de clasificación](#clasificación-de-specs)) y qué condición la promueve al goal inmediato.
 
-## Firma de código Windows (SignPath) y notarización Apple (macOS)
+## Firma de código y notarización
 
 **Motivación**: los binarios del canal nativo no están firmados, por lo que Windows SmartScreen y macOS Gatekeeper bloquean el primer arranque cuando el artefacto se descarga por navegador (ver `SECURITY.md` §"Artefactos sin firmar" y `docs/BUILD.md` §"Limitación conocida: firma de código y notarización"). Los instaladores de una línea y el canal PyPI ya mitigan esta fricción (descarga por CLI sin Mark-of-the-Web / launcher generado localmente), pero no la eliminan para la descarga directa desde el navegador.
 
@@ -215,7 +234,7 @@ Especificaciones **no comprometidas** para el goal inmediato. No se trabajan aho
 
 **Criterio de cierre**: los instaladores de Windows y macOS generados por CI arrancan sin disparar SmartScreen ni Gatekeeper en una instalación limpia, incluso descargados por navegador.
 
-## Desinstalación de un comando en `setup --uninstall` (multiplataforma)
+## Desinstalación en un comando (multiplataforma)
 
 **Motivación**: Linux ya ofrece `tts-sidecar setup --uninstall` (un comando, todo
 encadenado). macOS vía Cask también (`brew uninstall --cask --zap`). Pero macOS
@@ -255,4 +274,3 @@ experiencia refinada cuando el producto aún está en desarrollo.
 sin errores, elimina binario, symlink/PATH integrado y datos del modelo, y el
 suite pytest pasa (test nuevo o extendido que cubra Linux/macOS/Windows en la
 sección `TestSetupUninstall`).
-

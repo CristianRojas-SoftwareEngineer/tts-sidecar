@@ -280,7 +280,7 @@ cubiertos por test, y existe el runbook en `SECURITY.md`.
   una instalación anterior.
 - **Cierre** (automatizado): el smoke-test `bats` pasa en CI; la validación E2E
   real, sin un Mac del propietario, se difiere al circuito de feedback de usuarios
-  (ver `docs/GOAL.md` §«Decisión de validación E2E»).
+  (ver `docs/GOAL.md` §«Validación E2E»).
 - **Riesgos residuales**: solo Apple Silicon (el guard aborta en Intel); la firma
   de código/notarización sigue diferida (goal a largo plazo), pero la limpieza de
   cuarentena elimina la fricción de Gatekeeper para quien use el one-liner.

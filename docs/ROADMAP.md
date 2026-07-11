@@ -17,7 +17,7 @@ falta*.
 **Implementado y verificable en el repo** (la validación end-to-end de los
 instaladores por SO es externa al pipeline por diseño; ver la «Decisión de
 validación E2E» en
-[docs/GOAL.md](GOAL.md#decisión-de-validación-e2e)):
+[docs/GOAL.md](GOAL.md#validación-e2e)):
 
 - Motor Chatterbox Multilingual V3 implementado (Python)
 - Sistema de audio playback nativo por SO (pycaw/winsound/sounddevice/afplay)
@@ -40,8 +40,8 @@ quedaron cerradas a nivel de código/scripts/tests en v0.5.0 (solo la brecha 4,
 cross-SO, y la brecha 8, desinstalación de un comando en la vía one-liner de macOS, siguen diferidas a la firma del goal a largo
 plazo). Lo pendiente es la **marca de los criterios de aceptación 10, 1-3 y 9
 por validación de feedback de usuarios reales** en Linux y macOS (la validación
-E2E automatizable ya corre en CI; ver la «Decisión de validación E2E» en
-[docs/GOAL.md](GOAL.md#decisión-de-validación-e2e)).
+E2E automatizable ya corre en CI; ver «Validación E2E» en
+[docs/GOAL.md](GOAL.md#validación-e2e)).
 
 ### Hacia el Goal inmediato
 
