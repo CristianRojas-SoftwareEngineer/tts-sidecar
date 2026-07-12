@@ -1091,13 +1091,22 @@ def cmd_setup(args):
     if getattr(args, "force_update", False):
         import shutil
         from .model_cache import model_cache_dirs
+
+        def _dir_size(path):
+            return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+        freed_total = 0
         print("\n[force-update] Eliminando el modelo en caché para re-descargarlo...", file=sys.stderr)
         for p in model_cache_dirs():
             if not p.name.startswith("models--ResembleAI--"):
                 raise RuntimeError(f"Ruta inesperada fuera del proyecto: {p}")
             if p.exists():
+                size = _dir_size(p)
                 shutil.rmtree(p)
-                print(f"[force-update] Eliminado: {p}", file=sys.stderr)
+                freed_total += size
+                print(f"[force-update] Eliminado: {p} ({size / 1_048_576:.1f} MB)", file=sys.stderr)
+        if freed_total:
+            print(f"[force-update] Espacio liberado total: {freed_total / 1_048_576:.1f} MB", file=sys.stderr)
 
     try:
         from .model_cache import is_model_cached

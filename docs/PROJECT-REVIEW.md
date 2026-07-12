@@ -60,7 +60,7 @@ El índice siguiente lista los 47 hallazgos ordenados por ID, con su severidad, 
 | S1-32 | ARM64 Linux sin test dedicado (decisión consciente)                   | S1 — Bajo        | P3        | CI / aarch64                | No                 | Pendiente |
 | S1-33 | Runbook de falsos positivos solo para Defender                        | S1 — Bajo        | P3        | Documentación / seguridad   | No                 | Pendiente |
 | S0-01 | `bootstrap.apply()` corre antes del `reconfigure` UTF-8 (riesgo nulo) | S0 — Informativo | P3        | Contrato                    | No                 | Resuelto  |
-| S0-02 | `--force-update` sin log del tamaño liberado                          | S0 — Informativo | P3        | Observabilidad              | No                 | Pendiente |
+| S0-02 | `--force-update` sin log del tamaño liberado                          | S0 — Informativo | P3        | Observabilidad              | No                 | Resuelto  |
 | S0-03 | AppImage Linux sin CUDA (documentado)                                 | S0 — Informativo | P3        | Compatibilidad / Linux      | No                 | Pendiente |
 | S0-04 | Lock universal con `nvidia-*` distinguido del binario (sin acción)    | S0 — Informativo | P3        | Licencias                   | No                 | Pendiente |
 
