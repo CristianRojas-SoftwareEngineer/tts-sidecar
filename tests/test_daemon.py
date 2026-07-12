@@ -1,7 +1,9 @@
 """Tests para el gestor del ciclo de vida del daemon."""
 
+import os
 import pytest
 import sys
+import time
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -259,12 +261,17 @@ class TestStopDuringStartupWindow:
     detecta el proceso por cmdline, avisa y devuelve False, sin matarlo."""
 
     def _manager_offline(self):
-        """DaemonManager con health check negativo y puerto sin ocupar."""
+        """DaemonManager con health check negativo y puerto sin ocupar.
+
+        Sin pidfile (`_read_pid` → None) para ejercitar el fallback por cmdline
+        de forma determinista, con independencia de cualquier daemon.pid real.
+        """
         from tts_sidecar.daemon.daemon import DaemonManager
 
         manager = DaemonManager()
         manager.is_running = lambda: False
         manager._get_pid_from_port = lambda: None
+        manager._read_pid = lambda: None
         return manager
 
     def _psutil_with_processes(self, procs):
@@ -599,3 +606,135 @@ class TestSynthesizeStreaming:
                 assert "secreta" not in resp.text
         finally:
             server.set_engine(old_engine)
+
+
+class TestDaemonStartLock:
+    """S3-02: el lock de arranque atómico (pidfile con O_EXCL) serializa los
+    `start` concurrentes y reclama locks obsoletos."""
+
+    def _manager(self, tmp_path):
+        from tts_sidecar.daemon.daemon import DaemonManager
+
+        manager = DaemonManager()
+        pidfile = tmp_path / "daemon.pid"
+        manager._pidfile = lambda: str(pidfile)
+        return manager, pidfile
+
+    def test_acquire_creates_lock_when_absent(self, tmp_path):
+        manager, pidfile = self._manager(tmp_path)
+        assert manager._acquire_start_lock() is True
+        assert pidfile.exists()
+
+    def test_acquire_blocks_when_live_daemon_holds_lock(self, tmp_path):
+        manager, pidfile = self._manager(tmp_path)
+        pidfile.write_text("4321", encoding="utf-8")
+        manager._pid_alive_daemon = staticmethod(lambda pid: True)
+
+        assert manager._acquire_start_lock() is False
+        # El lock vigente no se toca.
+        assert pidfile.read_text(encoding="utf-8") == "4321"
+
+    def test_acquire_reclaims_dead_pid(self, tmp_path):
+        manager, pidfile = self._manager(tmp_path)
+        pidfile.write_text("4321", encoding="utf-8")
+        manager._pid_alive_daemon = staticmethod(lambda pid: False)
+
+        assert manager._acquire_start_lock() is True
+        # Reclamado y recreado vacío por el segundo open.
+        assert pidfile.read_text(encoding="utf-8") == ""
+
+    def test_acquire_reclaims_stale_empty_file(self, tmp_path):
+        manager, pidfile = self._manager(tmp_path)
+        pidfile.write_text("", encoding="utf-8")
+        old = time.time() - (manager.START_TIMEOUT + 60)
+        os.utime(str(pidfile), (old, old))
+
+        assert manager._acquire_start_lock() is True
+
+    def test_acquire_keeps_recent_empty_file(self, tmp_path):
+        manager, pidfile = self._manager(tmp_path)
+        pidfile.write_text("", encoding="utf-8")  # recién creado → arranque en curso
+
+        assert manager._acquire_start_lock() is False
+
+    def test_start_does_not_launch_when_lock_held(self, tmp_path):
+        manager, _ = self._manager(tmp_path)
+        manager.is_running = lambda: False
+        manager._acquire_start_lock = lambda: False
+
+        with patch("tts_sidecar.daemon.daemon.subprocess.Popen") as popen:
+            assert manager.start() is True
+            popen.assert_not_called()
+
+    def test_start_writes_child_pid_after_popen(self, tmp_path):
+        manager, pidfile = self._manager(tmp_path)
+        manager.is_running = lambda: False
+        manager._wait_for_ready = lambda: True
+        fake_proc = MagicMock()
+        fake_proc.pid = 4321
+
+        with patch("tts_sidecar.daemon.daemon.subprocess.Popen", return_value=fake_proc):
+            assert manager.start() is True
+
+        assert pidfile.read_text(encoding="utf-8") == "4321"
+
+
+class TestStopWithPidfile:
+    """S1-05: en la ventana de arranque, el pidfile es autoritativo y
+    desambigua un daemon vivo (arrancando) de un zombie (PID muerto)."""
+
+    def _offline(self, tmp_path):
+        from tts_sidecar.daemon.daemon import DaemonManager
+
+        manager = DaemonManager()
+        manager.is_running = lambda: False
+        manager._get_pid_from_port = lambda: None
+        pidfile = tmp_path / "daemon.pid"
+        manager._pidfile = lambda: str(pidfile)
+        return manager, pidfile
+
+    def test_live_daemon_in_pidfile_returns_false_with_notice(self, tmp_path, capsys):
+        manager, pidfile = self._offline(tmp_path)
+        pidfile.write_text("4321", encoding="utf-8")
+        manager._pid_alive_daemon = staticmethod(lambda pid: True)
+
+        assert manager.stop() is False
+        err = capsys.readouterr().err
+        assert "arrancando" in err
+        assert "4321" in err
+        # No se toca el pidfile de un daemon vivo.
+        assert pidfile.exists()
+
+    def test_dead_pid_in_pidfile_is_cleared_and_reports_not_running(self, tmp_path, capsys):
+        manager, pidfile = self._offline(tmp_path)
+        pidfile.write_text("4321", encoding="utf-8")
+        manager._pid_alive_daemon = staticmethod(lambda pid: False)
+
+        assert manager.stop() is True
+        assert "no está corriendo" in capsys.readouterr().err
+        # El pidfile obsoleto (zombie) se limpia.
+        assert not pidfile.exists()
+
+
+class TestRemoveOwnPidfile:
+    """run.py borra su propio pidfile al cerrar, con guarda por PID."""
+
+    def test_removes_pidfile_when_pid_matches(self, tmp_path, monkeypatch):
+        from tts_sidecar.daemon import run
+
+        pidfile = tmp_path / "daemon.pid"
+        pidfile.write_text(str(os.getpid()), encoding="utf-8")
+        monkeypatch.setattr("tts_sidecar.paths.daemon_pidfile", lambda: str(pidfile))
+
+        run._remove_own_pidfile()
+        assert not pidfile.exists()
+
+    def test_keeps_pidfile_of_another_process(self, tmp_path, monkeypatch):
+        from tts_sidecar.daemon import run
+
+        pidfile = tmp_path / "daemon.pid"
+        pidfile.write_text("999999", encoding="utf-8")
+        monkeypatch.setattr("tts_sidecar.paths.daemon_pidfile", lambda: str(pidfile))
+
+        run._remove_own_pidfile()
+        assert pidfile.exists()

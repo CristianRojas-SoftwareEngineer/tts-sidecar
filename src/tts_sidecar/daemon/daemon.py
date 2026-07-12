@@ -42,13 +42,14 @@ class DaemonManager:
         """
         Inicia el daemon. Idempotente: si ya está corriendo, devuelve True.
 
-        Ventana de carrera conocida (SUGGESTION-03): entre este chequeo de
-        `is_running()` y el lanzamiento del subproceso más abajo no hay lock,
-        así que dos invocaciones concurrentes de `start()` podrían lanzar dos
-        procesos que compitan por el mismo puerto. Riesgo de bajo impacto: el
-        segundo proceso falla al bindear el puerto y termina, sin corromper
-        estado; no se introduce un archivo de lock multiplataforma por el
-        costo de mantenimiento que no se justifica frente a esta probabilidad.
+        La ventana de carrera del doble arranque (antes SUGGESTION-03) se cierra
+        con un lock de arranque atómico: `_acquire_start_lock()` crea el pidfile
+        con `os.open(O_CREAT|O_EXCL)` antes de lanzar el subproceso, de modo que
+        dos `start()` concurrentes no pueden lanzar dos daemons —el segundo ve el
+        lock vigente y no arranca—. El mismo archivo persiste el PID del daemon
+        (registro autoritativo que desambigua un proceso huérfano o zombie sin
+        depender del escaneo por cmdline). Los locks obsoletos —PID muerto o
+        ajeno, o un arranque abortado— se reclaman al validarlos con psutil.
         """
         # Si ya está corriendo no hay nada que hacer
         if self.is_running():
@@ -71,6 +72,13 @@ class DaemonManager:
             cmd.extend(["--max-retries", str(max_retries)])
 
         if background:
+            # Lock de arranque atómico: serializa los `start` concurrentes
+            # (S3-02) antes de lanzar el subproceso. Si el lock está vigente,
+            # ya hay un daemon corriendo o arrancando y no se lanza otro.
+            if not self._acquire_start_lock():
+                print("Daemon ya está arrancando", file=sys.stderr)
+                return True
+
             env = os.environ.copy()
             # Modo fuente/pip-installed: fijar PYTHONPATH para que el subproceso
             # encuentre tts_sidecar. En modo congelado el ejecutable ya es
@@ -83,24 +91,35 @@ class DaemonManager:
                 if os.path.exists(src_path):
                     env["PYTHONPATH"] = src_path
 
-            if self.system == "Windows":
-                subprocess.Popen(
-                    cmd,
-                    env=env,
-                    creationflags=subprocess.DETACHED_PROCESS,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-            else:
-                subprocess.Popen(
-                    cmd,
-                    env=env,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True,
-                )
+            try:
+                if self.system == "Windows":
+                    proc = subprocess.Popen(
+                        cmd,
+                        env=env,
+                        creationflags=subprocess.DETACHED_PROCESS,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                else:
+                    proc = subprocess.Popen(
+                        cmd,
+                        env=env,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                    )
+            except Exception:
+                # El subproceso ni siquiera arrancó: soltar el lock.
+                self._clear_pidfile()
+                raise
 
-            # Esperar a que el daemon esté listo (la carga del modelo tarda)
+            # Persistir el PID del daemon recién lanzado en el pidfile/lock.
+            self._write_pid(proc.pid)
+
+            # Esperar a que el daemon esté listo (la carga del modelo tarda).
+            # Si expira, se conserva el pidfile: el proceso puede seguir vivo
+            # cargando el modelo, y un lock realmente obsoleto (PID muerto) se
+            # reclama en el próximo `start`.
             return self._wait_for_ready()
         else:
             # Modo primer plano (para depuración)
@@ -126,16 +145,26 @@ class DaemonManager:
             # R-05: durante la ventana de arranque (carga del modelo, 30-90 s)
             # el puerto aún está cerrado y ni el health check ni el escaneo de
             # puerto ven al daemon; reportar «no está corriendo» sería un éxito
-            # falso. Se detecta por cmdline, se avisa y se devuelve False
-            # (exit 5 en el CLI) sin matar el proceso.
+            # falso.
+            #
+            # S1-05: el pidfile es la fuente autoritativa. Si registra un PID
+            # vivo del daemon, es un arranque en curso: se avisa y se devuelve
+            # False (exit 5) sin matar el proceso. Si el PID está muerto/ajeno,
+            # es un pidfile obsoleto (zombie): se limpia y se reporta que no
+            # está corriendo, en lugar de dejarlo en un exit 5 perpetuo. Solo si
+            # no hay pidfile se cae al escaneo por cmdline (comportamiento previo).
+            pid = self._read_pid()
+            if pid is not None:
+                if self._pid_alive_daemon(pid):
+                    self._print_starting_notice(pid)
+                    return False
+                self._clear_pidfile()
+                print("Daemon no está corriendo", file=sys.stderr)
+                return True
+
             starting = self._find_starting_daemon()
             if starting is not None:
-                print(
-                    f"El daemon está arrancando (PID {starting.pid}) y aún no "
-                    "acepta conexiones; no se detuvo. Reintenta 'daemon stop' "
-                    "cuando termine la carga del modelo (30-90 s).",
-                    file=sys.stderr,
-                )
+                self._print_starting_notice(starting.pid)
                 return False
             print("Daemon no está corriendo", file=sys.stderr)
             return True
@@ -305,3 +334,104 @@ class DaemonManager:
                 proc.kill()
         except Exception:
             pass
+
+    # -- PID/lock file del daemon (serializa el arranque y persiste el PID) --
+
+    @staticmethod
+    def _pidfile() -> str:
+        """Ruta del PID/lock file del daemon."""
+        return paths.daemon_pidfile()
+
+    def _read_pid(self) -> Optional[int]:
+        """Lee el PID del pidfile. None si no existe, está vacío o es ilegible."""
+        try:
+            with open(self._pidfile(), "r", encoding="utf-8") as fh:
+                content = fh.read().strip()
+            return int(content) if content else None
+        except (OSError, ValueError):
+            return None
+
+    @staticmethod
+    def _pid_alive_daemon(pid: int) -> bool:
+        """True si `pid` está vivo y su cmdline es el de nuestro daemon.
+
+        Un PID muerto (psutil.Process lanza NoSuchProcess), reutilizado por otro
+        proceso, o un zombie sin cmdline no cuentan como daemon vivo.
+        """
+        try:
+            import psutil
+
+            return DaemonManager._is_own_daemon_process(psutil.Process(pid))
+        except Exception:
+            return False
+
+    def _acquire_start_lock(self) -> bool:
+        """Crea atómicamente el pidfile como lock de arranque.
+
+        Devuelve True si adquirimos el lock (se puede lanzar el daemon), o False
+        si ya hay uno corriendo/arrancando (lock vigente). Un lock obsoleto
+        —PID muerto o ajeno, o un archivo vacío más viejo que el timeout de
+        arranque— se reclama y se reintenta el `open` una vez.
+        """
+        path = self._pidfile()
+        for _ in range(2):
+            try:
+                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+                os.close(fd)
+                return True
+            except FileExistsError:
+                if self._reclaim_if_stale(path):
+                    continue
+                return False
+            except OSError:
+                return False
+        return False
+
+    def _reclaim_if_stale(self, path: str) -> bool:
+        """Elimina el pidfile si está obsoleto. True si lo reclamó.
+
+        Con un PID vivo del daemon, el lock está vigente y no se toca. Con un
+        PID muerto/ajeno se reclama. Un archivo vacío/ilegible se considera un
+        arranque en curso, salvo que su antigüedad supere el timeout de arranque
+        (arranque abortado antes de escribir el PID).
+        """
+        pid = self._read_pid()
+        if pid is not None:
+            if self._pid_alive_daemon(pid):
+                return False
+        else:
+            try:
+                age = time.time() - os.path.getmtime(path)
+            except OSError:
+                return False
+            if age < self.START_TIMEOUT:
+                return False
+        try:
+            os.unlink(path)
+            return True
+        except OSError:
+            return False
+
+    def _write_pid(self, pid: int) -> None:
+        """Escribe el PID del daemon en el pidfile/lock (best-effort)."""
+        try:
+            with open(self._pidfile(), "w", encoding="utf-8") as fh:
+                fh.write(str(pid))
+        except OSError:
+            pass
+
+    def _clear_pidfile(self) -> None:
+        """Elimina el pidfile/lock (best-effort)."""
+        try:
+            os.unlink(self._pidfile())
+        except OSError:
+            pass
+
+    def _print_starting_notice(self, pid: int) -> None:
+        """Aviso de daemon en arranque (puerto aún cerrado); no se detiene."""
+        print(
+            f"El daemon está arrancando (PID {pid}) y aún no acepta conexiones; "
+            "no se detuvo. Reintenta 'daemon stop' cuando termine la carga del "
+            "modelo (30-90 s).",
+            file=sys.stderr,
+        )

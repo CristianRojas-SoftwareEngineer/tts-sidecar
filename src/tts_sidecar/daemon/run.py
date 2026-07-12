@@ -9,6 +9,7 @@ from .. import bootstrap
 bootstrap.apply()
 
 import argparse
+import atexit
 import os
 import signal
 import sys
@@ -19,6 +20,26 @@ import uvicorn
 from .server import app, set_engine, set_start_time, set_server
 from .ipc import DEFAULT_PORT
 from ..timing import StageTimer, log
+
+
+def _remove_own_pidfile():
+    """Elimina el PID/lock file del daemon si registra nuestro propio PID.
+
+    El pidfile lo crea `DaemonManager.start()` con el PID de este proceso; al
+    cerrar (graceful o por señal) lo borramos para soltar el lock. La guarda por
+    PID evita que un proceso ajeno borre un pidfile que no es suyo.
+    """
+    from .. import paths
+
+    try:
+        path = paths.daemon_pidfile()
+        with open(path, "r", encoding="utf-8") as fh:
+            content = fh.read().strip()
+        # Cerrar antes de borrar: Windows no permite eliminar un archivo abierto.
+        if content == str(os.getpid()):
+            os.remove(path)
+    except OSError:
+        pass
 
 
 def serve(port: int = DEFAULT_PORT, auto_restart: bool = False, max_retries: int = 0):
@@ -41,6 +62,12 @@ def serve(port: int = DEFAULT_PORT, auto_restart: bool = False, max_retries: int
     # mecanismo (should_exit) el que gobierna el apagado ordenado.
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
+
+    # Soltar el lock al salir: atexit corre en el cierre normal y en sys.exit()
+    # (el SystemExit que dispara signal_handler ante SIGTERM/SIGINT). Un cierre
+    # abrupto (SIGKILL, os._exit) deja el pidfile, pero el próximo `start` lo
+    # reclama al validar que el PID ya no está vivo.
+    atexit.register(_remove_own_pidfile)
 
     while True:
         set_start_time(time.time())

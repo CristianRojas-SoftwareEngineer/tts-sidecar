@@ -53,6 +53,20 @@ def data_root() -> str:
     return root
 
 
+def daemon_pidfile() -> str:
+    """
+    Ruta del PID/lock file del daemon, en la raíz de datos de usuario.
+
+    Cumple dos funciones a la vez: (1) lock de arranque —se crea de forma
+    atómica con `os.open(O_CREAT|O_EXCL)` para serializar `daemon start` y
+    cerrar la ventana de carrera del doble arranque— y (2) registro del PID del
+    daemon, que desambigua un proceso huérfano o zombie sin depender del escaneo
+    por cmdline. Vive en `data_root()` porque debe ser escribible y estable
+    entre ejecuciones en los tres modos.
+    """
+    return os.path.join(data_root(), "daemon.pid")
+
+
 def bundled_voices_dir() -> str:
     """
     Directorio de voces de fábrica empaquetadas (solo lectura).
