@@ -19,11 +19,19 @@ Contrato de salida (estable entre SO y lenguajes):
     plataforma.
 """
 
+import sys
+
+# Fuerza salida UTF-8 antes de cualquier otra acción del proceso (incluido
+# bootstrap.apply), para una codificación consistente aunque falle algo temprano.
+for stream in (sys.stdout, sys.stderr):
+    reconfigure = getattr(stream, "reconfigure", None)
+    if reconfigure:
+        reconfigure(encoding="utf-8")
+
 from . import bootstrap
 bootstrap.apply()
 
 import argparse
-import sys
 import os
 import platform
 from pathlib import Path
@@ -1361,12 +1369,6 @@ def cmd_daemon(args):
 
 def main():
     """Punto de entrada principal de la CLI."""
-    # Fuerza salida UTF-8 para una codificación consistente en Windows/Linux/macOS.
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure:
-            reconfigure(encoding="utf-8")
-
     parser = argparse.ArgumentParser(
         prog="tts-sidecar",
         description="TTS Sidecar - TTS 100% local con clonación de voz"
