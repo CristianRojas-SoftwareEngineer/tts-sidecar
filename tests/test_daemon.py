@@ -58,6 +58,141 @@ class TestServerConcurrency:
             server.set_engine(old_engine)
 
 
+class TestServerAdmissionControl:
+    """S3-05: el semáforo de admisión acota las síntesis concurrentes admitidas."""
+
+    def test_rejects_concurrent_request_when_saturated(self, tmp_path, monkeypatch):
+        """Con el cupo agotado, una petición concurrente recibe 503 de inmediato."""
+        import threading
+        from fastapi.testclient import TestClient
+        from tts_sidecar.daemon import server
+        from tts_sidecar import voices
+
+        started = threading.Event()
+        release = threading.Event()
+
+        class SlowEngine:
+            def speak(self, **kwargs):
+                started.set()
+                assert release.wait(timeout=10), "la síntesis nunca fue liberada"
+                return b"RIFF" + b"\x00" * 40
+
+        wav = tmp_path / "voz.wav"
+        wav.write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
+        monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(tmp_path)])
+        monkeypatch.setattr(server, "_admission_semaphore", threading.BoundedSemaphore(1))
+
+        old_engine = server._engine
+        server.set_engine(SlowEngine())
+        server.set_start_time(0.0)
+        try:
+            with TestClient(server.app) as client:
+                result = {}
+
+                def synth():
+                    result["resp"] = client.post(
+                        "/synthesize", json={"text": "hola", "speech_audio": str(wav)}
+                    )
+
+                t = threading.Thread(target=synth)
+                t.start()
+                assert started.wait(timeout=10), "la síntesis no arrancó"
+
+                # Cupo agotado (BoundedSemaphore(1) ya tomado por la primera
+                # síntesis en curso): la segunda petición se rechaza de inmediato.
+                second = client.post(
+                    "/synthesize", json={"text": "hola", "speech_audio": str(wav)}
+                )
+                assert second.status_code == 503
+
+                release.set()
+                t.join(timeout=10)
+                assert result["resp"].status_code == 200
+        finally:
+            server.set_engine(old_engine)
+
+    def test_permit_released_after_synthesis_completes(self, tmp_path, monkeypatch):
+        """Al terminar la síntesis, el permiso se reintegra y una petición posterior responde 200."""
+        from fastapi.testclient import TestClient
+        from tts_sidecar.daemon import server
+        from tts_sidecar import voices
+        import threading
+
+        wav = tmp_path / "voz.wav"
+        wav.write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
+        monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(tmp_path)])
+        monkeypatch.setattr(server, "_admission_semaphore", threading.BoundedSemaphore(1))
+
+        class FakeEngine:
+            _synthesis_timing = {}
+
+            def speak(self, **kwargs):
+                return b"RIFF" + b"\x00" * 40
+
+        old_engine = server._engine
+        server.set_engine(FakeEngine())
+        try:
+            with TestClient(server.app) as client:
+                first = client.post(
+                    "/synthesize", json={"text": "hola", "speech_audio": str(wav)}
+                )
+                assert first.status_code == 200
+
+                second = client.post(
+                    "/synthesize", json={"text": "hola", "speech_audio": str(wav)}
+                )
+                assert second.status_code == 200
+        finally:
+            server.set_engine(old_engine)
+
+    def test_503_detail_is_actionable_without_system_paths(self, tmp_path, monkeypatch):
+        """El 503 de saturación lleva un detail accionable y no filtra rutas del sistema."""
+        import threading
+        from fastapi.testclient import TestClient
+        from tts_sidecar.daemon import server
+        from tts_sidecar import voices
+
+        started = threading.Event()
+        release = threading.Event()
+
+        class SlowEngine:
+            def speak(self, **kwargs):
+                started.set()
+                assert release.wait(timeout=10), "la síntesis nunca fue liberada"
+                return b"RIFF" + b"\x00" * 40
+
+        wav = tmp_path / "voz.wav"
+        wav.write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
+        monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(tmp_path)])
+        monkeypatch.setattr(server, "_admission_semaphore", threading.BoundedSemaphore(1))
+
+        old_engine = server._engine
+        server.set_engine(SlowEngine())
+        try:
+            with TestClient(server.app) as client:
+                def synth():
+                    client.post(
+                        "/synthesize", json={"text": "hola", "speech_audio": str(wav)}
+                    )
+
+                t = threading.Thread(target=synth)
+                t.start()
+                assert started.wait(timeout=10), "la síntesis no arrancó"
+
+                resp = client.post(
+                    "/synthesize", json={"text": "hola", "speech_audio": str(wav)}
+                )
+                assert resp.status_code == 503
+                detail = resp.json()["detail"]
+                assert detail
+                assert str(wav) not in resp.text
+
+                release.set()
+                t.join(timeout=10)
+        finally:
+            server.set_engine(old_engine)
+
+
 class TestSynthesizeAllowedPaths:
     def test_rejects_path_outside_allowed_dirs(self, tmp_path, monkeypatch):
         """WARNING-02: una ruta .wav fuera de voices_root()/tempdir se rechaza con 400."""

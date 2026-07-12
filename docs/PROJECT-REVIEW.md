@@ -4,10 +4,10 @@
 
 Se auditaron las diez dimensiones de preparación para release de `tts-sidecar` (robustez de CLI, contrato programático, daemon, estado en disco/modelo, compatibilidad multiplataforma, UX de instalación/desinstalación, calidad y cobertura de tests, documentación como producto, licencias/compliance, y cadena de suministro/CI), bajo lente de **release readiness** y perfil **preventivo**. El material probado son los 47 hallazgos con evidencia `file:line` del audit del `48c6d8a`.
 
-**Veredicto global: LISTO CON RESERVAS.** No hay hallazgos **S4 (Críticos)**: ninguno bloquea la publicación de v0.6.0. Persiste **1 hallazgo S3 (Alto)**: el endurecimiento de concurrencia del daemon (`S3-05`).
+**Veredicto global: LISTO PARA RELEASE.** No hay hallazgos **S4 (Críticos)** ni **S3 (Altos)** pendientes: no quedan bloqueadores abiertos para la publicación de v0.6.0.
 
-**Conteo por severidad:** 0 S4 · 1 S3 · 3 S2 · 33 S1 · 4 S0 (37 hallazgos).
-**Conteo por prioridad:** 0 P0 · 0 P1 · 1 P2 · 33 P3.
+**Conteo por severidad:** 0 S4 · 0 S3 · 3 S2 · 33 S1 · 4 S0 (37 hallazgos).
+**Conteo por prioridad:** 0 P0 · 0 P1 · 0 P2 · 33 P3.
 
 
 ### Índice de hallazgos
@@ -20,7 +20,7 @@ El índice siguiente lista los 37 hallazgos ordenados por ID, con su severidad, 
 | S3-02 | Ventana de carrera en `daemon start` (doble arranque)                 | S3 — Alto        | P1        | Daemon                      | No                 | Resuelto  |
 | S3-03 | Bind del puerto 8765 sin manejo de `OSError`                          | S3 — Alto        | P1        | Daemon                      | No                 | Resuelto |
 | S3-04 | Sin gestión de memoria del modelo en uso prolongado                   | S3 — Alto        | P2        | Daemon / CUDA               | No                 | Resuelto |
-| S3-05 | Sin límite de concurrencia en `/synthesize`                           | S3 — Alto        | P2        | Daemon                      | Sí                 | Pendiente |
+| S3-05 | Sin límite de concurrencia en `/synthesize`                           | S3 — Alto        | P2        | Daemon                      | Sí                 | Resuelto |
 | S3-06 | Oferta de código fuente GPL no explícita en el release                | S3 — Alto        | P1        | Licencias / release         | No                 | Resuelto |
 | S3-07 | Smoke test del binario congelado limitado a `version`                 | S3 — Alto        | P1        | CI / DevOps                 | No                 | Resuelto |
 | S2-01 | `/shutdown` sin autenticación (loopback, riesgo aceptado)             | S2 — Medio       | P3        | Daemon / seguridad          | Sí                 | Resuelto  |
@@ -156,6 +156,7 @@ Cada hallazgo se detalla a continuación, agrupado por nivel de severidad (de S3
 - **Corrección(es) propuesta(s)**: limitar los threads/handlers concurrentes con un semáforo de admisión configurable que rechace o encale con tope explícito al excederlo *(recomendada)*.
 - **Decisión requerida**: Sí — elegir la política ante saturación (rechazar con código de error vs. encolar con espera) y el valor del tope.
 - **Prioridad**: P2 *(migra D3-R04)*
+- **Resolución (2026-07-12)**: se añadió un semáforo de admisión no bloqueante (`_admission_semaphore`, `threading.BoundedSemaphore`) con tope fijo `MAX_INFLIGHT_SYNTHESIS = 4` (`server.py`). La petición N+1 concurrente recibe `HTTP 503` de inmediato, antes de crear cualquier thread worker; el cliente IPC ya convierte cualquier no-200 en `DaemonIPCError`, por lo que `speak --daemon` falla con el mismo exit 5 que un daemon inalcanzable, sin requerir cambios en el protocolo NDJSON ni en el cliente. El permiso se libera en el `finally` del worker (éxito o error), garantizando que no haya fugas de cupo.
 
 
 
@@ -760,7 +761,7 @@ Los 33 hallazgos de baja severidad se agrupan por área (en divisores en negrita
 No hay **P0**: sin hallazgos S4 y sin S3 que bloqueen el release de v0.6.0. Las fases agrupan los IDs por prioridad, dependencia y esfuerzo/impacto para alimentar la numeración de tareas de un plan posterior.
 
 - **Fase 1 — P1 (antes de la próxima versión menor; alto impacto / bajo esfuerzo):** (sin pendientes). (Ya resueltos y fuera de esta fase: `S3-06` —oferta de fuente GPL en el release, cerrado el 2026-07-12: `publish-release` inyecta en las notas del Release el tarball de fuente GPLv3 §6 (`archive/refs/tags/<tag>.tar.gz`)—; `S3-07` —smoke test del binario congelado, cerrado el 2026-07-12: los smoke tests de los 4 bins corren `voice list` y validan que la voz `default` quedó empaquetada—; `S3-01` —contrato de cancelación, cerrado el 2026-07-12: el handler de `main()` en `cli.py:1661` ya devuelve `EXIT_INTERRUPTED` (130)—; `S3-02` —carrera del doble arranque, cerrada el 2026-07-12 con un PID/lock file atómico—; `S3-03` —bind del puerto sin manejo de `OSError`, cerrado el 2026-07-12: `serve()` en `daemon/run.py` ahora distingue `EADDRINUSE` y sale con `EXIT_DAEMON_PORT_IN_USE` (6)—; `S2-03` —documentar `--force-update` en `USAGE.md`, cerrado el 2026-07-12.)
-- **Fase 2 — P2 (agendadas):** endurecimiento del daemon `S3-05` (concurrencia). (Ya resueltos y fuera de esta fase: `S3-04` —gestión de memoria del daemon, cerrada el 2026-07-12: `_clear_model_memory()` se invoca tras cada síntesis (`torch.cuda.empty_cache()` + `gc.collect()`, multiplataforma)—, `S1-05` —detección de daemon huérfano/zombie, cerrada el 2026-07-12 junto con `S3-02` mediante el PID/lock file compartido, tal como estaba previsto—, `S2-02` —macOS Intel, limitación aceptada—, `S1-23` —divergencia arm64 aceptada—, y el ciclo S1 del 2026-07-12: `S1-01`, `S1-09`, `S1-10`, `S1-11`, `S1-12`, `S1-13`, `S1-14`, `S1-17`, `S1-19`, `S1-20`, `S1-21`, `S1-24`, `S1-25`, `S1-27`, `S1-29`, `S1-30`, `S1-31`.)
+- **Fase 2 — P2:** (sin pendientes). (Ya resueltos y fuera de esta fase: `S3-04` —gestión de memoria del daemon, cerrada el 2026-07-12: `_clear_model_memory()` se invoca tras cada síntesis (`torch.cuda.empty_cache()` + `gc.collect()`, multiplataforma)—, `S3-05` —endurecimiento de concurrencia del daemon, cerrado el 2026-07-12: semáforo de admisión no bloqueante con tope fijo 4, rechazo `503`→exit 5 (ver detalle arriba)—, `S1-05` —detección de daemon huérfano/zombie, cerrada el 2026-07-12 junto con `S3-02` mediante el PID/lock file compartido, tal como estaba previsto—, `S2-02` —macOS Intel, limitación aceptada—, `S1-23` —divergencia arm64 aceptada—, y el ciclo S1 del 2026-07-12: `S1-01`, `S1-09`, `S1-10`, `S1-11`, `S1-12`, `S1-13`, `S1-14`, `S1-17`, `S1-19`, `S1-20`, `S1-21`, `S1-24`, `S1-25`, `S1-27`, `S1-29`, `S1-30`, `S1-31`.)
 - **Fase 3 — P3 (backlog):** sin pendientes. (Ya resueltos y fuera del backlog: riesgo aceptado `S2-01` —`/shutdown` sin token, aceptado formalmente el 2026-07-12 en `SECURITY.md`—, `S1-23` y `S1-32` —divergencia arm64 aceptada—, `S2-02` —macOS Intel, limitación aceptada—, `S1-33`, los informativos `S0-01`…`S0-04`, y el ciclo S1 del 2026-07-12: `S1-02`, `S1-03`, `S1-04`, `S1-06`, `S1-07`, `S1-08`, `S1-15`, `S1-16`, `S1-18`, `S1-22`, `S1-26`, `S1-28`.)
 
 

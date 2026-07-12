@@ -221,6 +221,16 @@ tts-sidecar speak --text "Hola" --no-daemon
 > default). Al expirar, `speak --daemon` falla con el error IPC estándar; no
 > hay reintento automático.
 
+> **Control de admisión (tope de concurrencia)**: `/synthesize` admite como
+> máximo **4** síntesis concurrentes (1 activa + hasta 3 en espera sobre el
+> lock interno de síntesis). Una petición que exceda ese cupo recibe
+> `HTTP 503` de inmediato, sin llegar a lanzar un hilo worker — el cliente IPC
+> ya convierte cualquier no-200 en `DaemonIPCError`, por lo que `speak --daemon`
+> falla con el mismo código de salida **5** que un daemon inalcanzable. El tope
+> es fijo (`MAX_INFLIGHT_SYNTHESIS` en `server.py`), no configurable, y protege
+> al proceso de acumular un thread sin límite por ráfaga de invocaciones
+> concurrentes.
+
 ## Seguridad: directorios de audio permitidos
 
 El endpoint `/synthesize` **no acepta rutas de audio arbitrarias del sistema
@@ -274,6 +284,7 @@ del watermark PerthNet y el timing por sub-etapa:
 | **Resiliencia** | Retry + auto-restart flag | Ninguna |
 | **torch.compile** | Compartido via proceso daemon | Memory-mapped files |
 | **Gestión de memoria** | Limpieza de caché CUDA + GC tras cada síntesis | Sin liberación (fragmentación bajo uso prolongado en CUDA) |
+| **Control de admisión** | Semáforo acotado (tope fijo 4), rechazo `503` inmediato | Encolado con espera indefinida |
 
 ## Compatibilidad
 

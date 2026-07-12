@@ -92,6 +92,13 @@ async def health_check():
 # cruzarían voces.
 _synthesis_lock = threading.Lock()
 
+# Control de admisión (S3-05): sin tope, una ráfaga de invocaciones concurrentes
+# lanza un thread worker por petición que se apila esperando _synthesis_lock,
+# saturando el proceso bajo el GIL. El semáforo acota la admisión a 1 síntesis
+# activa + hasta 3 en espera; la N+1 se rechaza con 503 antes de crear thread.
+MAX_INFLIGHT_SYNTHESIS = 4
+_admission_semaphore = threading.BoundedSemaphore(MAX_INFLIGHT_SYNTHESIS)
+
 
 @app.post("/synthesize")
 def synthesize(req: SynthesizeRequest) -> StreamingResponse:
@@ -153,6 +160,14 @@ def synthesize(req: SynthesizeRequest) -> StreamingResponse:
             )
         real_paths[field] = real_path
 
+    # Admisión no bloqueante: si ya hay MAX_INFLIGHT_SYNTHESIS peticiones en
+    # vuelo, se rechaza de inmediato en vez de apilar otro thread worker.
+    if not _admission_semaphore.acquire(blocking=False):
+        raise HTTPException(
+            status_code=503,
+            detail="Daemon ocupado (demasiadas síntesis concurrentes), reintente en unos segundos",
+        )
+
     # Patrón productor/consumidor: la síntesis (CPU-bound y bloqueante) corre en
     # un hilo worker que empuja eventos a una cola; el generador de la respuesta
     # los drena como líneas NDJSON hasta un centinela. Así el progreso viaja al
@@ -195,6 +210,7 @@ def synthesize(req: SynthesizeRequest) -> StreamingResponse:
                 q.put(("error", {"detail": "Error interno de síntesis"}))
             finally:
                 _clear_model_memory()
+                _admission_semaphore.release()
                 q.put((SENTINEL, None))
 
         t = threading.Thread(target=worker, daemon=True)
