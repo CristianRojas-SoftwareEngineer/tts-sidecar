@@ -68,7 +68,7 @@ jobs:
           # el venv ya poblado: así queda fuera del material cacheado y la caché de
           # venv la comparten test y build de esta plataforma. Reinstalarla cuesta
           # segundos (sin dependencias pesadas).
-          # Política de pins (S1-30): pytest va pineado a versión exacta. Hoy el
+          # Política de pins: pytest va pineado a versión exacta. Hoy el
           # proyecto NO usa plugins de pytest, así que no hay nada más que fijar;
           # esta política es deliberadamente solo documental (un guard automático
           # de plugins sería sobreingeniería sin valor actual). Si en el futuro se
@@ -155,7 +155,7 @@ jobs:
           # La herramienta de test (pytest) se instala DESPUÉS del save_cache, sobre
           # el venv ya poblado: así queda fuera del material cacheado y la caché de
           # venv la comparten test y build de esta plataforma.
-          # Política de pins (S1-30): pytest va pineado a versión exacta. Hoy el
+          # Política de pins: pytest va pineado a versión exacta. Hoy el
           # proyecto NO usa plugins de pytest, así que no hay nada más que fijar;
           # esta política es deliberadamente solo documental (un guard automático
           # de plugins sería sobreingeniería sin valor actual). Si en el futuro se
@@ -256,7 +256,7 @@ jobs:
           # La herramienta de test (pytest) se instala DESPUÉS del save_cache, sobre
           # el venv ya poblado: así queda fuera del material cacheado y la caché de
           # venv la comparten test y build de esta plataforma.
-          # Política de pins (S1-30): pytest va pineado a versión exacta. Hoy el
+          # Política de pins: pytest va pineado a versión exacta. Hoy el
           # proyecto NO usa plugins de pytest, así que no hay nada más que fijar;
           # esta política es deliberadamente solo documental (un guard automático
           # de plugins sería sobreingeniería sin valor actual). Si en el futuro se
@@ -446,7 +446,7 @@ jobs:
             Write-Host "[STEP] Smoke test dist/tts-sidecar/tts-sidecar.exe - INICIO"
             dist/tts-sidecar/tts-sidecar.exe version
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            # S3-07: valida que las voces de fábrica (en particular 'default')
+            # Valida que las voces de fábrica (en particular 'default')
             # quedaron empaquetadas en el bundle. `voice list` no carga el
             # modelo; falla el job si el bundle no trae la voz por defecto.
             $voiceList = dist/tts-sidecar/tts-sidecar.exe voice list
@@ -575,7 +575,7 @@ jobs:
           command: |
             echo "[STEP] Smoke test dist/tts-sidecar/tts-sidecar - INICIO"
             dist/tts-sidecar/tts-sidecar version
-            # S3-07: valida que las voces de fábrica (en particular 'default')
+            # Valida que las voces de fábrica (en particular 'default')
             # quedaron empaquetadas en el bundle. `voice list` no carga el
             # modelo; el grep -qx aborta el step si 'default' no viaja en el bundle.
             dist/tts-sidecar/tts-sidecar voice list | grep -qx '  - default'
@@ -685,7 +685,7 @@ jobs:
           command: |
             echo "[STEP] Smoke test dist/tts-sidecar/tts-sidecar - INICIO"
             dist/tts-sidecar/tts-sidecar version
-            # S3-07: valida que las voces de fábrica (en particular 'default')
+            # Valida que las voces de fábrica (en particular 'default')
             # quedaron empaquetadas en el bundle. `voice list` no carga el
             # modelo; el grep -qx aborta el step si 'default' no viaja en el bundle.
             dist/tts-sidecar/tts-sidecar voice list | grep -qx '  - default'
@@ -819,7 +819,7 @@ jobs:
           command: |
             echo "[STEP] Smoke test dist/tts-sidecar-arm64.app/Contents/MacOS/tts-sidecar - INICIO"
             dist/tts-sidecar-arm64.app/Contents/MacOS/tts-sidecar version
-            # S3-07: valida que las voces de fábrica (en particular 'default')
+            # Valida que las voces de fábrica (en particular 'default')
             # quedaron empaquetadas en el bundle. `voice list` no carga el
             # modelo; el grep -qx aborta el step si 'default' no viaja en el bundle.
             dist/tts-sidecar-arm64.app/Contents/MacOS/tts-sidecar voice list | grep -qx '  - default'
@@ -913,7 +913,7 @@ jobs:
             cat notes.md
             echo "[STEP] Extract release notes from CHANGELOG section - FIN"
       - run:
-          # S3-06 (GPLv3 §6): inyecta en las notas del release la oferta de
+          # GPLv3 §6: inyecta en las notas del release la oferta de
           # código fuente canónica — tarball del tag y enlace al tag — para que
           # TODO release futuro cumpla el compliance de fuente sin depender de
           # que el humano la añada a mano. El pie se anexa a notes.md (ya

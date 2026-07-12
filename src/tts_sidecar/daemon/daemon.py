@@ -73,7 +73,7 @@ class DaemonManager:
 
         if background:
             # Lock de arranque atómico: serializa los `start` concurrentes
-            # (S3-02) antes de lanzar el subproceso. Si el lock está vigente,
+            # antes de lanzar el subproceso. Si el lock está vigente,
             # ya hay un daemon corriendo o arrancando y no se lanza otro.
             if not self._acquire_start_lock():
                 print("Daemon ya está arrancando", file=sys.stderr)
@@ -147,7 +147,7 @@ class DaemonManager:
             # puerto ven al daemon; reportar «no está corriendo» sería un éxito
             # falso.
             #
-            # S1-05: el pidfile es la fuente autoritativa. Si registra un PID
+            # El pidfile es la fuente autoritativa. Si registra un PID
             # vivo del daemon, es un arranque en curso: se avisa y se devuelve
             # False (exit 5) sin matar el proceso. Si el PID está muerto/ajeno,
             # es un pidfile obsoleto (zombie): se limpia y se reporta que no

@@ -163,7 +163,7 @@ class TestFetchPinnedAsset:
         assert resultado == dest
 
     def test_network_timeout_propagates_without_partial_artifact(self, tmp_path, monkeypatch):
-        """S1-20: un timeout de red al descargar propaga la excepción (el build
+        """Un timeout de red al descargar propaga la excepción (el build
         aborta) y no deja un dest parcial que la rama de caché confunda después."""
         import urllib.request
 

@@ -34,7 +34,7 @@ def test_desktop_entry_application_type_and_terminal():
 
 
 class TestEnsureRuntimeDependencies:
-    """S1-19: las ramas de fallo de ensure_runtime_dependencies abortan el build
+    """Las ramas de fallo de ensure_runtime_dependencies abortan el build
     con SystemExit(1) en vez de propagar un traceback crudo."""
 
     def test_missing_lockfile_aborts(self, tmp_path, monkeypatch):

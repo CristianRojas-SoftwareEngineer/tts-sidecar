@@ -150,7 +150,7 @@ mock_all() {
 
     [ "$status" -ne 0 ]
     [[ "$output" == *"arquitectura no soportada"* ]]
-    # S1-18: el rechazo debe encaminar a Mac Intel hacia las alternativas.
+    # El rechazo debe encaminar a Mac Intel hacia las alternativas.
     [[ "$output" == *"PyPI"* ]]
 }
 

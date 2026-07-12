@@ -57,7 +57,7 @@ def test_uninstall_trims_path_entry(iss):
 
 
 def test_uninstall_path_trim_logic_is_anchored(iss):
-    """S1-24: ancla línea a línea la lógica Pascal de recorte del PATH (lo más
+    """Ancla línea a línea la lógica Pascal de recorte del PATH (lo más
     cercano a un test unitario sin ejecutar Pascal): guard del paso de
     desinstalación, búsqueda envuelta en ';' case-insensitive, no-op sin match
     y las dos ramas de recorte (entrada al inicio vs. en medio/al final)."""

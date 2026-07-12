@@ -526,7 +526,7 @@ def _environment_checks() -> list[tuple[str, str, str]]:
 
 
 def _check_avx2() -> tuple[str, str, str]:
-    """Chequeo best-effort de AVX2 para doctor (S1-11).
+    """Chequeo best-effort de AVX2 para doctor.
 
     Solo aplica a x86-64: en ARM (Apple Silicon, aarch64) PyTorch usa NEON y el
     chequeo se reporta como no aplicable. La detección evita dependencias
@@ -615,7 +615,7 @@ def cmd_doctor(args):
         # psutil no disponible o error de lectura: se omite sin penalizar.
         checks.append(("SKIP", "RAM", f"no se pudo determinar ({e})"))
 
-    # Chequea AVX2 (advisory, S1-11): PyTorch lo requiere en x86-64 y falla en
+    # Chequea AVX2 (advisory): PyTorch lo requiere en x86-64 y falla en
     # runtime sin diagnóstico en CPUs pre-2015. Detección best-effort por SO
     # (sin dependencia nueva): /proc/cpuinfo en Linux, sysctl en macOS Intel;
     # en Windows no hay vía estándar y el chequeo se degrada a una nota
@@ -1081,7 +1081,7 @@ def _uninstall_windows(args):
 
 
 def _describe_provision_failure(e: Exception) -> str:
-    """Mensaje [FAIL] accionable según la causa del fallo de provisión (S1-01).
+    """Mensaje [FAIL] accionable según la causa del fallo de provisión.
 
     Clasifica en tres familias observables sin depender del texto de la
     excepción: credenciales/acceso (HTTP 401/403, repos gated de HuggingFace),
@@ -1241,7 +1241,7 @@ def cmd_setup(args):
                 }))
 
         def _purge_incomplete():
-            """Limpia los '*.incomplete' huérfanos tras una provisión completa (S1-03).
+            """Limpia los '*.incomplete' huérfanos tras una provisión completa.
 
             Solo se invoca con el modelo ya íntegro en caché: en ese punto ningún
             .incomplete es una descarga reanudable, son parciales huérfanos.

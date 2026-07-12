@@ -117,7 +117,7 @@ EOF
     chmod +x "$MOCK_BIN/ldd"
 }
 
-@test "glibc < 2.35 aborta encaminando a PyPI/fuente (S1-14)" {
+@test "glibc < 2.35 aborta encaminando a PyPI/fuente" {
     mock_uname x86_64
     mock_curl x86_64
     mock_ldd 2.31

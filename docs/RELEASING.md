@@ -102,7 +102,7 @@ Una vez pushado el tag, el pipeline ejecuta sin intervención:
      de código fuente **GPLv3 §6**: el tarball del tag
      (`archive/refs/tags/vX.Y.Z.tar.gz`) y el enlace al tag, para que todo
      release cumpla el compliance de fuente de forma automática sin depender de
-     que el humano la añada a mano (S3-06).
+     que el humano la añada a mano.
    - Publica el GitHub Release directo (sin borrador) sobre el tag `vX.Y.Z`, con
      los 5 assets (4 artefactos + `SHA256SUMS.txt`) y las notas.
 3. **`publish-pypi`** (en paralelo a los 4 builds, solo requiere la triple

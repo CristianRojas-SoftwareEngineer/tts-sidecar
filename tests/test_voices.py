@@ -248,7 +248,7 @@ def test_voice_paths_of_listed_voice_never_fails(voice_roots):
 
 
 def test_factory_default_voice_is_bundled():
-    """S3-07: la voz de fábrica `default` viaja en el bundle (sin modelo).
+    """La voz de fábrica `default` viaja en el bundle (sin modelo).
 
     Valida a nivel de paquete que la voz por defecto está empaquetada, sin
     instanciar el engine (las voces de fábrica son de solo lectura y no

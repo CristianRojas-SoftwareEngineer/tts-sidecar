@@ -126,7 +126,7 @@ function Find-LegacyMachinePathEntry {
 }
 
 function Test-LegacyMachinePath {
-    # Migración per-machine→per-user (S1-17): los instaladores pre-0.4.0 eran
+    # Migración per-machine→per-user: los instaladores pre-0.4.0 eran
     # per-machine y dejaban su entrada en el PATH de máquina (HKLM). El
     # instalador per-user actual no puede limpiarla sin UAC
     # (PrivilegesRequired=lowest), así que se detecta y se indica el comando

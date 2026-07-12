@@ -33,7 +33,7 @@ class DaemonIPCClient:
     TIMEOUT = 5.0          # Timeout de conexión
     # Timeout de síntesis: 5 min por defecto (audio largo en CPU lenta).
     # Sobreescribible con TTS_SIDECAR_REQUEST_TIMEOUT (segundos, float) para
-    # consumidores programáticos que prefieran fallar antes (S1-06); un valor
+    # consumidores programáticos que prefieran fallar antes; un valor
     # inválido o no positivo se ignora y se conserva el default.
     REQUEST_TIMEOUT = 300.0
 

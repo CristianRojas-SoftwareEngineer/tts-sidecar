@@ -67,7 +67,7 @@ Describe "Install-TtsSidecar" {
             Should -Invoke Invoke-TtsSidecarSetup -Times 1 -Exactly
         }
 
-        It "revisa la migración per-machine tras instalar (S1-17)" {
+        It "revisa la migración per-machine tras instalar" {
             { Install-TtsSidecar } | Should -Not -Throw
             Should -Invoke Test-LegacyMachinePath -Times 1 -Exactly
         }
@@ -107,7 +107,7 @@ Describe "Install-TtsSidecar" {
 }
 
 Describe "Find-LegacyMachinePathEntry" {
-    # S1-17: detección pura de la entrada per-machine heredada (pre-0.4.0),
+    # Detección pura de la entrada per-machine heredada (pre-0.4.0),
     # sin tocar el registro real.
 
     It "detecta la entrada tts-sidecar al inicio, en medio y al final" {

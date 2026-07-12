@@ -199,7 +199,7 @@ def purge_incomplete_downloads() -> int:
     huggingface_hub deja '<hash>.incomplete' en blobs/ cuando una descarga se
     interrumpe, y solo los reutiliza para reanudar esa misma descarga. Tras una
     provisión exitosa todos los archivos necesarios están completos, así que
-    cualquier .incomplete restante es basura huérfana que nadie limpia (S1-03).
+    cualquier .incomplete restante es basura huérfana que nadie limpia.
     Se purga únicamente dentro de las carpetas del proyecto (model_cache_dirs),
     nunca la caché completa de HuggingFace; un unlink fallido (archivo en uso,
     permisos) se ignora para no bloquear la provisión.

@@ -102,7 +102,7 @@ toolchain (torch, onnxruntime); ver el callout anterior.
 se gatea solo con el smoke `version` (importa el stack nativo en ARM y exige exit
 0); no hay puerta `pytest` nativa en arm64 porque la suite es arch-independiente y
 mockea el engine (ver «Simetría: 3 puertas de test vs. 4 targets de build» más
-abajo). Es una **decisión consciente** registrada como los hallazgos S1-23/S1-32;
+abajo). Es una **decisión consciente**;
 el fast-follow de mayor ROI sería un test de integración que cargue el modelo y
 sintetice en ARM, no re-correr la suite.
 
@@ -129,7 +129,7 @@ máquinas con esas versiones exactas.
 | Linux | `cimg/python:3.13` (base Ubuntu 22.04, glibc 2.35) en x86_64 y arm64 | glibc ≥ 2.35 | El AppImage se compila contra la glibc del runner; `install.sh` advierte por debajo |
 | macOS | Runner Apple Silicon con Xcode 26.4 | `LSMinimumSystemVersion` del `.dmg` | Derivado de `MACOSX_DEPLOYMENT_TARGET` del Python del build (`build_macos.py`) |
 
-**Limitación aceptada (S1-13):** los mínimos declarados **no** se prueban en máquinas
+**Limitación aceptada:** los mínimos declarados **no** se prueban en máquinas
 con esas versiones exactas (no hay runners de Windows 10, Ubuntu 22.04 de escritorio ni
 del macOS mínimo). La matriz registra lo efectivamente probado; un reporte de fallo en
 una versión mínima real reabriría esta decisión.
@@ -217,8 +217,7 @@ publicar el artefacto, de modo que un empaquetado roto (metadata faltante,
 hace fallar el job en lugar de publicarse «verde». `version` y `voice list` **no
 cargan el modelo** (las voces viajan en el bundle), así que el chequeo es de
 segundos: el step valida con `grep -qx '  - default'` (bash) / `-notmatch
-'default'` (PowerShell) que la voz de fábrica `default` quedó empaquetada. Ver
-S3-07 en `docs/PROJECT-REVIEW.md`.
+'default'` (PowerShell) que la voz de fábrica `default` quedó empaquetada.
 
 Queda **manual** (requiere modelo, audio real y hardware por SO): `doctor`,
 `setup` y una síntesis real (`speak`). La validación end-to-end de los
@@ -311,7 +310,7 @@ Así, un bug específico de plataforma —Windows
 (pycaw/COM, winsound, generación del `.iss`) o macOS (afplay/sounddevice, rutas y señales
 POSIX)— se detecta en el gate en lugar de llegar al usuario.
 
-> **Mockeo deliberado de los smoke-tests de instaladores (S1-31).** Los tres jobs
+> **Mockeo deliberado de los smoke-tests de instaladores.** Los tres jobs
 > `test-installer-*` mockean por PATH las herramientas con efectos externos (`curl`,
 > `sha256sum`, `hdiutil`, `xattr`, …): validan la lógica del script (parsing del
 > release, verificación de checksum, guards de arquitectura y glibc, mensajes) sin
@@ -365,7 +364,7 @@ Los tests (3) y los builds (4) no están desalineados: responden a **ejes distin
 │ -x64+ Inno  │ │    x64      │ │   arm64     │ │     arm64        │
 │  Setup      │ │ + AppImage  │ │ + AppImage  │ │  + create-dmg    │
 └─────────────┘ └─────────────┘ └─────────────┘ └──────────────────┘
-     (cada build corre además un smoke test `version` del binario congelado)
+     (cada build corre además un smoke test `version` y `voice list` del binario congelado)
 ```
 
 ### Jobs

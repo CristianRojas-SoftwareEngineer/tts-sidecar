@@ -769,7 +769,7 @@ No hay **P0**: sin hallazgos S4 y sin S3 que bloqueen el release de v0.6.0. Las 
 
 Hallazgos ya probados por lectura de código cuya evidencia multiplataforma o de runtime se confirma al correr CI:
 
-- `S3-07` — la ampliación del smoke test se verifica en los jobs `build-linux-x64`, `build-linux-arm64` y `build-darwin-arm64` (`.circleci/config.yml:541,647,773`): un bundle sin voces de fábrica debe hacer fallar el job.
+- `S3-07` — la ampliación del smoke test se verifica en los 4 jobs de build (`build-windows-x64`, `build-linux-x64`, `build-linux-arm64`, `build-darwin-arm64`) (`.circleci/config.yml:444,574,684,818`): un bundle sin voces de fábrica debe hacer fallar el job.
 - `S1-22` — la omisión de los tests de symlink en Windows se observa en el job de Windows sin Developer Mode (`tests/test_cli.py:522-530`).
 - `S1-23` / `S1-32` — la ausencia de suite dedicada aarch64 se confirma en los jobs ARM64 Linux (`.circleci/config.yml:643-646,669-673`), donde hoy solo corre el smoke `version`.
 - `S1-31` — el grado de mockeo de los smoke-tests de instaladores se verifica en los jobs `test-installer-*` (`.circleci/config.yml:253-277,304-327`).

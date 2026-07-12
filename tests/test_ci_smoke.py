@@ -3,7 +3,7 @@
 Verifican que ciertos comportamientos del release y de los smoke tests de
 binario congelado no se eliminen silenciosamente en `.circleci/config.yml`,
 pues son la única barrera automática de compliance (GPLv3 §6) y de integridad
-del empaquetado de voces (S3-06 / S3-07).
+del empaquetado de voces.
 """
 
 import pathlib
@@ -25,20 +25,20 @@ def test_config_exists(config_text):
 
 
 def test_publish_release_offers_source_tarball(config_text):
-    """S3-06: el job `publish-release` debe inyectar la oferta de fuente GPL.
+    """El job `publish-release` debe inyectar la oferta de fuente GPL.
 
     Si se elimina el pie en CI (tarball + nota GPLv3 §6), este test falla.
     """
     assert "archive/refs/tags/" in config_text, (
-        "Falta el tarball de fuente en publish-release (S3-06: GPLv3 §6)"
+        "Falta el tarball de fuente en publish-release (GPLv3 §6)"
     )
     assert "GPL" in config_text, (
-        "Falta la referencia a la licencia GPL en publish-release (S3-06)"
+        "Falta la referencia a la licencia GPL en publish-release"
     )
 
 
 def test_smoke_tests_validate_bundled_default_voice(config_text):
-    """S3-07: los 4 smoke tests de binario congelado deben correr `voice list`.
+    """Los 4 smoke tests de binario congelado deben correr `voice list`.
 
     `voice list` debe aparecer al menos 4 veces (una por cada job de build:
     build-windows-x64, build-linux-x64, build-linux-arm64, build-darwin-arm64).
@@ -46,5 +46,5 @@ def test_smoke_tests_validate_bundled_default_voice(config_text):
     count = config_text.count("voice list")
     assert count >= 4, (
         f"Se esperaban >=4 ocurrencias de 'voice list' en los smoke tests "
-        f"de los 4 bins congelados (S3-07); encontradas: {count}"
+        f"de los 4 bins congelados; encontradas: {count}"
     )

@@ -768,7 +768,7 @@ class TestSetupAudioAdvisory:
 
 
 class TestCheckAvx2:
-    """S1-11: chequeo best-effort de AVX2, por arquitectura y SO. Nunca FAIL:
+    """Chequeo best-effort de AVX2, por arquitectura y SO. Nunca FAIL:
     PASS/WARN donde hay detección (Linux, macOS Intel) y SKIP informativo donde
     no la hay (Windows, ARM)."""
 

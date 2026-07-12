@@ -504,7 +504,7 @@ class TestDaemonManager:
 
     @patch("requests.post")
     def test_stop_swallows_request_exception_and_reports_by_state(self, mock_post):
-        """S1-21: un RequestException en el POST a /shutdown no revienta stop():
+        """Un RequestException en el POST a /shutdown no revienta stop():
         se ignora y el resultado se decide por el estado real del proceso."""
         import requests
         from tts_sidecar.daemon.daemon import DaemonManager
@@ -518,7 +518,7 @@ class TestDaemonManager:
 
     @patch("requests.get")
     def test_status_reports_unknown_on_request_exception(self, mock_get):
-        """S1-21: si /health no responde pero el daemon parece vivo, status()
+        """Si /health no responde pero el daemon parece vivo, status()
         devuelve el estado documentado "unknown" en lugar de propagar la excepción."""
         import requests
         from tts_sidecar.daemon.daemon import DaemonManager
@@ -609,7 +609,7 @@ class TestSynthesizeStreaming:
 
 
 class TestDaemonStartLock:
-    """S3-02: el lock de arranque atómico (pidfile con O_EXCL) serializa los
+    """El lock de arranque atómico (pidfile con O_EXCL) serializa los
     `start` concurrentes y reclama locks obsoletos."""
 
     def _manager(self, tmp_path):
@@ -680,7 +680,7 @@ class TestDaemonStartLock:
 
 
 class TestStopWithPidfile:
-    """S1-05: en la ventana de arranque, el pidfile es autoritativo y
+    """En la ventana de arranque, el pidfile es autoritativo y
     desambigua un daemon vivo (arrancando) de un zombie (PID muerto)."""
 
     def _offline(self, tmp_path):
@@ -741,7 +741,7 @@ class TestRemoveOwnPidfile:
 
 
 class TestServePortInUse:
-    """S3-03: el bind del puerto 8765 distingue EADDRINUSE y sale con
+    """El bind del puerto 8765 distingue EADDRINUSE y sale con
     EXIT_DAEMON_PORT_IN_USE (6), sin reintentar ni reportar éxito (0)."""
 
     def _serve_that_fails_bind(self, errno_value, auto_restart=False):
