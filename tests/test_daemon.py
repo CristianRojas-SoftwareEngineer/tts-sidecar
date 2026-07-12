@@ -738,3 +738,75 @@ class TestRemoveOwnPidfile:
 
         run._remove_own_pidfile()
         assert pidfile.exists()
+
+
+class TestServePortInUse:
+    """S3-03: el bind del puerto 8765 distingue EADDRINUSE y sale con
+    EXIT_DAEMON_PORT_IN_USE (6), sin reintentar ni reportar éxito (0)."""
+
+    def _serve_that_fails_bind(self, errno_value, auto_restart=False):
+        """Ejercita serve() con server.run() forzado a un OSError de bind.
+
+        No carga el modelo real (get_instance mockeado) ni ocupa el puerto
+        8765 (uvicorn.Server.run está parcheado para lanzar el error).
+        """
+        import errno
+        from unittest.mock import MagicMock
+        from tts_sidecar.daemon import run
+        from tts_sidecar.cli import EXIT_ERROR
+
+        with patch(
+            "tts_sidecar.engine.ChatterboxEngine.get_instance",
+            return_value=MagicMock(),
+        ), patch(
+            "tts_sidecar.engine.ChatterboxEngine._auto_detect_compute_backend",
+            return_value="cpu",
+        ), patch(
+            "uvicorn.Server.run",
+            side_effect=OSError(errno_value, "No se pudo enlazar el puerto"),
+        ) as mock_run:
+            with pytest.raises(SystemExit) as exc:
+                run.serve(auto_restart=auto_restart)
+
+        return exc, mock_run, EXIT_ERROR
+
+    def test_eaddrinuse_posix_exits_with_port_in_use_code(self, capsys):
+        import errno
+
+        exc, mock_run, _ = self._serve_that_fails_bind(errno.EADDRINUSE)
+        assert exc.value.code == 6
+        mock_run.assert_called_once()
+        err = capsys.readouterr().err
+        assert "8765" in err
+        assert "daemon stop" in err
+
+    def test_wsaeaddrinuse_windows_exits_with_port_in_use_code(self, capsys):
+        # WSAEADDRINUSE (Windows) == 10048
+        exc, mock_run, _ = self._serve_that_fails_bind(10048)
+        assert exc.value.code == 6
+        mock_run.assert_called_once()
+        err = capsys.readouterr().err
+        assert "8765" in err
+        assert "daemon stop" in err
+
+    def test_eaddrinuse_with_auto_restart_does_not_retry(self, capsys):
+        import errno
+
+        exc, mock_run, _ = self._serve_that_fails_bind(
+            errno.EADDRINUSE, auto_restart=True
+        )
+        # El bind fallido rompe el bucle de auto-reinicio de inmediato (exit 6),
+        # sin recargar el modelo en vueltas sucesivas.
+        assert exc.value.code == 6
+        mock_run.assert_called_once()
+
+    def test_other_oserror_exits_with_generic_error_code(self, capsys):
+        import errno
+
+        # Un OSError de binding distinto a EADDRINUSE (p.ej. EACCES) no debe
+        # confundirse con «puerto en uso»: sale con EXIT_ERROR (1).
+        exc, mock_run, EXIT_ERROR = self._serve_that_fails_bind(errno.EACCES)
+        assert exc.value.code == EXIT_ERROR
+        mock_run.assert_called_once()
+        err = capsys.readouterr().err
+        assert "no se pudo enlazar" in err
