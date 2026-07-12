@@ -182,6 +182,14 @@ tts-sidecar speak --text "Hola" --no-daemon
 > desactiva por completo y stdout queda intacto (contrato del CLI: stdout =
 > datos, stderr = progreso).
 
+> **Timeout de síntesis del cliente**: el cliente IPC espera la respuesta de
+> `/synthesize` hasta **300 s** por defecto (audio largo en CPU lenta). Un
+> consumidor programático que prefiera fallar antes puede reducirlo con la
+> variable de entorno **`TTS_SIDECAR_REQUEST_TIMEOUT`** (segundos, admite
+> decimales; un valor inválido o no positivo se ignora y se conserva el
+> default). Al expirar, `speak --daemon` falla con el error IPC estándar; no
+> hay reintento automático.
+
 ## Seguridad: directorios de audio permitidos
 
 El endpoint `/synthesize` **no acepta rutas de audio arbitrarias del sistema

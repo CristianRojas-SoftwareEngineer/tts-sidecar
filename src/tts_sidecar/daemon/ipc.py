@@ -31,11 +31,24 @@ class DaemonIPCClient:
     """
 
     TIMEOUT = 5.0          # Timeout de conexión
-    REQUEST_TIMEOUT = 300.0  # Timeout de síntesis (5 min para audio largo)
+    # Timeout de síntesis: 5 min por defecto (audio largo en CPU lenta).
+    # Sobreescribible con TTS_SIDECAR_REQUEST_TIMEOUT (segundos, float) para
+    # consumidores programáticos que prefieran fallar antes (S1-06); un valor
+    # inválido o no positivo se ignora y se conserva el default.
+    REQUEST_TIMEOUT = 300.0
 
     def __init__(self):
         self.port = DEFAULT_PORT
         self.base_url = f"http://127.0.0.1:{self.port}"
+        import os
+        raw = os.environ.get("TTS_SIDECAR_REQUEST_TIMEOUT")
+        if raw:
+            try:
+                value = float(raw)
+                if value > 0:
+                    self.REQUEST_TIMEOUT = value
+            except ValueError:
+                pass
 
     def is_running(self) -> bool:
         """Comprueba si el daemon está corriendo y responde al health check.

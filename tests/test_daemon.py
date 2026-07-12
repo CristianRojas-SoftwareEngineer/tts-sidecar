@@ -495,6 +495,32 @@ class TestDaemonManager:
         with pytest.raises(DaemonIPCError, match="no devolvió audio"):
             client.synthesize(text="hola")
 
+    @patch("requests.post")
+    def test_stop_swallows_request_exception_and_reports_by_state(self, mock_post):
+        """S1-21: un RequestException en el POST a /shutdown no revienta stop():
+        se ignora y el resultado se decide por el estado real del proceso."""
+        import requests
+        from tts_sidecar.daemon.daemon import DaemonManager
+
+        mock_post.side_effect = requests.RequestException("conexión rota")
+        manager = DaemonManager()
+        # Vivo al entrar (se intenta el cierre graceful); muerto después: stop()
+        # debe reportar éxito pese al fallo HTTP, sin recurrir al kill por PID.
+        with patch.object(manager, "is_running", side_effect=[True, False, False]):
+            assert manager.stop() is True
+
+    @patch("requests.get")
+    def test_status_reports_unknown_on_request_exception(self, mock_get):
+        """S1-21: si /health no responde pero el daemon parece vivo, status()
+        devuelve el estado documentado "unknown" en lugar de propagar la excepción."""
+        import requests
+        from tts_sidecar.daemon.daemon import DaemonManager
+
+        mock_get.side_effect = requests.RequestException("timeout")
+        manager = DaemonManager()
+        with patch.object(manager, "is_running", return_value=True):
+            assert manager.status() == {"running": True, "status": "unknown"}
+
 
 class TestSynthesizeStreaming:
     """El endpoint /synthesize emite NDJSON: N×progress → result, o error."""
