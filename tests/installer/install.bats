@@ -1,6 +1,7 @@
-# Smoke-test de install.sh (bats-core): mockea curl/uname/sha256sum por PATH,
-# sin red ni GitHub real. Cubre selección de arquitectura, elección del asset
-# correcto y aborto ante checksum corrupto (docs/SELF-HOSTED-INSTALL.md).
+# Smoke-test de install.sh (bats-core): mockea curl/uname/sha256sum/ldd por
+# PATH, sin red ni GitHub real. Cubre selección de arquitectura, elección del
+# asset correcto, aborto ante checksum corrupto y guard de glibc mínima
+# (docs/SELF-HOSTED-INSTALL.md).
 #
 # Ejecutar: bats tests/installer/install.bats
 
@@ -104,6 +105,39 @@ EOF
     [ "$status" -eq 0 ]
     [[ "$output" == *"tts-sidecar-1.0.0-aarch64.AppImage"* ]]
     [ -f "$HOME/.local/opt/tts-sidecar/tts-sidecar-1.0.0-aarch64.AppImage" ]
+}
+
+# Instala un mock de `ldd` cuyo `--version` reporta la glibc $1.
+mock_ldd() {
+    local version="$1"
+    cat > "$MOCK_BIN/ldd" <<EOF
+#!/bin/sh
+if [ "\$1" = "--version" ]; then echo "ldd (GNU libc) $version"; fi
+EOF
+    chmod +x "$MOCK_BIN/ldd"
+}
+
+@test "glibc < 2.35 aborta encaminando a PyPI/fuente (S1-14)" {
+    mock_uname x86_64
+    mock_curl x86_64
+    mock_ldd 2.31
+
+    run sh "$INSTALL_SH"
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"glibc"* ]]
+    [[ "$output" == *"PyPI"* ]]
+    [ ! -d "$HOME/.local/opt/tts-sidecar" ]
+}
+
+@test "glibc >= 2.35 no bloquea la instalación" {
+    mock_uname x86_64
+    mock_curl x86_64
+    mock_ldd 2.35
+
+    run sh "$INSTALL_SH"
+
+    [ "$status" -eq 0 ]
 }
 
 @test "arquitectura no soportada aborta con error" {

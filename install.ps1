@@ -117,6 +117,28 @@ function Update-SessionPath {
     $env:Path = "$machinePath;$userPath"
 }
 
+function Find-LegacyMachinePathEntry {
+    # Lógica pura de detección (testeable en Pester sin tocar el registro):
+    # devuelve la primera entrada tts-sidecar del PATH de máquina, o $null.
+    param([string]$MachinePath)
+    if (-not $MachinePath) { return $null }
+    return ($MachinePath -split ';' | Where-Object { $_ -match 'tts-sidecar' } | Select-Object -First 1)
+}
+
+function Test-LegacyMachinePath {
+    # Migración per-machine→per-user (S1-17): los instaladores pre-0.4.0 eran
+    # per-machine y dejaban su entrada en el PATH de máquina (HKLM). El
+    # instalador per-user actual no puede limpiarla sin UAC
+    # (PrivilegesRequired=lowest), así que se detecta y se indica el comando
+    # exacto de limpieza para una PowerShell de administrador.
+    $stale = Find-LegacyMachinePathEntry -MachinePath ([Environment]::GetEnvironmentVariable("Path", "Machine"))
+    if ($stale) {
+        Write-Log "AVISO: quedó una entrada per-machine en el PATH de una instalación anterior (pre-0.4.0): $stale"
+        Write-Log "La instalación actual es per-user y no la necesita. Para quitarla, en una PowerShell de administrador:"
+        Write-Log '  [Environment]::SetEnvironmentVariable("Path", (([Environment]::GetEnvironmentVariable("Path","Machine") -split ";") | Where-Object { $_ -notmatch "tts-sidecar" }) -join ";", "Machine")'
+    }
+}
+
 function Invoke-TtsSidecarSetup {
     # La instalación silenciosa omite el checkbox de setup (skipifsilent), así
     # que la provisión del modelo se ofrece aquí.
@@ -147,6 +169,7 @@ function Install-TtsSidecar {
         Test-Sha256Sum -FilePath $setupPath -SumsPath $sumsPath
         Install-SetupSilently -SetupPath $setupPath
         Update-SessionPath
+        Test-LegacyMachinePath
 
         if (-not $NoSetup) {
             Invoke-TtsSidecarSetup

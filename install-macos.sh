@@ -50,6 +50,7 @@ require_cmd mkdir
 # soportado (limitación de toolchain documentada en el README).
 machine="$(uname -m)"
 if [ "$machine" != "arm64" ]; then
+    log "Alternativas para Mac Intel: instala desde PyPI ('uv tool install tts-sidecar' o 'pipx install tts-sidecar') o compila desde la fuente (docs/BUILD.md)."
     fail "arquitectura no soportada: $machine (tts-sidecar solo publica .dmg para Apple Silicon / arm64 en macOS)"
 fi
 log "Arquitectura detectada: $machine"

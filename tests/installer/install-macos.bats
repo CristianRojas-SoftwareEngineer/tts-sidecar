@@ -150,6 +150,8 @@ mock_all() {
 
     [ "$status" -ne 0 ]
     [[ "$output" == *"arquitectura no soportada"* ]]
+    # S1-18: el rechazo debe encaminar a Mac Intel hacia las alternativas.
+    [[ "$output" == *"PyPI"* ]]
 }
 
 @test "selecciona el asset .dmg de arm64" {

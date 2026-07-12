@@ -56,18 +56,21 @@ case "$machine" in
 esac
 log "Arquitectura detectada: $machine -> $ASSET_ARCH"
 
-# --- glibc: advertencia, no aborto ----------------------------------------
-# El AppImage se compila sobre una glibc mínima; en distros muy antiguas
-# (glibc < 2.35) puede fallar en tiempo de ejecución. Se advierte y se
-# continúa: el propio AppImage falla con un mensaje claro si la glibc del
-# host es insuficiente.
+# --- glibc: guard de versión mínima ----------------------------------------
+# El AppImage se compila sobre glibc 2.35 (runner base Ubuntu 22.04); en distros
+# más antiguas no arranca. Detectarlo aquí evita instalar un binario que
+# fallaría en el primer uso: se aborta encaminando a las alternativas (PyPI o
+# compilación desde fuente). Si la versión no puede parsearse se continúa: es
+# preferible no bloquear a ciegas sobre un parseo fallido.
 if command -v ldd >/dev/null 2>&1; then
     glibc_version="$(ldd --version 2>/dev/null | head -n1 | grep -o '[0-9]\+\.[0-9]\+$' || true)"
     if [ -n "$glibc_version" ]; then
         glibc_major="$(printf '%s' "$glibc_version" | cut -d. -f1)"
         glibc_minor="$(printf '%s' "$glibc_version" | cut -d. -f2)"
         if [ "$glibc_major" -lt 2 ] || { [ "$glibc_major" -eq 2 ] && [ "$glibc_minor" -lt 35 ]; }; then
-            log "WARNING: glibc $glibc_version detectada (< 2.35). El AppImage puede no ejecutar en este sistema."
+            log "glibc $glibc_version detectada: el AppImage requiere glibc >= 2.35 y no funcionaría en este sistema."
+            log "Alternativas: instala desde PyPI ('uv tool install tts-sidecar' o 'pipx install tts-sidecar') o compila desde la fuente (docs/BUILD.md)."
+            fail "glibc insuficiente ($glibc_version < 2.35)"
         fi
     fi
 fi

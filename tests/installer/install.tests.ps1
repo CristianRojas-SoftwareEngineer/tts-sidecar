@@ -44,6 +44,7 @@ Describe "Install-TtsSidecar" {
     BeforeEach {
         Mock Install-SetupSilently {}
         Mock Update-SessionPath {}
+        Mock Test-LegacyMachinePath {}
         Mock Invoke-TtsSidecarSetup {}
     }
 
@@ -64,6 +65,11 @@ Describe "Install-TtsSidecar" {
             Should -Invoke Get-RemoteFile -Times 2 -Exactly
             Should -Invoke Install-SetupSilently -Times 1 -Exactly
             Should -Invoke Invoke-TtsSidecarSetup -Times 1 -Exactly
+        }
+
+        It "revisa la migración per-machine tras instalar (S1-17)" {
+            { Install-TtsSidecar } | Should -Not -Throw
+            Should -Invoke Test-LegacyMachinePath -Times 1 -Exactly
         }
     }
 
@@ -97,5 +103,27 @@ Describe "Install-TtsSidecar" {
             Should -Invoke Get-RemoteFile -Times 0 -Exactly
             Should -Invoke Install-SetupSilently -Times 0 -Exactly
         }
+    }
+}
+
+Describe "Find-LegacyMachinePathEntry" {
+    # S1-17: detección pura de la entrada per-machine heredada (pre-0.4.0),
+    # sin tocar el registro real.
+
+    It "detecta la entrada tts-sidecar al inicio, en medio y al final" {
+        Find-LegacyMachinePathEntry -MachinePath "C:\Program Files\tts-sidecar;C:\Windows" |
+            Should -Be "C:\Program Files\tts-sidecar"
+        Find-LegacyMachinePathEntry -MachinePath "C:\Windows;C:\Program Files\tts-sidecar;C:\Tools" |
+            Should -Be "C:\Program Files\tts-sidecar"
+        Find-LegacyMachinePathEntry -MachinePath "C:\Windows;C:\Program Files\tts-sidecar" |
+            Should -Be "C:\Program Files\tts-sidecar"
+    }
+
+    It "devuelve nulo cuando no hay entrada heredada" {
+        Find-LegacyMachinePathEntry -MachinePath "C:\Windows;C:\Tools" | Should -BeNullOrEmpty
+    }
+
+    It "devuelve nulo con un PATH de máquina vacío" {
+        Find-LegacyMachinePathEntry -MachinePath "" | Should -BeNullOrEmpty
     }
 }
