@@ -144,7 +144,8 @@ al portal de Microsoft (*Windows Defender Security Intelligence*):
    Defender (no solo para quien reportó).
 
 Alcance de este runbook: cubre **únicamente** la detección de Defender
-Antivirus. **No** desactiva ni acelera el paso de SmartScreen — SmartScreen es
+Antivirus (ver también los runbooks de ClamAV y Gatekeeper abajo). **No**
+desactiva ni acelera el paso de SmartScreen — SmartScreen es
 reputación de archivo/editor, y solo la resuelve la firma de código (ver la
 ruta prevista arriba), no un reporte a WDSI. Firmar el binario tampoco borra
 retroactivamente una detección de Defender ya existente: solo el reporte a
@@ -154,3 +155,48 @@ con firma de código, la reputación se hereda entre versiones y esa
 recurrencia disminuye considerablemente. Ver también la guía de usuario para
 los diálogos de bloqueo en
 [USAGE.md](USAGE.md#el-sistema-bloquea-el-primer-arranque-binarios-sin-firmar).
+
+### Runbook: reportar un falso positivo de ClamAV
+
+ClamAV (usado sobre todo en Linux y en pasarelas de correo) puede marcar el
+binario PyInstaller como `PUA.Win32.Packer.PyInstaller` u otra detección de
+empaquetador, especialmente el AppImage/onedir de Linux. No hay un portal
+central de falsos positivos equivalente al de Microsoft; el reporte se hace al
+proyecto ClamAV:
+
+1. Confirma la detección con `clamscan --verbose <ruta-del-artefacto>` y anota
+   la firma exacta que reportó (p. ej. `PUA.Win32.Packer.PyInstaller-*`).
+2. Verifica la integridad del archivo cotejando su SHA-256 contra
+   `SHA256SUMS.txt` del [Release](https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/releases)
+   (ver [docs/RELEASING.md](docs/RELEASING.md)): un hash que coincide descarta
+   que el archivo haya sido alterado en tránsito.
+3. Reporta la firma como falso positivo a ClamAV vía su rastreador de
+   incidencias / portal de muestras (Talos/Cisco), adjuntando el artefacto y
+   aclarando que es un ejecutable PyInstaller de código abierto (enlaza este
+   repositorio y el commit/tag del que se construyó).
+4. Mientras la firma no se actualiza, el usuario afectado puede excluir la ruta
+   o el archivo de su escaneo local (p. ej. `clamscan --exclude=<ruta>`) tras
+   confirmar el paso 2.
+
+### Runbook: bloqueo de Gatekeeper en macOS
+
+Gatekeeper no es una heurística de malware sino una **puerta de firma y
+notarización**: al no estar el binario firmado ni notarizado, macOS lo pone en
+cuarentena en el primer arranque. El diálogo típico es «no se puede abrir
+porque el desarrollador no puede ser verificado». No existe un portal de
+«falso positivo» de Gatekeeper; la solución definitiva es la firma de código
+notarizada (ver la *ruta prevista* de SignPath más arriba). Mientras tanto, el
+usuario puede desbloquear el binario:
+
+1. En `System Settings → Privacidad y Seguridad`, tras intentar abrir el
+   binario aparece **«Permitir de todas formas»**; confírmalo y vuelve a abrir.
+2. O bien, desde Terminal, quita la marca de cuarentena del ejecutable (o del
+   `.app`):
+   `xattr -dr com.apple.quarantine /ruta/a/tts-sidecar`
+   (o `xattr -c` sobre el `.app` completo).
+3. También funciona hacer clic derecho sobre el binario/`.app` y elegir
+   **Abrir**: macOS pide confirmación una vez y luego recuerda la excepción.
+4. Verifica siempre la integridad cotejando el SHA-256 del artefacto contra
+   `SHA256SUMS.txt` del [Release](https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/releases)
+   antes de desbloquear (ver [docs/RELEASING.md](docs/RELEASING.md) y la guía de
+   usuario en [USAGE.md](USAGE.md#el-sistema-bloquea-el-primer-arranque-binarios-sin-firmar)).
