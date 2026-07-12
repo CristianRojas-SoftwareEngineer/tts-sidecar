@@ -441,11 +441,17 @@ jobs:
           # Ejecuta el binario congelado recién construido para detectar
           # empaquetados rotos (metadata faltante, --collect-all incompleto)
           # antes de publicar. `version` no carga el modelo; exit 0 obligatorio.
-          name: Smoke test dist/tts-sidecar/tts-sidecar.exe
+          name: Smoke test dist/tts-sidecar/tts-sidecar.exe (version + voces de fábrica)
           command: |
             Write-Host "[STEP] Smoke test dist/tts-sidecar/tts-sidecar.exe - INICIO"
             dist/tts-sidecar/tts-sidecar.exe version
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            # S3-07: valida que las voces de fábrica (en particular 'default')
+            # quedaron empaquetadas en el bundle. `voice list` no carga el
+            # modelo; falla el job si el bundle no trae la voz por defecto.
+            $voiceList = dist/tts-sidecar/tts-sidecar.exe voice list
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            if ($voiceList -notmatch 'default') { throw "La voz de fábrica 'default' no está empaquetada en el bundle" }
             Write-Host "[STEP] Smoke test dist/tts-sidecar/tts-sidecar.exe - FIN"
       - run:
           # Etapa Installer como step separado: invoca directamente al generador,
@@ -565,10 +571,14 @@ jobs:
       - run:
           # Ejecuta el binario congelado onedir para detectar empaquetados rotos
           # antes de publicar. `version` no carga el modelo; exit 0 obligatorio.
-          name: Smoke test dist/tts-sidecar/tts-sidecar
+          name: Smoke test dist/tts-sidecar/tts-sidecar (version + voces de fábrica)
           command: |
             echo "[STEP] Smoke test dist/tts-sidecar/tts-sidecar - INICIO"
             dist/tts-sidecar/tts-sidecar version
+            # S3-07: valida que las voces de fábrica (en particular 'default')
+            # quedaron empaquetadas en el bundle. `voice list` no carga el
+            # modelo; el grep -qx aborta el step si 'default' no viaja en el bundle.
+            dist/tts-sidecar/tts-sidecar voice list | grep -qx '  - default'
             echo "[STEP] Smoke test dist/tts-sidecar/tts-sidecar - FIN"
       - run:
           # Copia única del AppImage VERSIONADO (nombre de release, con arch) al
@@ -671,10 +681,14 @@ jobs:
           # el engine, ver test-linux), así que este smoke test es la única puerta
           # que ejercita el stack nativo aarch64 (wheels, extensiones). Decisión
           # documentada en docs/BUILD.md §4.
-          name: Smoke test dist/tts-sidecar/tts-sidecar
+          name: Smoke test dist/tts-sidecar/tts-sidecar (version + voces de fábrica)
           command: |
             echo "[STEP] Smoke test dist/tts-sidecar/tts-sidecar - INICIO"
             dist/tts-sidecar/tts-sidecar version
+            # S3-07: valida que las voces de fábrica (en particular 'default')
+            # quedaron empaquetadas en el bundle. `voice list` no carga el
+            # modelo; el grep -qx aborta el step si 'default' no viaja en el bundle.
+            dist/tts-sidecar/tts-sidecar voice list | grep -qx '  - default'
             echo "[STEP] Smoke test dist/tts-sidecar/tts-sidecar - FIN"
       - run:
           # Copia única del AppImage VERSIONADO (nombre de release, con arch) al
@@ -801,10 +815,14 @@ jobs:
           # Ejecuta el binario congelado dentro del .app para detectar
           # empaquetados rotos antes de publicar. `version` no carga el modelo;
           # exit 0 obligatorio.
-          name: Smoke test dist/tts-sidecar-arm64.app/Contents/MacOS/tts-sidecar
+          name: Smoke test dist/tts-sidecar-arm64.app/Contents/MacOS/tts-sidecar (version + voces de fábrica)
           command: |
             echo "[STEP] Smoke test dist/tts-sidecar-arm64.app/Contents/MacOS/tts-sidecar - INICIO"
             dist/tts-sidecar-arm64.app/Contents/MacOS/tts-sidecar version
+            # S3-07: valida que las voces de fábrica (en particular 'default')
+            # quedaron empaquetadas en el bundle. `voice list` no carga el
+            # modelo; el grep -qx aborta el step si 'default' no viaja en el bundle.
+            dist/tts-sidecar-arm64.app/Contents/MacOS/tts-sidecar voice list | grep -qx '  - default'
             echo "[STEP] Smoke test dist/tts-sidecar-arm64.app/Contents/MacOS/tts-sidecar - FIN"
       - run:
           # Copia única del .dmg VERSIONADO (nombre de release, con arch) al
@@ -894,6 +912,29 @@ jobs:
             fi
             cat notes.md
             echo "[STEP] Extract release notes from CHANGELOG section - FIN"
+      - run:
+          # S3-06 (GPLv3 §6): inyecta en las notas del release la oferta de
+          # código fuente canónica — tarball del tag y enlace al tag — para que
+          # TODO release futuro cumpla el compliance de fuente sin depender de
+          # que el humano la añada a mano. El pie se anexa a notes.md (ya
+          # recortado del CHANGELOG por el paso anterior).
+          name: Append GPL source-offer footer to release notes
+          command: |
+            echo "[STEP] Append GPL source-offer footer to release notes - INICIO"
+            set -euo pipefail
+            {
+              echo ""
+              echo "---"
+              echo ""
+              echo "## Código fuente (oferta GPLv3 §6)"
+              echo ""
+              echo "Este release se distribuye bajo **GPL-3.0-or-later**. El código"
+              echo "fuente correspondiente a este tag está disponible en:"
+              echo ""
+              echo "- Tarball de fuente: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/archive/refs/tags/${CIRCLE_TAG}.tar.gz"
+              echo "- Etiqueta del release: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/releases/tag/${CIRCLE_TAG}"
+            } >> notes.md
+            echo "[STEP] Append GPL source-offer footer to release notes - FIN"
       - run:
           # Publica el Release directo (sin draft) con los 5 assets (4
           # artefactos + SHA256SUMS.txt). Si el tag ya tiene Release, `gh

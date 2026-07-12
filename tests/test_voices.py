@@ -245,3 +245,14 @@ def test_voice_paths_of_listed_voice_never_fails(voice_roots):
         ref, speech = voices.voice_paths(name)
         assert ref.endswith("reference.wav")
         assert speech.endswith("speech.wav")
+
+
+def test_factory_default_voice_is_bundled():
+    """S3-07: la voz de fábrica `default` viaja en el bundle (sin modelo).
+
+    Valida a nivel de paquete que la voz por defecto está empaquetada, sin
+    instanciar el engine (las voces de fábrica son de solo lectura y no
+    requieren el modelo Chatterbox). No usa el fixture `voice_roots`, que
+    redirige las raíces a directorios vacíos y ocultaría la voz de fábrica.
+    """
+    assert "default" in voices.list_voices()

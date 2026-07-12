@@ -98,6 +98,11 @@ Una vez pushado el tag, el pipeline ejecuta sin intervención:
      `tts-sidecar-X.Y.Z-arm64.dmg`.
    - Genera `SHA256SUMS.txt` con los checksums de los 4.
    - Extrae las notas de la sección `[X.Y.Z]` de `CHANGELOG.md`.
+   - Inyecta en `notes.md` (tras el recorte del CHANGELOG) un pie con la oferta
+     de código fuente **GPLv3 §6**: el tarball del tag
+     (`archive/refs/tags/vX.Y.Z.tar.gz`) y el enlace al tag, para que todo
+     release cumpla el compliance de fuente de forma automática sin depender de
+     que el humano la añada a mano (S3-06).
    - Publica el GitHub Release directo (sin borrador) sobre el tag `vX.Y.Z`, con
      los 5 assets (4 artefactos + `SHA256SUMS.txt`) y las notas.
 3. **`publish-pypi`** (en paralelo a los 4 builds, solo requiere la triple
@@ -132,6 +137,8 @@ Verifica:
 
 - Los **5 assets** están presentes (4 artefactos + `SHA256SUMS.txt`).
 - Las **notas** corresponden a la sección `[X.Y.Z]` del `CHANGELOG.md`.
+- Las **notas** incluyen el pie de oferta de código fuente GPLv3 §6: el enlace al
+  tarball de fuente (`.../archive/refs/tags/vX.Y.Z.tar.gz`) aparece en el Release.
 - Opcional: coteja los hashes de `SHA256SUMS.txt` contra los emitidos por cada
   build en el log del pipeline (step "Emit artifact SHA-256").
 

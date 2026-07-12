@@ -211,10 +211,14 @@ nativas o imports lazy que no siguen automáticamente. Los flags de metadata (`-
 
 El **smoke test del binario congelado está automatizado en CI**: cada uno de los
 4 jobs de build ejecuta `tts-sidecar version` sobre el ejecutable recién
-construido (exit 0 obligatorio) antes de publicar el artefacto, de modo que un
-empaquetado roto (metadata faltante, `--collect-all` incompleto) hace fallar el
-job en lugar de publicarse «verde». `version` no carga el modelo, así que el
-chequeo es de segundos.
+construido (exit 0 obligatorio) **y luego `tts-sidecar voice list`** antes de
+publicar el artefacto, de modo que un empaquetado roto (metadata faltante,
+`--collect-all` incompleto) **o la ausencia de las voces de fábrica en el bundle**
+hace fallar el job en lugar de publicarse «verde». `version` y `voice list` **no
+cargan el modelo** (las voces viajan en el bundle), así que el chequeo es de
+segundos: el step valida con `grep -qx '  - default'` (bash) / `-notmatch
+'default'` (PowerShell) que la voz de fábrica `default` quedó empaquetada. Ver
+S3-07 en `docs/PROJECT-REVIEW.md`.
 
 Queda **manual** (requiere modelo, audio real y hardware por SO): `doctor`,
 `setup` y una síntesis real (`speak`). La validación end-to-end de los
