@@ -68,6 +68,50 @@ primer arranque del AppImage en cualquier distro.
 > Los campos `os`/`cpu` de `package.json` no expresan la matriz por SO (el esquema
 > no lo permite): `x64` aplica a Windows/Linux y `arm64` a Linux/macOS.
 
+### Matriz de arquitecturas y brechas
+
+La matriz de soporte es SO × {x86_64, arm64}. Cada SO publica las arquitecturas
+que cumplen a la vez población real de usuarios y wheels disponibles en el
+toolchain (torch, onnxruntime); ver el callout anterior.
+
+| SO | x86_64 | arm64 | Artefacto |
+|----|:---:|:---:|----------|
+| Windows | ✅ | ❌ | `*.exe` Inno (x64) |
+| Linux | ✅ | ✅ | AppImage x64 + AppImage aarch64 |
+| macOS | ❌ | ✅ | `.dmg` arm64 (Apple Silicon) |
+
+**Arquitecturas faltantes y su justificación:**
+
+- **Windows en ARM64 (`Windows-on-ARM`):** no soportado. Por **decisión de alcance**,
+  la población de Windows-on-ARM es marginal en la audiencia objetivo (el flag
+  `--arch` de `build_windows.py` solo acepta `x86_64`). Además hay un **bloqueo
+  técnico**: no existen wheels estables de `torch`/`torchaudio`/`onnxruntime` para
+  Windows arm64 en PyPI, así que el entorno Python del engine ni siquiera se
+  resuelve. El esfuerzo del proyecto sería modesto *si existieran esos wheels*
+  (añadir `arm64` a `build_windows.py`, Python arm64 en el runner, target PyInstaller
+  arm64, portar el interop nativo `pycaw`/COM, `sounddevice`/WASAPI e Inno Setup
+  arm64), pero hoy **no es factible** por la dependencia upstream.
+- **macOS Intel (`x86_64`):** no soportado por **imposibilidad técnica**. `torch>=2.3`
+  no publica wheels macOS x86_64 (foco en Apple Silicon), y un binario `universal2`
+  no resolvería nada porque no hay slices x86_64 de `torch` que empaquetar. La única
+  vía sería compilar `torch`/`torchaudio` desde fuente para macOS x86_64, un build
+  impracticable de mantener y distribuir. Se acepta como **limitación técnica
+  permanente** del toolchain actual (ver también [docs/PARITY.md](PARITY.md)).
+
+**Divergencia aceptada en Linux arm64 (cobertura de tests):** `build-linux-arm64`
+se gatea solo con el smoke `version` (importa el stack nativo en ARM y exige exit
+0); no hay puerta `pytest` nativa en arm64 porque la suite es arch-independiente y
+mockea el engine (ver «Simetría: 3 puertas de test vs. 4 targets de build» más
+abajo). Es una **decisión consciente** registrada como los hallazgos S1-23/S1-32;
+el fast-follow de mayor ROI sería un test de integración que cargue el modelo y
+sintetice en ARM, no re-correr la suite.
+
+**Conclusión:** las dos arquitecturas faltantes no son déficits del código del
+proyecto (este es arch-abstracto: Python puro + PyInstaller), sino de la
+disponibilidad de wheels upstream (PyTorch/onnxruntime). macOS Intel se acepta
+como limitación técnica; Windows ARM64 como decisión de alcance sumada a un bloqueo
+upstream.
+
 > Los scripts de build también generan la carpeta `--onedir` en `dist/tts-sidecar/` (o
 > `dist/tts-sidecar.app/` en macOS) con el ejecutable y todas las dependencias,
 > útil para pruebas directas sin pasar por el instalador.

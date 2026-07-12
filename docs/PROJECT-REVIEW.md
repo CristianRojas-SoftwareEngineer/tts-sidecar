@@ -24,7 +24,7 @@ El índice siguiente lista los 47 hallazgos ordenados por ID, con su severidad, 
 | S3-06 | Oferta de código fuente GPL no explícita en el release                | S3 — Alto        | P1        | Licencias / release         | No                 | Pendiente |
 | S3-07 | Smoke test del binario congelado limitado a `version`                 | S3 — Alto        | P1        | CI / DevOps                 | No                 | Pendiente |
 | S2-01 | `/shutdown` sin autenticación (loopback, riesgo aceptado)             | S2 — Medio       | P3        | Daemon / seguridad          | Sí                 | Pendiente |
-| S2-02 | Binario nativo de macOS solo `arm64` (sin Intel)                      | S2 — Medio       | P2        | Compatibilidad / macOS      | Sí                 | Pendiente |
+| S2-02 | Binario nativo de macOS solo `arm64` (sin Intel)                      | S2 — Medio       | P2        | Compatibilidad / macOS      | Sí                 | Resuelto  |
 | S2-03 | `setup --force-update` no documentado en `USAGE.md`                   | S2 — Medio       | P1        | Documentación               | No                 | Pendiente |
 | S1-01 | Error de descarga genérico sin diferenciar red/disco/credenciales     | S1 — Bajo        | P2        | CLI                         | No                 | Pendiente |
 | S1-02 | `voice remove` con mensaje genérico ante `PermissionError`            | S1 — Bajo        | P3        | CLI / Windows               | No                 | Pendiente |
@@ -48,7 +48,7 @@ El índice siguiente lista los 47 hallazgos ordenados por ID, con su severidad, 
 | S1-20 | Timeout de `fetch_pinned_asset` no testeado                           | S1 — Bajo        | P2        | Testing                     | No                 | Pendiente |
 | S1-21 | `RequestException` del daemon no testeada                             | S1 — Bajo        | P2        | Testing                     | No                 | Pendiente |
 | S1-22 | Tests de symlink se saltan en Windows sin Developer Mode              | S1 — Bajo        | P3        | Testing / Windows           | No                 | Pendiente |
-| S1-23 | ARM64 Linux sin suite dedicada                                        | S1 — Bajo        | P2        | Testing / aarch64           | No                 | Pendiente |
+| S1-23 | ARM64 Linux sin suite dedicada                                        | S1 — Bajo        | P2        | Testing / aarch64           | No                 | Resuelto  |
 | S1-24 | Pascal Script de desinstalación sin test unitario                     | S1 — Bajo        | P2        | Testing / Windows           | No                 | Pendiente |
 | S1-25 | Branch `except Exception` del worker no cubierto                      | S1 — Bajo        | P2        | Testing / Daemon            | No                 | Pendiente |
 | S1-26 | `CLAUDE.md` dice 296 tests (real: 314)                                | S1 — Bajo        | P3        | Documentación               | No                 | Pendiente |
@@ -57,7 +57,7 @@ El índice siguiente lista los 47 hallazgos ordenados por ID, con su severidad, 
 | S1-29 | Atribución de PerthNet/`resemble-perth` débil                         | S1 — Bajo        | P2        | Licencias                   | No                 | Pendiente |
 | S1-30 | `pytest` pineado pero no sus plugins                                  | S1 — Bajo        | P2        | Cadena de suministro / CI   | No                 | Pendiente |
 | S1-31 | Installers mockeados; `docs/SELF-HOSTED-INSTALL.md` inexistente       | S1 — Bajo        | P2        | CI / docs                   | No                 | Pendiente |
-| S1-32 | ARM64 Linux sin test dedicado (decisión consciente)                   | S1 — Bajo        | P3        | CI / aarch64                | No                 | Pendiente |
+| S1-32 | ARM64 Linux sin test dedicado (decisión consciente)                   | S1 — Bajo        | P3        | CI / aarch64                | No                 | Resuelto  |
 | S1-33 | Runbook de falsos positivos solo para Defender                        | S1 — Bajo        | P3        | Documentación / seguridad   | No                 | Resuelto  |
 | S0-01 | `bootstrap.apply()` corre antes del `reconfigure` UTF-8 (riesgo nulo) | S0 — Informativo | P3        | Contrato                    | No                 | Resuelto  |
 | S0-02 | `--force-update` sin log del tamaño liberado                          | S0 — Informativo | P3        | Observabilidad              | No                 | Resuelto  |
@@ -760,8 +760,8 @@ Los 33 hallazgos de baja severidad se agrupan por área (en divisores en negrita
 No hay **P0**: sin hallazgos S4 y sin S3 que bloqueen el release de v0.6.0. Las fases agrupan los IDs por prioridad, dependencia y esfuerzo/impacto para alimentar la numeración de tareas de un plan posterior.
 
 - **Fase 1 — P1 (antes de la próxima versión menor; alto impacto / bajo esfuerzo):** `S3-01` (contrato de cancelación), `S3-02` y `S3-03` (arranque del daemon: carrera y bind), `S3-06` (oferta de fuente GPL en el release), `S3-07` (smoke test del binario congelado), `S2-03` (documentar `--force-update`).
-- **Fase 2 — P2 (agendadas):** endurecimiento del daemon `S3-04` (memoria) y `S3-05` (concurrencia); cobertura de plataforma `S2-02` (macOS Intel); y los S1 de cobertura de tests, diagnósticos y contrato: `S1-01`, `S1-05`, `S1-09`, `S1-10`, `S1-11`, `S1-12`, `S1-13`, `S1-14`, `S1-17`, `S1-19`, `S1-20`, `S1-21`, `S1-23`, `S1-24`, `S1-25`, `S1-27`, `S1-29`, `S1-30`, `S1-31`.
-- **Fase 3 — P3 (backlog):** riesgo aceptado `S2-01` (`/shutdown`); S1 residuales `S1-02`, `S1-03`, `S1-04`, `S1-06`, `S1-07`, `S1-08`, `S1-15`, `S1-16`, `S1-18`, `S1-22`, `S1-26`, `S1-28`, `S1-32`. (Ya resueltos y fuera del backlog: `S1-33` y los informativos `S0-01`…`S0-04`.)
+- **Fase 2 — P2 (agendadas):** endurecimiento del daemon `S3-04` (memoria) y `S3-05` (concurrencia); y los S1 de cobertura de tests, diagnósticos y contrato: `S1-01`, `S1-05`, `S1-09`, `S1-10`, `S1-11`, `S1-12`, `S1-13`, `S1-14`, `S1-17`, `S1-19`, `S1-20`, `S1-21`, `S1-24`, `S1-25`, `S1-27`, `S1-29`, `S1-30`, `S1-31`. (Ya resueltos y fuera de esta fase: `S2-02` —macOS Intel, limitación aceptada— y `S1-23` —divergencia arm64 aceptada—; ver matriz de arquitecturas en BUILD.md §2.)
+- **Fase 3 — P3 (backlog):** riesgo aceptado `S2-01` (`/shutdown`); S1 residuales `S1-02`, `S1-03`, `S1-04`, `S1-06`, `S1-07`, `S1-08`, `S1-15`, `S1-16`, `S1-18`, `S1-22`, `S1-26`, `S1-28`. (Ya resueltos y fuera del backlog: `S1-23` y `S1-32` —divergencia arm64 aceptada—, `S2-02` —macOS Intel, limitación aceptada—, `S1-33` y los informativos `S0-01`…`S0-04`.)
 
 
 

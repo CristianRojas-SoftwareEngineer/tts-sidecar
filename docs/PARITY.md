@@ -16,7 +16,7 @@ Fecha de corte: **v0.6.0**. Cada brecha se identifica por un **nombre descriptiv
 | Uso (CLI, daemon, voces, contratos `--json`) | ✅ | ✅ | ✅ | **Sí** |
 | Actualización sin residuo ni trampa | ✅ Inno reemplaza en sitio | ✅ re-ejecutar one-liner limpia AppImages viejos | ✅ `brew upgrade --cask` / re-ejecutar one-liner | **Sí** |
 | Desinstalación integrada y con residuo cero | ✅ `setup --uninstall` (un comando; delega binario+PATH a Inno) | ✅ `setup --uninstall` (un comando) | ✅ `setup --uninstall` (un comando; con Homebrew difiere a `brew --zap`) | **Sí** (brecha de *desinstalación en un comando* cerrada en v0.6.0) |
-| Cobertura de arquitecturas | x86_64 | x86_64 + aarch64 | arm64 | Limitación de toolchain (aceptada) |
+| Cobertura de arquitecturas | x86_64 | x86_64 + aarch64 | arm64 | Limitación de toolchain (aceptada; ver matriz en BUILD.md §2) |
 
 **Conclusión**: con v0.6.0 la paridad es **completa** en instalación, uso, actualización y **desinstalación** en los tres SO: `setup --uninstall` es un comando único en Linux, macOS y Windows (dispatch por SO sobre un contrato compartido — datos → PATH → binario, con cancelación atómica). Queda **una sola brecha abierta**, la de **firma de código** (primer arranque en Windows y macOS, por binarios sin firmar), diferida por diseño al goal a largo plazo por depender de terceros (firma/notarización, [docs/GOAL.md](GOAL.md)); está mitigada en su síntoma por los one-liners (descarga por CLI, sin Mark-of-the-Web) y el Cask. La brecha de *desinstalación en un comando*, la última accionable del goal inmediato, se cerró a nivel de código/scripts/tests en v0.6.0. El detalle por fase, a continuación.
 
