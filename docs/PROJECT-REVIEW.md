@@ -761,7 +761,7 @@ No hay **P0**: sin hallazgos S4 y sin S3 que bloqueen el release de v0.6.0. Las 
 
 - **Fase 1 — P1 (antes de la próxima versión menor; alto impacto / bajo esfuerzo):** `S3-01` (contrato de cancelación), `S3-02` y `S3-03` (arranque del daemon: carrera y bind), `S3-06` (oferta de fuente GPL en el release), `S3-07` (smoke test del binario congelado), `S2-03` (documentar `--force-update`).
 - **Fase 2 — P2 (agendadas):** endurecimiento del daemon `S3-04` (memoria) y `S3-05` (concurrencia); cobertura de plataforma `S2-02` (macOS Intel); y los S1 de cobertura de tests, diagnósticos y contrato: `S1-01`, `S1-05`, `S1-09`, `S1-10`, `S1-11`, `S1-12`, `S1-13`, `S1-14`, `S1-17`, `S1-19`, `S1-20`, `S1-21`, `S1-23`, `S1-24`, `S1-25`, `S1-27`, `S1-29`, `S1-30`, `S1-31`.
-- **Fase 3 — P3 (backlog):** riesgo aceptado `S2-01` (`/shutdown`); S1 residuales `S1-02`, `S1-03`, `S1-04`, `S1-06`, `S1-07`, `S1-08`, `S1-15`, `S1-16`, `S1-18`, `S1-22`, `S1-26`, `S1-28`, `S1-32`, `S1-33`; y todos los informativos `S0-01`…`S0-04`.
+- **Fase 3 — P3 (backlog):** riesgo aceptado `S2-01` (`/shutdown`); S1 residuales `S1-02`, `S1-03`, `S1-04`, `S1-06`, `S1-07`, `S1-08`, `S1-15`, `S1-16`, `S1-18`, `S1-22`, `S1-26`, `S1-28`, `S1-32`. (Ya resueltos y fuera del backlog: `S1-33` y los informativos `S0-01`…`S0-04`.)
 
 
 
