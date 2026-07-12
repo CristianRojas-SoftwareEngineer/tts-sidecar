@@ -119,6 +119,21 @@ descargar nada (es idempotente):
 Provisión completa. No hay nada que descargar.
 ```
 
+**Forzar una re-descarga limpia (`--force-update`):** si necesitas re-descargar
+el modelo (p. ej. una caché corrupta o para actualizarlo a la revisión fijada por
+una versión nueva), `setup --force-update` elimina primero el modelo en caché y
+luego lo vuelve a descargar, informando el espacio liberado:
+
+```bash
+tts-sidecar setup --force-update
+# [force-update] Eliminando el modelo en caché para re-descargarlo...
+# [force-update] Espacio liberado total: ... MB
+# → a continuación, la descarga normal de setup
+```
+
+Es un modo mutuamente excluyente con `--remove-path` y `--uninstall`. Sin el flag,
+`setup` es idempotente y no re-descarga un modelo ya presente.
+
 **Provisión por SO** (experiencia homóloga):
 
 - **Windows**: el instalador agrega `tts-sidecar` al PATH de usuario (HKCU) y

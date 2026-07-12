@@ -37,6 +37,13 @@ limitada, pero conviene explicitar sus supuestos:
   operativo (cualquier proceso local del mismo usuario puede invocarlo).
 - **No ejecutes el daemon en un host multiusuario no confiable** esperando
   aislamiento entre usuarios locales: no lo provee.
+- El endpoint de apagado (`POST /shutdown`) **no exige token ni confirmación**:
+  cualquier proceso local del mismo usuario puede apagar el daemon. Es una brecha
+  de defensa en profundidad de bajo impacto (un DoS local que el mismo usuario ya
+  puede provocar matando el proceso por PID), no un fallo de correctness. Se acepta
+  ese riesgo residual en lugar de introducir un secreto que el propio cliente IPC
+  tendría que generar y persistir, sin ganancia real bajo un binding exclusivo a
+  loopback y modelo single-user.
 - El endpoint de síntesis valida la entrada (`text` acotado a 5000 caracteres; las
   rutas de audio deben existir y ser `.wav`) antes de procesarla.
 - La validación de rutas de audio resuelve symlinks (`realpath`) y exige contención
