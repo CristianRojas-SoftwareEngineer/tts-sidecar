@@ -9,15 +9,15 @@ instalar → comando disponible en el PATH → provisión guiada del modelo → 
 
 Se implementan cinco piezas:
 
-1. **Instalador Linux** — un script `install.sh` servido por el propio repo, que se
+1. **Instalador Linux** — un script `install-linux.sh` servido por el propio repo, que se
    ejecuta con `curl … | sh` sobre el `.AppImage` del release.
 2. **Cask de macOS** — un tap de Homebrew propio que instala el CLI desde el `.dmg`
    del release, actualizado automáticamente en cada publicación (vía complementaria
    para usuarios de Homebrew).
 3. **Instalador macOS (`curl | sh`)** — un script `install-macos.sh` servido por el
-   propio repo, homólogo a `install.sh`, que instala desde el `.dmg` del release sin
+   propio repo, homólogo a `install-linux.sh`, que instala desde el `.dmg` del release sin
    Homebrew ni `sudo`. Es la vía de una línea sin prerequisitos para macOS.
-4. **Instalador Windows** — un script `install.ps1` servido por el propio repo, que
+4. **Instalador Windows** — un script `install-windows.ps1` servido por el propio repo, que
    se ejecuta con `irm … | iex` sobre el instalador Inno Setup (per-user) del release.
 5. **Endurecimiento del build** — ajustes al empaquetado que reducen los falsos
    positivos de antivirus en el ejecutable de Windows y en el resto de artefactos.
@@ -138,8 +138,8 @@ cubiertos por test, y existe el runbook en `SECURITY.md`.
 
 ## Instalador Linux (`curl | sh`)
 
-- **Entregable**: `install.sh` en la raíz del repo, servido desde
-  `raw.githubusercontent.com/<owner>/TTS-Sidecar/main/install.sh`. Uso:
+- **Entregable**: `install-linux.sh` en la raíz del repo, servido desde
+  `raw.githubusercontent.com/<owner>/TTS-Sidecar/main/install-linux.sh`. Uso:
   `curl -fsSL <url> | sh`.
 - **Flujo del script**: resolver `releases/latest` de la GitHub Releases API (no
   requiere autenticación en repos públicos) → leer `uname -m` → seleccionar el asset
@@ -168,11 +168,11 @@ cubiertos por test, y existe el runbook en `SECURITY.md`.
 
 ## Instalador Windows (`irm | iex`)
 
-- **Entregable**: `install.ps1` en la raíz del repo, servido desde
-  `raw.githubusercontent.com/<owner>/TTS-Sidecar/main/install.ps1`. Uso:
+- **Entregable**: `install-windows.ps1` en la raíz del repo, servido desde
+  `raw.githubusercontent.com/<owner>/TTS-Sidecar/main/install-windows.ps1`. Uso:
   `irm <url> | iex`. Al no ser un `.ps1` en disco, `irm | iex` no pasa por la
   Execution Policy; la alternativa inspeccionable es
-  `iwr <url> -OutFile install.ps1; .\install.ps1`.
+  `iwr <url> -OutFile install-windows.ps1; .\install-windows.ps1`.
 - **Flujo del script**: resolver `releases/latest` de la GitHub Releases API →
   seleccionar el asset `tts-sidecar-*-x86_64-setup.exe` (solo hay build x86_64
   para Windows: sin selección de arquitectura) → descargar el instalador y
@@ -194,8 +194,8 @@ cubiertos por test, y existe el runbook en `SECURITY.md`.
 - **Docs**: línea de instalación en `README.md` y `USAGE.md`; nota en `SECURITY.md`
   espejo de la de Linux (checksum previo, sin privilegios, sin MOTW por CLI,
   remisión al runbook WDSI).
-- **Tests**: smoke-test Pester (`tests/installer/install.tests.ps1`) que hace
-  dot-source de `install.ps1` y mockea sus funciones propias, en el job de CI
+- **Tests**: smoke-test Pester (`tests/installer/install-windows.tests.ps1`) que hace
+  dot-source de `install-windows.ps1` y mockea sus funciones propias, en el job de CI
   `test-installer-windows` (espejo de `test-installer-linux`). Cubre el flujo
   exitoso, el aborto ante checksum corrupto y el release sin asset de Windows.
   El generador `.iss` per-user se cubre en `tests/test_create_installer_windows.py`.
@@ -253,7 +253,7 @@ cubiertos por test, y existe el runbook en `SECURITY.md`.
   ni Homebrew (a diferencia del Cask) ni `sudo` (a diferencia del `.dmg` manual).
 - **Herramientas del host**: solo binarios del sistema base de macOS. No existe
   `sha256sum` (se usa `shasum -a 256 -c`) ni `jq` (parseo con `grep`/`sed`, como
-  `install.sh`); montaje con `hdiutil`, copia con `ditto`, limpieza de cuarentena
+  `install-linux.sh`); montaje con `hdiutil`, copia con `ditto`, limpieza de cuarentena
   con `xattr`.
 - **Flujo del script**: resolver `releases/latest` de la GitHub Releases API →
   **guard de arquitectura** `uname -m` = `arm64` (Mac Intel no soportado; mensaje
@@ -326,7 +326,7 @@ salvo el Cask en macOS. El panorama real por sistema operativo:
 - **Windows**: SmartScreen depende del MOTW, y el MOTW depende del **medio de
   descarga**: el navegador sella el archivo con `ZoneId=3` y dispara SmartScreen;
   la descarga por CLI o script (`curl`, `Invoke-WebRequest`, `WebClient`, `gh`) no
-  aplica la marca, así que el instalador bajado por `install.ps1` no dispara
+  aplica la marca, así que el instalador bajado por `install-windows.ps1` no dispara
   SmartScreen al ejecutarse. Microsoft Defender **Antivirus** es independiente del
   MOTW: puede marcar el binario sin firma venga de donde venga; el endurecimiento
   del build reduce esos falsos positivos y el runbook WDSI da la vía de

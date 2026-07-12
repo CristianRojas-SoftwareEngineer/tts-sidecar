@@ -37,7 +37,7 @@ Las tres plataformas tienen además una **instalación auto-hospedada de
 una línea** (`curl | sh` / `irm | iex`), capa adicional sobre el mismo
 artefacto nativo (no un canal nuevo), con un script por SO:
 
-- **Linux** — `install.sh` (`curl | sh`) automatiza la descarga, verificación
+- **Linux** — `install-linux.sh` (`curl | sh`) automatiza la descarga, verificación
   de checksum e instalación del `.AppImage` (eliminando la versión anterior al
   actualizar) y encadena `setup`.
 - **macOS** — `install-macos.sh` (`curl | sh`) descarga el `.dmg` de arm64,
@@ -48,7 +48,7 @@ artefacto nativo (no un canal nuevo), con un script por SO:
   CristianRojas-SoftwareEngineer/tts-sidecar && brew install --cask
   tts-sidecar`), que resuelve PATH, desinstalación (`--zap`) y cuarentena sin
   intervención manual, pero exige Homebrew y no provisiona el modelo.
-- **Windows** — `install.ps1` (`irm | iex`) descarga el instalador Inno Setup
+- **Windows** — `install-windows.ps1` (`irm | iex`) descarga el instalador Inno Setup
   del release, verifica su checksum y lo ejecuta en silencio (instalación
   per-user: `%LOCALAPPDATA%\Programs`, PATH de usuario en HKCU, sin UAC),
   terminando con `tts-sidecar setup`.
@@ -59,7 +59,7 @@ válido en paralelo. La justificación técnica de la vía de Windows es el *Mar
 the Web* (MOTW): el navegador sí sella el `.exe` con la marca de Internet
 (`ZoneId=3`) y dispara SmartScreen, pero la descarga por CLI (`curl`, `gh`,
 PowerShell `Invoke-WebRequest`/`WebClient`) **no** la aplica, así que el
-instalador bajado por `install.ps1` no dispara SmartScreen al ejecutarse. El
+instalador bajado por `install-windows.ps1` no dispara SmartScreen al ejecutarse. El
 binario sigue sin firmar: Microsoft Defender Antivirus es independiente del MOTW
 y puede marcarlo (ver runbook WDSI en `SECURITY.md`); la advertencia de
 SmartScreen para la descarga por navegador solo la resuelve la firma de código

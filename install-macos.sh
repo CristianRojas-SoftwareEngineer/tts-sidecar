@@ -12,7 +12,7 @@
 # ofrece descargar el modelo de voz). Ver docs/SELF-HOSTED-INSTALL.md para el
 # diseño completo.
 #
-# Espejo estructural de install.sh (Linux). Sin `sudo`: instalación per-user.
+# Espejo estructural de install-linux.sh (Linux). Sin `sudo`: instalación per-user.
 # Solo asume binarios del sistema base de macOS (no `sha256sum` — se usa
 # `shasum`; no `jq` — parseo con grep/sed).
 #
@@ -60,7 +60,7 @@ log "Resolviendo el último release de $REPO..."
 release_json="$(curl -fsSL "$API_URL")" || fail "no se pudo consultar $API_URL"
 
 # Extrae las URLs de descarga sin depender de jq (parseo con grep/sed, como
-# install.sh): el .dmg de arm64 y SHA256SUMS.txt.
+# install-linux.sh): el .dmg de arm64 y SHA256SUMS.txt.
 dmg_url="$(printf '%s' "$release_json" \
     | grep -o '"browser_download_url": *"[^"]*arm64\.dmg"' \
     | sed -E 's/.*"(https:[^"]+)"/\1/' \

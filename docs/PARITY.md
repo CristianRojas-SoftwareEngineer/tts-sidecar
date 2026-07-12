@@ -24,8 +24,8 @@ Fecha de corte: **v0.6.0**. Cada brecha se identifica por un **nombre descriptiv
 
 ### Estado
 
-- **Windows**: `install.ps1` (`irm | iex`) resuelve el release, verifica el checksum, instala en silencio per-user (sin UAC, PATH en HKCU) y encadena `tts-sidecar setup`. Cero prerequisitos: PowerShell viene con el SO.
-- **Linux**: `install.sh` (`curl | sh`) hace lo análogo: checksum, instala en `~/.local/opt/tts-sidecar/`, exporta `APPIMAGE` y encadena `setup` (que crea el symlink de PATH en `~/.local/bin`). Cero prerequisitos en la práctica (`curl` + coreutils).
+- **Windows**: `install-windows.ps1` (`irm | iex`) resuelve el release, verifica el checksum, instala en silencio per-user (sin UAC, PATH en HKCU) y encadena `tts-sidecar setup`. Cero prerequisitos: PowerShell viene con el SO.
+- **Linux**: `install-linux.sh` (`curl | sh`) hace lo análogo: checksum, instala en `~/.local/opt/tts-sidecar/`, exporta `APPIMAGE` y encadena `setup` (que crea el symlink de PATH en `~/.local/bin`). Cero prerequisitos en la práctica (`curl` + coreutils).
 - **macOS**: **no existe one-liner equivalente.** Las dos vías actuales:
   - **Cask de Homebrew** (`brew tap … && brew install --cask tts-sidecar`): automatiza checksum, PATH y cuarentena, pero **exige tener Homebrew instalado** — un prerequisito de terceros que la audiencia declarada del canal nativo ("usuario final sin Python", `docs/DISTRIBUTION.md`) no necesariamente tiene. Además **no provisiona el modelo**: Homebrew no permite post-install arbitrario, así que el Cask solo imprime un *caveat* remitiendo a `tts-sidecar setup` (`scripts/render_cask.py`).
   - **`.dmg` manual**: montar, arrastrar el `.app`, ejecutar `Instalar (PATH + modelo).command`, **teclear la contraseña de administrador** (`sudo` para el symlink en `/usr/local/bin`, `scripts/build_macos.py::_path_install_script`) y responder el prompt de descarga del modelo. Es la única vía de instalación del proyecto que pide privilegios elevados, y el checksum queda a cargo del usuario.
@@ -70,11 +70,11 @@ Nada pendiente en esta fase.
 
 - **Windows**: repetir el one-liner (o el instalador nuevo); Inno reemplaza la instalación per-user en el mismo directorio y conserva el PATH. Limpio.
 - **macOS (Cask)**: `brew upgrade --cask tts-sidecar` con `livecheck` — la mejor experiencia de actualización de las tres plataformas.
-- **Linux**: re-ejecutar `install.sh` con una versión nueva instala el AppImage nuevo, reapunta el symlink y **elimina los AppImages anteriores** del directorio de instalación (cerrado en v0.5.0). En la vía manual, reemplazar el archivo sin re-correr `setup` sigue dejando el symlink de PATH colgante (trampa documentada en `USAGE.md`), pero la vía recomendada (re-ejecutar el one-liner) ya no la tiene.
+- **Linux**: re-ejecutar `install-linux.sh` con una versión nueva instala el AppImage nuevo, reapunta el symlink y **elimina los AppImages anteriores** del directorio de instalación (cerrado en v0.5.0). En la vía manual, reemplazar el archivo sin re-correr `setup` sigue dejando el symlink de PATH colgante (trampa documentada en `USAGE.md`), pero la vía recomendada (re-ejecutar el one-liner) ya no la tiene.
 
 ### Qué falta para la paridad
 
-- **Brecha de *acumulación de AppImages* [CERRADA]**: `install.sh` elimina las versiones anteriores tras instalar y dar permisos al AppImage nuevo: un bucle POSIX borra los `tts-sidecar-*.AppImage` previos de `~/.local/opt/tts-sidecar/` (de su propiedad exclusiva), dejando exactamente un AppImage. Cubierto por un test `bats` de actualización.
+- **Brecha de *acumulación de AppImages* [CERRADA]**: `install-linux.sh` elimina las versiones anteriores tras instalar y dar permisos al AppImage nuevo: un bucle POSIX borra los `tts-sidecar-*.AppImage` previos de `~/.local/opt/tts-sidecar/` (de su propiedad exclusiva), dejando exactamente un AppImage. Cubierto por un test `bats` de actualización.
 
 ## Fase 5 — Desinstalación
 
@@ -99,7 +99,7 @@ El contrato (`USAGE.md` §"Desinstalación completa") es: datos primero (`cleanu
 | *one-liner de instalación en macOS* | Instalación | macOS | ✅ Cerrada (v0.5.0) | `install-macos.sh` (`curl \| sh`) |
 | *Cask en el README* | Instalación | macOS | ✅ Cerrada (v0.5.0) | README con las tres plataformas + Cask |
 | *instalación sin `sudo` en macOS* | Instalación | macOS | ✅ Cerrada (v0.5.0) | `.command` per-user en `~/.local/bin` |
-| *acumulación de AppImages* | Actualización | Linux | ✅ Cerrada (v0.5.0) | Limpieza de versiones en `install.sh` |
+| *acumulación de AppImages* | Actualización | Linux | ✅ Cerrada (v0.5.0) | Limpieza de versiones en `install-linux.sh` |
 | *`zap` completo del Cask* | Desinstalación | macOS | ✅ Cerrada (v0.5.0) | Repo base añadido a `_CASK_TEMPLATE` |
 | *desinstalador de Linux* | Desinstalación | Linux | ✅ Cerrada (v0.5.0) | `setup --uninstall` |
 | *desinstalación en un comando* | Desinstalación | macOS + Windows | ✅ Cerrada a nivel de código (v0.6.0) | `setup --uninstall` multiplataforma (dispatch por SO) |

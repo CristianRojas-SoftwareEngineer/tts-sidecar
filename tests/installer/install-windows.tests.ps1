@@ -1,12 +1,13 @@
-# Smoke-test Pester (v5) de install.ps1 (docs/SELF-HOSTED-INSTALL.md).
+# Smoke-test Pester (v5) de install-windows.ps1 (docs/SELF-HOSTED-INSTALL.md).
 #
 # Valida el orquestador Install-TtsSidecar sin red ni instalación reales:
-# el dot-source de install.ps1 solo define funciones (guard de entrypoint),
-# y los mocks recaen sobre las funciones propias del script — no sobre
-# cmdlets nativos — igual que install.bats mockea curl/sha256sum por PATH.
+# el dot-source de install-windows.ps1 solo define funciones (guard de
+# entrypoint), y los mocks recaen sobre las funciones propias del script —
+# no sobre cmdlets nativos — igual que install-linux.bats mockea
+# curl/sha256sum por PATH.
 
 BeforeAll {
-    . (Join-Path $PSScriptRoot "..\..\install.ps1")
+    . (Join-Path $PSScriptRoot "..\..\install-windows.ps1")
 
     # Fabrica el release simulado de la API de GitHub (no duplicar el JSON
     # por Context). Incluye un asset de Linux para verificar que la selección

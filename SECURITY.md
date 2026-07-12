@@ -76,8 +76,8 @@ limitada, pero conviene explicitar sus supuestos:
 
 ### Nota sobre los instaladores de una línea
 
-Los tres instaladores de una línea (`install.sh` en Linux, `install-macos.sh`
-en macOS, `install.ps1` en Windows; raíz del repo) se sirven por
+Los tres instaladores de una línea (`install-linux.sh` en Linux, `install-macos.sh`
+en macOS, `install-windows.ps1` en Windows; raíz del repo) se sirven por
 `raw.githubusercontent.com` y se ejecutan con `curl | sh` / `irm | iex`, el
 patrón habitual de instalación de una línea. La mitigación de ese patrón
 —ejecutar contenido remoto sin inspeccionarlo antes— es común a los tres: **el
@@ -87,20 +87,20 @@ Release, ver «Artefactos sin firmar» abajo) **antes** de darle permisos de
 ejecución, montarlo o invocarlo; un checksum que no coincide aborta la
 instalación sin ejecutar nada. Ninguno requiere privilegios elevados:
 
-- **Linux** (`install.sh`): instala en `~/.local/opt/tts-sidecar/`, sin `sudo`.
+- **Linux** (`install-linux.sh`): instala en `~/.local/opt/tts-sidecar/`, sin `sudo`.
 - **macOS** (`install-macos.sh`): verifica con `shasum -a 256 -c`, copia el
   `.app` a `~/Applications` y crea el symlink en `~/.local/bin`, sin `sudo`.
   Limpia el atributo `com.apple.quarantine` del `.app` copiado (legítimo: el
   usuario ya expresó intención al ejecutar el script), lo que evita la
   advertencia de Gatekeeper en el primer arranque.
-- **Windows** (`install.ps1`): instalación per-user
+- **Windows** (`install-windows.ps1`): instalación per-user
   (`%LOCALAPPDATA%\Programs\tts-sidecar`, PATH en `HKCU\Environment`), sin UAC.
   La descarga por CLI (`Invoke-WebRequest`) no aplica el Mark-of-the-Web, por lo
   que el instalador descargado por el script no dispara SmartScreen; Microsoft
   Defender **Antivirus** es independiente del MOTW y puede marcar el binario sin
   firma — en ese caso aplica el runbook WDSI de más abajo. Como `irm | iex` no
   escribe un `.ps1` en disco, no pasa por la Execution Policy; la alternativa
-  inspeccionable es `iwr <url> -OutFile install.ps1; .\install.ps1`.
+  inspeccionable es `iwr <url> -OutFile install-windows.ps1; .\install-windows.ps1`.
 
 ## Artefactos sin firmar
 

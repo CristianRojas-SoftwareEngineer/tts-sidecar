@@ -126,7 +126,7 @@ máquinas con esas versiones exactas.
 | SO | Probado en (CI) | Mínimo declarado | Origen del mínimo |
 |----|-----------------|------------------|-------------------|
 | Windows | Executor `circleci/windows@5.0` (Windows Server 2022) + desarrollo en Windows 11 | Sin mínimo formal; se espera Windows 10+ x64 | Stack Inno Setup/PyInstaller sin APIs posteriores conocidas |
-| Linux | `cimg/python:3.13` (base Ubuntu 22.04, glibc 2.35) en x86_64 y arm64 | glibc ≥ 2.35 | El AppImage se compila contra la glibc del runner; `install.sh` advierte por debajo |
+| Linux | `cimg/python:3.13` (base Ubuntu 22.04, glibc 2.35) en x86_64 y arm64 | glibc ≥ 2.35 | El AppImage se compila contra la glibc del runner; `install-linux.sh` advierte por debajo |
 | macOS | Runner Apple Silicon con Xcode 26.4 | `LSMinimumSystemVersion` del `.dmg` | Derivado de `MACOSX_DEPLOYMENT_TARGET` del Python del build (`build_macos.py`) |
 
 **Limitación aceptada:** los mínimos declarados **no** se prueban en máquinas
@@ -265,10 +265,10 @@ guiada + desinstalación limpia):
 
 La tabla describe los artefactos descargados a mano. Las tres plataformas
 tienen además una instalación auto-hospedada de una línea que resuelve PATH,
-`setup` y desinstalación sin los pasos manuales de arriba: `install.sh`
+`setup` y desinstalación sin los pasos manuales de arriba: `install-linux.sh`
 (`curl | sh`) en Linux, un Cask de Homebrew propio
 (`brew install --cask tts-sidecar`, con `brew uninstall --cask` + `zap` para
-la desinstalación limpia) en macOS, e `install.ps1` (`irm | iex`) en Windows
+la desinstalación limpia) en macOS, e `install-windows.ps1` (`irm | iex`) en Windows
 (descarga el instalador, verifica el checksum y lo ejecuta en silencio, sin
 UAC). Ninguno de los tres cambia el artefacto que los scripts de build
 producen; todos se apoyan en el artefacto nativo tal cual. Diseño completo en
@@ -304,8 +304,8 @@ como **triple puerta simétrica**: cada build depende de los tres
 (`requires: [test-linux, test-windows, test-macos]`), de modo que la suite se ejercita en
 los tres SO nativos antes de compilar. A la triple puerta de la suite pytest se suman,
 también como `requires` de los 4 builds, los tres smoke-tests de los instaladores de una
-línea: `test-installer-linux` (bats sobre `install.sh`), `test-installer-windows`
-(Pester sobre `install.ps1`) y `test-installer-macos` (bats sobre `install-macos.sh`).
+línea: `test-installer-linux` (bats sobre `install-linux.sh`), `test-installer-windows`
+(Pester sobre `install-windows.ps1`) y `test-installer-macos` (bats sobre `install-macos.sh`).
 Así, un bug específico de plataforma —Windows
 (pycaw/COM, winsound, generación del `.iss`) o macOS (afplay/sounddevice, rutas y señales
 POSIX)— se detecta en el gate en lugar de llegar al usuario.

@@ -53,10 +53,10 @@ pytest tests/ -v
 Además de la suite pytest, los instaladores de una línea tienen smoke-tests
 propios en `tests/installer/`, que corren **en CI, no en pytest**:
 
-- `install.bats` — `install.sh` (Linux), con [bats-core](https://github.com/bats-core/bats-core).
+- `install-linux.bats` — `install-linux.sh` (Linux), con [bats-core](https://github.com/bats-core/bats-core).
 - `install-macos.bats` — `install-macos.sh` (macOS), también con bats.
-- `install.tests.ps1` — `install.ps1` (Windows), con **Pester v5**
-  (`Invoke-Pester tests/installer/install.tests.ps1` en PowerShell).
+- `install-windows.tests.ps1` — `install-windows.ps1` (Windows), con **Pester v5**
+  (`Invoke-Pester tests/installer/install-windows.tests.ps1` en PowerShell).
 
 Si modificas un instalador, actualiza su smoke-test en el mismo cambio; los tres
 jobs (`test-installer-linux`/`-windows`/`-macos`) son puerta de los builds en CI.

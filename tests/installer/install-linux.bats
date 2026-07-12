@@ -1,13 +1,13 @@
-# Smoke-test de install.sh (bats-core): mockea curl/uname/sha256sum/ldd por
-# PATH, sin red ni GitHub real. Cubre selección de arquitectura, elección del
-# asset correcto, aborto ante checksum corrupto y guard de glibc mínima
+# Smoke-test de install-linux.sh (bats-core): mockea curl/uname/sha256sum/ldd
+# por PATH, sin red ni GitHub real. Cubre selección de arquitectura, elección
+# del asset correcto, aborto ante checksum corrupto y guard de glibc mínima
 # (docs/SELF-HOSTED-INSTALL.md).
 #
-# Ejecutar: bats tests/installer/install.bats
+# Ejecutar: bats tests/installer/install-linux.bats
 
 setup() {
     REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
-    INSTALL_SH="$REPO_ROOT/install.sh"
+    INSTALL_SH="$REPO_ROOT/install-linux.sh"
 
     WORK="$(mktemp -d)"
     export HOME="$WORK/home"
@@ -18,7 +18,7 @@ setup() {
     export PATH="$MOCK_BIN:$PATH"
 
     # Contenido fijo del "AppImage" falso: un script shell válido, para que
-    # "$final_path" setup (última línea de install.sh) se ejecute sin error
+    # "$final_path" setup (última línea de install-linux.sh) se ejecute sin error
     # de formato ejecutable, en vez de un ELF real.
     FAKE_APPIMAGE_CONTENT='#!/bin/sh
 echo "fake tts-sidecar $*"

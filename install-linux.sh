@@ -2,7 +2,7 @@
 # Instalador auto-hospedado de tts-sidecar para Linux.
 #
 # Uso:
-#   curl -fsSL https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install-linux.sh | sh
 #
 # Resuelve el último Release de GitHub, elige el .AppImage de la arquitectura
 # del host, descarga el AppImage y SHA256SUMS.txt, verifica el checksum

@@ -1,7 +1,7 @@
 # Instalador auto-hospedado de tts-sidecar para Windows.
 #
 # Uso:
-#   irm https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install-windows.ps1 | iex
 #
 # Resuelve el último Release de GitHub, descarga el instalador Inno Setup
 # x86_64 y SHA256SUMS.txt, verifica el checksum (abortando si no coincide) y
@@ -17,8 +17,8 @@
 # (hallazgo verificado; solo la descarga por navegador marca ZoneId=3).
 #
 # Alternativa inspeccionable a `irm | iex`:
-#   iwr https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install.ps1 -OutFile install.ps1
-#   .\install.ps1
+#   iwr https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install-windows.ps1 -OutFile install-windows.ps1
+#   .\install-windows.ps1
 
 param(
     [string]$Repo = "CristianRojas-SoftwareEngineer/TTS-Sidecar",
@@ -54,7 +54,7 @@ function Resolve-LatestRelease {
 function Select-WindowsAsset {
     # Elige el instalador x86_64 y SHA256SUMS.txt del release. Solo hay build
     # x86_64 para Windows, así que no hay selección de arquitectura (a
-    # diferencia de install.sh).
+    # diferencia de install-linux.sh).
     param($Release)
     $setupAsset = $Release.assets | Where-Object { $_.name -like "tts-sidecar-*-x86_64-setup.exe" } | Select-Object -First 1
     $sumsAsset = $Release.assets | Where-Object { $_.name -eq "SHA256SUMS.txt" } | Select-Object -First 1

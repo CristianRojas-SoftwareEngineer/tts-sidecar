@@ -278,10 +278,11 @@ jobs:
             echo "[STEP] Run pytest suite over tests/ - FIN"
 
   test-installer-linux:
-    # Smoke-test de install.sh (docs/SELF-HOSTED-INSTALL.md): valida el script
-    # sin red real, mockeando curl/uname/sha256sum por PATH (tests/installer/).
-    # cimg/base es una imagen liviana (Ubuntu), suficiente porque el job no
-    # compila nada: solo instala bats-core y corre el smoke-test de shell.
+    # Smoke-test de install-linux.sh (docs/SELF-HOSTED-INSTALL.md): valida el
+    # script sin red real, mockeando curl/uname/sha256sum por PATH
+    # (tests/installer/). cimg/base es una imagen liviana (Ubuntu), suficiente
+    # porque el job no compila nada: solo instala bats-core y corre el
+    # smoke-test de shell.
     docker:
       - image: cimg/base:current
     steps:
@@ -294,21 +295,22 @@ jobs:
             sudo apt-get install -y bats
             echo "[STEP] Install bats-core - FIN"
       - run:
-          name: Run install.sh smoke-test (bats)
+          name: Run install-linux.sh smoke-test (bats)
           command: |
-            echo "[STEP] Run install.sh smoke-test (bats) - INICIO"
-            # Acotado a install.bats: install-macos.bats corre en el executor
-            # macOS (job test-installer-macos), no en este runner Linux.
-            bats tests/installer/install.bats
-            echo "[STEP] Run install.sh smoke-test (bats) - FIN"
+            echo "[STEP] Run install-linux.sh smoke-test (bats) - INICIO"
+            # Acotado a install-linux.bats: install-macos.bats corre en el
+            # executor macOS (job test-installer-macos), no en este runner
+            # Linux.
+            bats tests/installer/install-linux.bats
+            echo "[STEP] Run install-linux.sh smoke-test (bats) - FIN"
 
   test-installer-windows:
-    # Smoke-test de install.ps1 (docs/SELF-HOSTED-INSTALL.md): valida el script
-    # sin red ni instalación reales, mockeando las funciones propias del script
-    # con Pester v5 (tests/installer/install.tests.ps1) — espejo de
-    # test-installer-linux. Mismo executor Windows que test-windows; Pester
-    # pineado (el server-2022 trae Pester 3.x, y un release nuevo de Pester no
-    # debe romper el job sin cambios en el repo).
+    # Smoke-test de install-windows.ps1 (docs/SELF-HOSTED-INSTALL.md): valida
+    # el script sin red ni instalación reales, mockeando las funciones propias
+    # del script con Pester v5 (tests/installer/install-windows.tests.ps1) —
+    # espejo de test-installer-linux. Mismo executor Windows que test-windows;
+    # Pester pineado (el server-2022 trae Pester 3.x, y un release nuevo de
+    # Pester no debe romper el job sin cambios en el repo).
     executor: win/server-2022
     steps:
       - checkout
@@ -320,13 +322,13 @@ jobs:
             if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Write-Host "[STEP] Install Pester (pinned 5.8.0) - FIN"
       - run:
-          name: Run install.ps1 smoke-test (Pester)
+          name: Run install-windows.ps1 smoke-test (Pester)
           command: |
-            Write-Host "[STEP] Run install.ps1 smoke-test (Pester) - INICIO"
+            Write-Host "[STEP] Run install-windows.ps1 smoke-test (Pester) - INICIO"
             Import-Module Pester -RequiredVersion 5.8.0
-            Invoke-Pester tests/installer/install.tests.ps1 -CI
+            Invoke-Pester tests/installer/install-windows.tests.ps1 -CI
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            Write-Host "[STEP] Run install.ps1 smoke-test (Pester) - FIN"
+            Write-Host "[STEP] Run install-windows.ps1 smoke-test (Pester) - FIN"
 
   test-installer-macos:
     # Smoke-test de install-macos.sh (docs/SELF-HOSTED-INSTALL.md): valida el

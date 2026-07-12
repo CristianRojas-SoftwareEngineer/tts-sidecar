@@ -42,14 +42,14 @@ pre-compilado por SO (audiencia general, sin Python) y el paquete PyPI
 
 ### Instalación de una línea
 
-En Linux, `install.sh` automatiza la Opción 1 completa: resuelve el último
-Release, descarga el `.AppImage` de tu arquitectura, verifica su checksum
-contra `SHA256SUMS.txt`, lo instala en `~/.local/opt/tts-sidecar/` (eliminando
-la versión anterior si existe) y ejecuta `setup` (integra el PATH y ofrece
-descargar el modelo):
+En Linux, `install-linux.sh` automatiza la Opción 1 completa: resuelve el
+último Release, descarga el `.AppImage` de tu arquitectura, verifica su
+checksum contra `SHA256SUMS.txt`, lo instala en `~/.local/opt/tts-sidecar/`
+(eliminando la versión anterior si existe) y ejecuta `setup` (integra el PATH
+y ofrece descargar el modelo):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install-linux.sh | sh
 ```
 
 En macOS (Apple Silicon), `install-macos.sh` hace lo análogo sin `sudo` ni
@@ -61,12 +61,12 @@ symlink de PATH en `~/.local/bin` y ejecuta `setup`:
 curl -fsSL https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install-macos.sh | sh
 ```
 
-En Windows, `install.ps1` hace lo análogo desde PowerShell: descarga el
-instalador del último Release, verifica su checksum, lo ejecuta en silencio
-(instalación per-user, sin UAC) y corre `tts-sidecar setup`:
+En Windows, `install-windows.ps1` hace lo análogo desde PowerShell: descarga
+el instalador del último Release, verifica su checksum, lo ejecuta en
+silencio (instalación per-user, sin UAC) y corre `tts-sidecar setup`:
 
 ```powershell
-irm https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install-windows.ps1 | iex
 ```
 
 Los tres scripts abortan la instalación si el checksum descargado no coincide

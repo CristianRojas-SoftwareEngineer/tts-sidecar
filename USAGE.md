@@ -27,18 +27,18 @@ HKCU). Luego invoca:
 tts-sidecar <comando>
 ```
 
-En **Linux**, `install.sh` automatiza toda la descarga/verificación/instalación
+En **Linux**, `install-linux.sh` automatiza toda la descarga/verificación/instalación
 con una sola línea (detalle en [README.md](README.md#instalación-de-una-línea-linux-y-windows)):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install-linux.sh | sh
 ```
 
-En **Windows**, `install.ps1` hace lo análogo desde PowerShell (instalación
+En **Windows**, `install-windows.ps1` hace lo análogo desde PowerShell (instalación
 per-user, sin UAC; termina ejecutando `tts-sidecar setup`):
 
 ```powershell
-irm https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/main/install-windows.ps1 | iex
 ```
 
 **Desinstalación limpia**, en **un comando** en los tres SO: `tts-sidecar setup
@@ -138,7 +138,7 @@ Es un modo mutuamente excluyente con `--remove-path` y `--uninstall`. Sin el fla
 
 - **Windows**: el instalador agrega `tts-sidecar` al PATH de usuario (HKCU) y
   ofrece una casilla post-instalación que ejecuta `setup` en tu contexto de
-  usuario (con `install.ps1`, el propio script ejecuta `setup` al terminar).
+  usuario (con `install-windows.ps1`, el propio script ejecuta `setup` al terminar).
 - **Linux**: `setup` es el punto único de provisión. Ejecutado desde el AppImage,
   además de descargar el modelo crea el symlink `~/.local/bin/tts-sidecar`
   apuntando al AppImage, dejando el comando invocable por nombre:
@@ -630,7 +630,7 @@ binario.
   (anterior a 0.4.0, instalada en Program Files), desinstálala primero desde el
   Panel de control (con admin): instalar la per-user encima dejaría dos
   instalaciones y PATH duplicado.
-- **Linux**: repite el one-liner `curl -fsSL …/install.sh | sh`. Instala el
+- **Linux**: repite el one-liner `curl -fsSL …/install-linux.sh | sh`. Instala el
   `.AppImage` nuevo, reapunta el symlink `~/.local/bin/tts-sidecar` y **elimina
   los AppImages anteriores** de `~/.local/opt/tts-sidecar/` (ya no acumulan
   gigabytes). En la vía manual (descargar el `.AppImage` a mano), vuelve a

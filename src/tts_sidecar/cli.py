@@ -673,7 +673,7 @@ def _integrate_linux_path():
     modernas, sin necesidad de sudo.
 
     `APPIMAGE` es un contrato oficial soportado, no solo el mecanismo interno
-    del runtime AppImage: `install.sh` la exporta explícitamente tras instalar
+    del runtime AppImage: `install-linux.sh` la exporta explícitamente tras instalar
     el AppImage en `~/.local/opt/tts-sidecar/` y antes de invocar `setup`, así
     que cualquier valor externo de `APPIMAGE` que apunte a un archivo existente
     es una entrada válida.
@@ -737,7 +737,7 @@ def _remove_linux_path() -> bool:
 def _linux_install_dir() -> Path:
     """Directorio de instalación del AppImage en Linux (~/.local/opt/tts-sidecar).
 
-    Es propiedad exclusiva del proyecto: lo crea install.sh y solo contiene los
+    Es propiedad exclusiva del proyecto: lo crea install-linux.sh y solo contiene los
     AppImages versionados. --uninstall lo borra por completo.
     """
     return Path.home() / ".local" / "opt" / "tts-sidecar"

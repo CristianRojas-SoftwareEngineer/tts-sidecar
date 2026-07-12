@@ -158,7 +158,7 @@ está cacheado, remitiendo a `tts-sidecar setup` sin disparar descargas. En Wind
 el instalador agrega `{app}` al PATH y ofrece una casilla que ejecuta `setup`; en
 macOS el `.dmg` incluye scripts de instalación (symlink per-user en `~/.local/bin`,
 sin `sudo`, + oferta de `setup`) y desinstalación, y existe además el one-liner
-`install-macos.sh` (`curl | sh`) homólogo a `install.sh`.
+`install-macos.sh` (`curl | sh`) homólogo a `install-linux.sh`.
 <!-- </model_provisioning> -->
 
 <!-- <license> -->
@@ -240,9 +240,9 @@ src/tts_sidecar/         # Código fuente Python
 tests/                   # Tests pytest (350 tests) + smoke-tests de instaladores
 ├── conftest.py
 ├── installer/           # Smoke-tests de los instaladores de una línea (corren en CI, no en pytest)
-│   ├── install.bats     # install.sh (bats, job test-installer-linux)
+│   ├── install-linux.bats     # install-linux.sh (bats, job test-installer-linux)
 │   ├── install-macos.bats # install-macos.sh (bats, job test-installer-macos, executor macOS)
-│   └── install.tests.ps1 # install.ps1 (Pester v5, job test-installer-windows)
+│   └── install-windows.tests.ps1 # install-windows.ps1 (Pester v5, job test-installer-windows)
 ├── test_audio.py
 ├── test_build_linux.py
 ├── test_build_macos.py

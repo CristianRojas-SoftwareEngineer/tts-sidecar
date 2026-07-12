@@ -562,7 +562,7 @@ class TestSetupLinuxPath:
         assert "symlink creado" in capsys.readouterr().err
 
     def test_creates_symlink_from_externally_exported_appimage(self, monkeypatch, tmp_path, capsys):
-        # Contrato oficial: install.sh exporta APPIMAGE tras instalar el AppImage
+        # Contrato oficial: install-linux.sh exporta APPIMAGE tras instalar el AppImage
         # en ~/.local/opt/tts-sidecar/, sin correr dentro de un runtime AppImage
         # real. El symlink debe crearse igual que si lo exportara el runtime.
         if not _symlinks_supported(tmp_path):
@@ -573,7 +573,7 @@ class TestSetupLinuxPath:
         install_dir = tmp_path / "opt" / "tts-sidecar"
         install_dir.mkdir(parents=True)
         appimage = install_dir / "tts-sidecar-x86_64.AppImage"
-        appimage.write_bytes(b"appimage instalado por install.sh")
+        appimage.write_bytes(b"appimage instalado por install-linux.sh")
         monkeypatch.setattr(sys, "platform", "linux")
         monkeypatch.setenv("APPIMAGE", str(appimage))
 
