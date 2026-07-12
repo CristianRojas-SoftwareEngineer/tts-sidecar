@@ -32,6 +32,16 @@ El modelo base incluye además la nota de que su salida lleva un watermark neura
 TTS Sidecar **desactiva ese watermark** en el motor; ver la sección «Uso ético y
 responsable» en `README.md`/`USAGE.md` para las obligaciones que ello traslada al usuario.
 
+### Atribución: PerthNet (`resemble-perth`)
+
+El watermarker neural **PerthNet** es obra de **Resemble AI** y se distribuye como el
+paquete Python `resemble-perth` (licencia **MIT**, © Resemble AI;
+<https://pypi.org/project/resemble-perth/>), dependencia de `chatterbox-tts`. Aunque
+TTS Sidecar **no ejecuta** el watermarker (el engine lo bypasea en ambos modos), el
+paquete **sí se redistribuye** dentro del binario autocontenido, por lo que su aviso de
+copyright y su licencia se conservan aquí y en la tabla de dependencias empaquetadas
+(fila `resemble-perth`).
+
 ---
 
 ## Familias de licencias permisivas

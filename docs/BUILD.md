@@ -116,6 +116,24 @@ upstream.
 > `dist/tts-sidecar.app/` en macOS) con el ejecutable y todas las dependencias,
 > útil para pruebas directas sin pasar por el instalador.
 
+### Matriz de SO probados y mínimos declarados
+
+Complementa la matriz de arquitecturas: registra **en qué versiones de SO se valida
+realmente** cada artefacto y qué mínimo declara. La validación efectiva ocurre en los
+runners de CI; los mínimos declarados se derivan del toolchain, no de pruebas en
+máquinas con esas versiones exactas.
+
+| SO | Probado en (CI) | Mínimo declarado | Origen del mínimo |
+|----|-----------------|------------------|-------------------|
+| Windows | Executor `circleci/windows@5.0` (Windows Server 2022) + desarrollo en Windows 11 | Sin mínimo formal; se espera Windows 10+ x64 | Stack Inno Setup/PyInstaller sin APIs posteriores conocidas |
+| Linux | `cimg/python:3.13` (base Ubuntu 22.04, glibc 2.35) en x86_64 y arm64 | glibc ≥ 2.35 | El AppImage se compila contra la glibc del runner; `install.sh` advierte por debajo |
+| macOS | Runner Apple Silicon con Xcode 26.4 | `LSMinimumSystemVersion` del `.dmg` | Derivado de `MACOSX_DEPLOYMENT_TARGET` del Python del build (`build_macos.py`) |
+
+**Limitación aceptada (S1-13):** los mínimos declarados **no** se prueban en máquinas
+con esas versiones exactas (no hay runners de Windows 10, Ubuntu 22.04 de escritorio ni
+del macOS mínimo). La matriz registra lo efectivamente probado; un reporte de fallo en
+una versión mínima real reabriría esta decisión.
+
 ---
 
 ## 3. Compilación Local
@@ -282,11 +300,21 @@ plataformas automáticamente. Los jobs `test-linux`, `test-windows` y `test-maco
 como **triple puerta simétrica**: cada build depende de los tres
 (`requires: [test-linux, test-windows, test-macos]`), de modo que la suite se ejercita en
 los tres SO nativos antes de compilar. A la triple puerta de la suite pytest se suman,
-también como `requires` de los 4 builds, los dos smoke-tests de los instaladores de una
-línea: `test-installer-linux` (bats sobre `install.sh`) y `test-installer-windows`
-(Pester sobre `install.ps1`). Así, un bug específico de plataforma —Windows
+también como `requires` de los 4 builds, los tres smoke-tests de los instaladores de una
+línea: `test-installer-linux` (bats sobre `install.sh`), `test-installer-windows`
+(Pester sobre `install.ps1`) y `test-installer-macos` (bats sobre `install-macos.sh`).
+Así, un bug específico de plataforma —Windows
 (pycaw/COM, winsound, generación del `.iss`) o macOS (afplay/sounddevice, rutas y señales
-POSIX)— se detecta en el gate en lugar de llegar al usuario. La cobertura es equivalente
+POSIX)— se detecta en el gate en lugar de llegar al usuario.
+
+> **Mockeo deliberado de los smoke-tests de instaladores (S1-31).** Los tres jobs
+> `test-installer-*` mockean por PATH las herramientas con efectos externos (`curl`,
+> `sha256sum`, `hdiutil`, `xattr`, …): validan la lógica del script (parsing del
+> release, verificación de checksum, guards de arquitectura y glibc, mensajes) sin
+> red ni artefactos reales. Es una **decisión consciente**: ejercitar el flujo real
+> exigiría descargar releases publicados en cada push (lento, frágil y circular
+> durante un release). El flujo real queda validado por el propio proceso de release
+> y por los smoke tests del binario congelado en los jobs de build. La cobertura es equivalente
 para los tres SO **por familia de SO**: el mismo `pytest tests/` corre en cada uno. La
 suite se ejercita en **una** arquitectura por SO (Linux en x86_64), no en las dos que
 Linux publica; el porqué de esa asimetría se detalla en la subsección siguiente.

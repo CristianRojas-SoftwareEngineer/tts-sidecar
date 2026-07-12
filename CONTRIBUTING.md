@@ -41,7 +41,25 @@ pytest tests/ -v
 - La suite se ejecuta en CI en **Linux**, **Windows** y **macOS** nativos; evita
   supuestos específicos de un SO (rutas, permisos, señales) o márcalos con un
   `skip` justificado.
+- En Windows, los tests de symlink (`TestSetupLinuxPath`, en `tests/test_cli.py`)
+  requieren permiso para crear symlinks: activa el **Modo de programador**
+  (Configuración → Sistema → Para programadores) o ejecuta pytest en una consola
+  elevada; sin ello esos tests se saltan con `skip` y la cobertura local se reduce
+  (en CI corren completos en Linux/macOS).
 - Verificación rápida de sintaxis: `python -m compileall src/`.
+
+### Smoke-tests de instaladores
+
+Además de la suite pytest, los instaladores de una línea tienen smoke-tests
+propios en `tests/installer/`, que corren **en CI, no en pytest**:
+
+- `install.bats` — `install.sh` (Linux), con [bats-core](https://github.com/bats-core/bats-core).
+- `install-macos.bats` — `install-macos.sh` (macOS), también con bats.
+- `install.tests.ps1` — `install.ps1` (Windows), con **Pester v5**
+  (`Invoke-Pester tests/installer/install.tests.ps1` en PowerShell).
+
+Si modificas un instalador, actualiza su smoke-test en el mismo cambio; los tres
+jobs (`test-installer-linux`/`-windows`/`-macos`) son puerta de los builds en CI.
 
 ## Dependencias y lockfile
 
