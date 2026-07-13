@@ -3,6 +3,30 @@ version: 2.1
 orbs:
   win: circleci/windows@5.0
 
+commands:
+  smoke_test_frozen_bundle:
+    # Ejecuta el binario congelado onedir para detectar empaquetados rotos
+    # antes de publicar. `version` no carga el modelo; exit 0 obligatorio.
+    # Valida además que las voces de fábrica (en particular 'default')
+    # quedaron empaquetadas en el bundle: `voice list` no carga el modelo;
+    # el grep -qx aborta el step si 'default' no viaja en el bundle.
+    # Parametrizado por executable_path para reusarse entre build-linux-x64
+    # y build-linux-arm64, que solo difieren en esa ruta (S2-08).
+    description: >
+      Smoke test del binario congelado onedir (version + voces de fábrica).
+    parameters:
+      executable_path:
+        type: string
+        description: Ruta al ejecutable congelado dentro del onedir/AppDir.
+    steps:
+      - run:
+          name: Smoke test << parameters.executable_path >> (version + voces de fábrica)
+          command: |
+            echo "[STEP] Smoke test << parameters.executable_path >> - INICIO"
+            << parameters.executable_path >> version
+            << parameters.executable_path >> voice list | grep -qx '  - default'
+            echo "[STEP] Smoke test << parameters.executable_path >> - FIN"
+
 jobs:
   test-linux:
     # El executor es x86_64 (Docker, el más barato/rápido disponible): la suite
@@ -412,7 +436,7 @@ jobs:
           name: Install PyInstaller into venv (post-cache)
           command: |
             Write-Host "[STEP] Install PyInstaller into venv (post-cache) - INICIO"
-            .venv\Scripts\python.exe -m pip install pyinstaller==6.21.0
+            .venv\Scripts\python.exe -m pip install -r requirements-lock-build.txt --require-hashes
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Write-Host "[STEP] Install PyInstaller into venv (post-cache) - FIN"
       - run:
@@ -561,7 +585,7 @@ jobs:
           name: Install PyInstaller into venv (post-cache)
           command: |
             echo "[STEP] Install PyInstaller into venv (post-cache) - INICIO"
-            pip install pyinstaller==6.21.0
+            pip install -r requirements-lock-build.txt --require-hashes
             echo "[STEP] Install PyInstaller into venv (post-cache) - FIN"
       - run:
           name: Build Linux x64 AppImage via PyInstaller
@@ -570,18 +594,8 @@ jobs:
             echo "[STEP] Build Linux x64 AppImage via PyInstaller - INICIO"
             python scripts/build_linux.py --arch x86_64
             echo "[STEP] Build Linux x64 AppImage via PyInstaller - FIN"
-      - run:
-          # Ejecuta el binario congelado onedir para detectar empaquetados rotos
-          # antes de publicar. `version` no carga el modelo; exit 0 obligatorio.
-          name: Smoke test dist/tts-sidecar/tts-sidecar (version + voces de fábrica)
-          command: |
-            echo "[STEP] Smoke test dist/tts-sidecar/tts-sidecar - INICIO"
-            dist/tts-sidecar/tts-sidecar version
-            # Valida que las voces de fábrica (en particular 'default')
-            # quedaron empaquetadas en el bundle. `voice list` no carga el
-            # modelo; el grep -qx aborta el step si 'default' no viaja en el bundle.
-            dist/tts-sidecar/tts-sidecar voice list | grep -qx '  - default'
-            echo "[STEP] Smoke test dist/tts-sidecar/tts-sidecar - FIN"
+      - smoke_test_frozen_bundle:
+          executable_path: dist/tts-sidecar/tts-sidecar
       - run:
           # Copia única del AppImage VERSIONADO (nombre de release, con arch) al
           # directorio de workspace para `publish-release`. Fail-fast: sin match,
@@ -667,7 +681,7 @@ jobs:
           name: Install PyInstaller into venv (post-cache)
           command: |
             echo "[STEP] Install PyInstaller into venv (post-cache) - INICIO"
-            python -m pip install pyinstaller==6.21.0
+            python -m pip install -r requirements-lock-build.txt --require-hashes
             echo "[STEP] Install PyInstaller into venv (post-cache) - FIN"
       - run:
           name: Build Linux ARM64 AppImage via PyInstaller
@@ -676,22 +690,12 @@ jobs:
             echo "[STEP] Build Linux ARM64 AppImage via PyInstaller - INICIO"
             python scripts/build_linux.py --arch arm64
             echo "[STEP] Build Linux ARM64 AppImage via PyInstaller - FIN"
-      - run:
-          # Ejecuta el binario congelado onedir para detectar empaquetados rotos
-          # antes de publicar. `version` no carga el modelo; exit 0 obligatorio.
-          # Gate de facto de ARM64: no hay un `test-linux-arm64` (la suite mockea
-          # el engine, ver test-linux), así que este smoke test es la única puerta
-          # que ejercita el stack nativo aarch64 (wheels, extensiones). Decisión
-          # documentada en docs/BUILD.md §4.
-          name: Smoke test dist/tts-sidecar/tts-sidecar (version + voces de fábrica)
-          command: |
-            echo "[STEP] Smoke test dist/tts-sidecar/tts-sidecar - INICIO"
-            dist/tts-sidecar/tts-sidecar version
-            # Valida que las voces de fábrica (en particular 'default')
-            # quedaron empaquetadas en el bundle. `voice list` no carga el
-            # modelo; el grep -qx aborta el step si 'default' no viaja en el bundle.
-            dist/tts-sidecar/tts-sidecar voice list | grep -qx '  - default'
-            echo "[STEP] Smoke test dist/tts-sidecar/tts-sidecar - FIN"
+      # Gate de facto de ARM64: no hay un `test-linux-arm64` (la suite mockea
+      # el engine, ver test-linux), así que este smoke test es la única puerta
+      # que ejercita el stack nativo aarch64 (wheels, extensiones). Decisión
+      # documentada en docs/BUILD.md §4.
+      - smoke_test_frozen_bundle:
+          executable_path: dist/tts-sidecar/tts-sidecar
       - run:
           # Copia única del AppImage VERSIONADO (nombre de release, con arch) al
           # directorio de workspace para `publish-release`. Fail-fast: sin match,
@@ -791,7 +795,7 @@ jobs:
           name: Install PyInstaller into venv (post-cache)
           command: |
             echo "[STEP] Install PyInstaller into venv (post-cache) - INICIO"
-            python -m pip install pyinstaller==6.21.0
+            python -m pip install -r requirements-lock-build.txt --require-hashes
             echo "[STEP] Install PyInstaller into venv (post-cache) - FIN"
       - run:
           # create-dmg es un script de shell distribuido por Homebrew, no un

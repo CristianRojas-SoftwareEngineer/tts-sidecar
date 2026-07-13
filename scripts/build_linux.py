@@ -19,8 +19,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from build_utils import (
     log, StageTimer, BuildTimer, copy_license_files, get_version,
     check_pyinstaller, common_pyinstaller_args, bundle_size_mb, run_pyinstaller,
-    ensure_png_icon, ensure_build_dependency, module_available,
-    fetch_pinned_asset, APPIMAGE_TOOLING,
+    ensure_png_icon, check_sounddevice,
+    install_lockfile_dependencies, fetch_pinned_asset, APPIMAGE_TOOLING,
     BUILD_SUBPROCESS_TIMEOUT, PYINSTALLER_TIMEOUT,
 )
 
@@ -94,30 +94,17 @@ def ensure_runtime_dependencies(target_arch="x86_64"):
 
     En x86_64 usa requirements-lock-linux-cpu.txt (CPU-only, sin paquetes nvidia-*).
     En arm64 usa requirements-lock.txt (universal, los wheels CPU-only se resuelven
-    automáticamente por platform_machine == 'arm64' en el lockfile).
+    automáticamente por platform_machine == 'arm64' en el lockfile). Solo resuelve
+    el lockfile correcto por arquitectura; la instalación en sí (existencia, pip
+    --require-hashes, manejo de timeout/fallo) vive en
+    build_utils.install_lockfile_dependencies, fuente única compartida con
+    build_windows.py y build_macos.py (S2-06).
     """
     if target_arch == "x86_64":
         lockfile = PROJECT_ROOT / "requirements-lock-linux-cpu.txt"
     else:
         lockfile = PROJECT_ROOT / "requirements-lock.txt"
-
-    if not lockfile.exists():
-        log(f"ERROR: No se encontró {lockfile}; instala primero con: pip install -r {lockfile.name} --require-hashes")
-        sys.exit(1)
-
-    log(f"Instalando dependencias runtime desde {lockfile.name}...")
-    try:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-r", str(lockfile), "--require-hashes"],
-            check=True,
-            timeout=BUILD_SUBPROCESS_TIMEOUT,
-        )
-    except subprocess.CalledProcessError as exc:
-        log(f"ERROR: Falló la instalación del lockfile (rc={exc.returncode})")
-        sys.exit(1)
-    except subprocess.TimeoutExpired:
-        log(f"ERROR: La instalación del lockfile excedió {BUILD_SUBPROCESS_TIMEOUT}s")
-        sys.exit(1)
+    install_lockfile_dependencies(lockfile)
 
 
 def check_dependencies(target_arch="x86_64"):
@@ -127,14 +114,9 @@ def check_dependencies(target_arch="x86_64"):
 
     with StageTimer("CheckDeps", "Verificando dependencias"):
         # sounddevice es dependencia del producto (sin ella el bundle saldría
-        # sin audio): required. Sin pin: es dependencia de runtime gobernada
-        # por requirements.txt, no una herramienta de build.
-        ensure_build_dependency(
-            "sounddevice",
-            lambda: module_available("sounddevice"),
-            install_cmd=[sys.executable, "-m", "pip", "install", "sounddevice"],
-            required=True,
-        )
+        # sin audio): required. check_sounddevice es fuente única compartida
+        # con build_macos.py (S2-06).
+        check_sounddevice()
 
         # appimagetool + runtime estático empaquetan el AppImage a partir del
         # bundle onedir; es tooling del empaquetador (opcional): sin él el

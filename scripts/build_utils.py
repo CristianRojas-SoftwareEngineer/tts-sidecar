@@ -53,6 +53,16 @@ INSTALLER_TIMEOUT = 1800
 PYINSTALLER_PIN = "6.21.0"
 INNOSETUP_PIN = "6.3.3"
 
+# Lockfile con hashes de la herramienta de build PyInstaller (y sus
+# dependencias transitivas), separado de los lockfiles de runtime
+# (requirements-lock.txt / requirements-lock-linux-cpu.txt): PyInstaller no es
+# una dependencia del producto (no debe viajar en el wheel de PyPI), así que
+# no pertenece a pyproject.toml ni a sus lockfiles derivados (S2-09). Fija
+# PYINSTALLER_PIN con --require-hashes para que la instalación del compilador
+# sea tan reproducible como la de las dependencias runtime; regenerar tras
+# actualizar PYINSTALLER_PIN (ver cabecera del propio archivo).
+PYINSTALLER_LOCKFILE = Path(__file__).parent.parent / "requirements-lock-build.txt"
+
 # Tooling pineado del empaquetado AppImage (L-03): appimagetool empaqueta el
 # AppDir y el runtime estático de type2-runtime (FUSE 3 estático con
 # autoextracción de respaldo) se incrusta con --runtime-file, eliminando la
@@ -186,15 +196,72 @@ def check_pyinstaller() -> None:
 
     Fuente única para los tres scripts de build: antes cada uno duplicaba este
     mismo bloque de try/except (SUGGESTION-04). Criticidad required: sin el
-    compilador el build no tiene sentido.
+    compilador el build no tiene sentido. La instalación manual/ofrecida usa
+    PYINSTALLER_LOCKFILE (--require-hashes) en vez de `pip install
+    pyinstaller==X.Y.Z` suelto, para que la versión de PyInstaller (y sus
+    dependencias transitivas) sea tan reproducible como el resto del build
+    (S2-09).
     """
     with StageTimer("CheckDeps", "Verificando dependencias"):
         ensure_build_dependency(
             "PyInstaller",
             lambda: module_available("PyInstaller"),
-            install_cmd=[sys.executable, "-m", "pip", "install", f"pyinstaller=={PYINSTALLER_PIN}"],
+            install_cmd=[
+                sys.executable, "-m", "pip", "install",
+                "-r", str(PYINSTALLER_LOCKFILE), "--require-hashes",
+            ],
             required=True,
         )
+
+
+def install_lockfile_dependencies(lockfile) -> None:
+    """Instala las dependencias de runtime desde `lockfile` (--require-hashes).
+
+    Fuente única para los tres scripts de build (S2-06): antes cada uno
+    duplicaba el chequeo de existencia, el mensaje de log y el try/except de
+    subprocess.run con el mismo manejo de timeout/CalledProcessError. Cada
+    build_*.py resuelve su propio lockfile (universal o CPU-only-linux según
+    la plataforma/arquitectura) y delega la instalación aquí. Aborta el build
+    (sys.exit(1)) si el lockfile no existe, si pip falla o si excede
+    BUILD_SUBPROCESS_TIMEOUT: un build sin dependencias reproducibles nunca
+    debe continuar en silencio.
+    """
+    lockfile = Path(lockfile)
+    if not lockfile.exists():
+        log(f"ERROR: No se encontró {lockfile}; instala primero con: pip install -r {lockfile.name} --require-hashes")
+        sys.exit(1)
+
+    log(f"Instalando dependencias runtime desde {lockfile.name}...")
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-r", str(lockfile), "--require-hashes"],
+            check=True,
+            timeout=BUILD_SUBPROCESS_TIMEOUT,
+        )
+    except subprocess.CalledProcessError as exc:
+        log(f"ERROR: Falló la instalación del lockfile (rc={exc.returncode})")
+        sys.exit(1)
+    except subprocess.TimeoutExpired:
+        log(f"ERROR: La instalación del lockfile excedió {BUILD_SUBPROCESS_TIMEOUT}s")
+        sys.exit(1)
+
+
+def check_sounddevice() -> None:
+    """Verifica que sounddevice esté instalado (dependencia del producto).
+
+    Fuente única para build_linux.py y build_macos.py (S2-06): en Linux
+    gobierna reproducción + enumeración de dispositivos; en macOS solo la
+    enumeración (afplay reproduce). Sin pin: es dependencia de runtime
+    gobernada por requirements.txt, no una herramienta de build. required:
+    sin ella el bundle saldría sin audio funcional (doctor/setup/devices
+    fallarían en todo binario congelado).
+    """
+    ensure_build_dependency(
+        "sounddevice",
+        lambda: module_available("sounddevice"),
+        install_cmd=[sys.executable, "-m", "pip", "install", "sounddevice"],
+        required=True,
+    )
 
 
 def common_pyinstaller_args(
@@ -313,29 +380,44 @@ def ensure_png_icon(dest_path) -> Path:
     return dest
 
 
-def ensure_ico(dest_dir) -> Path:
-    """Genera un .ico multi-resolución (16/32/48/256) desde el logo del proyecto.
+def _generate_pillow_icon(dest_dir, filename: str, save_kwargs: dict, label: str, fallback_desc: str) -> Path:
+    """Genera un icono nativo desde LOGO_SOURCE con Pillow (S1-16).
 
-    Devuelve la ruta del .ico generado, o None si Pillow o la fuente faltan
-    (degradación con gracia: el build sigue sin icono nativo).
+    Factoriza la lógica antes duplicada entre ensure_ico y ensure_icns:
+    apertura del logo, creación del directorio destino, guardado con Pillow y
+    logging (éxito o warning de degradación). `save_kwargs` son los kwargs de
+    `Image.save` (formato y, en el .ico, los tamaños multi-resolución).
+    `label` identifica el formato en mayúsculas (p. ej. "ICO"); el mensaje de
+    warning deriva su extensión en minúsculas del mismo label. Devuelve la
+    ruta generada, o None si Pillow o la fuente del logo faltan (degradación
+    con gracia: el llamador sigue sin icono nativo).
     """
     try:
         from PIL import Image
 
         dest = Path(dest_dir)
         dest.mkdir(parents=True, exist_ok=True)
-        ico_path = dest / "tts-sidecar.ico"
+        icon_path = dest / filename
         with Image.open(LOGO_SOURCE) as img:
-            img.save(
-                ico_path,
-                format="ICO",
-                sizes=[(16, 16), (32, 32), (48, 48), (256, 256)],
-            )
-        log(f"Icono ICO generado: {ico_path}")
-        return ico_path
+            img.save(icon_path, **save_kwargs)
+        log(f"Icono {label} generado: {icon_path}")
+        return icon_path
     except (ImportError, FileNotFoundError, OSError) as exc:
-        log(f"WARNING: no se pudo generar el .ico ({exc}); build sin icono nativo")
+        log(f"WARNING: no se pudo generar el .{label.lower()} ({exc}); {fallback_desc}")
         return None
+
+
+def ensure_ico(dest_dir) -> Path:
+    """Genera un .ico multi-resolución (16/32/48/256) desde el logo del proyecto.
+
+    Devuelve la ruta del .ico generado, o None si Pillow o la fuente faltan
+    (degradación con gracia: el build sigue sin icono nativo).
+    """
+    return _generate_pillow_icon(
+        dest_dir, "tts-sidecar.ico",
+        {"format": "ICO", "sizes": [(16, 16), (32, 32), (48, 48), (256, 256)]},
+        "ICO", "build sin icono nativo",
+    )
 
 
 def ensure_icns(dest_dir) -> Path:
@@ -344,21 +426,13 @@ def ensure_icns(dest_dir) -> Path:
     Devuelve la ruta del .icns generado, o None si Pillow o la fuente faltan
     (degradación con gracia: el .app mantiene el CFBundleIconFile vacío).
     """
-    try:
-        from PIL import Image
-
-        dest = Path(dest_dir)
-        dest.mkdir(parents=True, exist_ok=True)
-        icns_path = dest / "tts-sidecar.icns"
-        with Image.open(LOGO_SOURCE) as img:
-            # Pillow escribe .icns a partir de la imagen fuente; los tamaños del
-            # iconset se derivan internamente. El logo es 256×256, tamaño válido.
-            img.save(icns_path, format="ICNS")
-        log(f"Icono ICNS generado: {icns_path}")
-        return icns_path
-    except (ImportError, FileNotFoundError, OSError) as exc:
-        log(f"WARNING: no se pudo generar el .icns ({exc}); .app sin icono nativo")
-        return None
+    # Pillow escribe .icns a partir de la imagen fuente; los tamaños del
+    # iconset se derivan internamente. El logo es 256×256, tamaño válido.
+    return _generate_pillow_icon(
+        dest_dir, "tts-sidecar.icns",
+        {"format": "ICNS"},
+        "ICNS", ".app sin icono nativo",
+    )
 
 
 def get_version(init_path: Path = None) -> str:
