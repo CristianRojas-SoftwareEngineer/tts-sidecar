@@ -625,6 +625,31 @@ uv pip compile --generate-hashes --python-version 3.13 \
     pyproject.toml -o requirements-lock-linux-cpu.txt
 ```
 
+**Por qué `--index-strategy unsafe-best-match` es imprescindible (y no basta con
+`--extra-index-url`).** El `index-strategy` por defecto de `uv` es
+`first-index`: para cada paquete, resuelve contra el **primer** índice donde
+aparece y no mira los demás. Como `torch`/`torchaudio` sí existen en el índice
+por defecto (PyPI, con su build CUDA), `uv` se quedaría resolviendo ahí y jamás
+llegaría a evaluar `https://download.pytorch.org/whl/cpu` — el `--extra-index-url`
+por sí solo no tiene efecto en ese caso, solo importa para paquetes que PyPI no
+resuelve. `unsafe-best-match` cambia la estrategia a comparar versiones entre
+**todos** los índices declarados y quedarse con la mejor coincidencia, dejando
+que gane el wheel `+cpu` de `download.pytorch.org` sobre el wheel CUDA de PyPI
+para `torch`/`torchaudio` (el resto de paquetes —incluidas sus dependencias
+transitivas— sigue resolviendo normalmente contra PyPI). Es el mismo
+comportamiento (permisivo) que usa `pip` por defecto al mezclar índices; la
+contrapartida documentada por `uv` es el riesgo de *dependency confusion* si
+alguno de los índices no fuera de confianza — aceptable aquí porque ambos
+(PyPI oficial y el índice oficial de PyTorch) lo son.
+
+**Cuándo regenerar este lock.** Cada vez que se regenera `requirements-lock.txt`
+tras editar `pyproject.toml` (nueva versión de `torch`, `chatterbox-tts`, o
+cualquier dependencia de runtime), regenerar también este lock CPU-only con el
+comando de arriba y revisar el diff: un cambio de versión de `torch` puede no
+tener todavía wheel `+cpu` publicado para el `--python-version` fijado, lo que
+haría fallar la resolución y hay que esperar a que PyTorch lo publique antes de
+subir el pin.
+
 Un usuario que necesite aceleración NVIDIA debe compilar desde código fuente
 instalando el `requirements-lock.txt` universal (que sí resuelve el stack CUDA
 en x86_64/Linux) en vez de usar el AppImage distribuido.
