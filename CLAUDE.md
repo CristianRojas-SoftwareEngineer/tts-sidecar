@@ -269,9 +269,20 @@ tests/                   # Tests pytest (~498 tests) + smoke-tests de instalador
 <!-- <silenced_warnings> -->
 ## Warnings silenciados
 
-`src/tts_sidecar/bootstrap.py` (`apply()`) silencia:
-- `pkg_resources deprecation`
-- `diffusers LoRACompatibleLinear`
+`src/tts_sidecar/bootstrap.py` (`apply()`) silencia mediante una **allow-list explícita**
+(`_SILENCED_WARNINGS`), **no** un catch-all global `warnings.filterwarnings("ignore")`
+ni `PYTHONWARNINGS=ignore` (remediado en S2-12, para no enmascarar deprecaciones propias
+ni de terceros). La allow-list acota solo dos warnings benignos del módulo `warnings`:
+
+- `pkg_resources is deprecated` — por **mensaje**; lo emite `perth` al importar
+  `pkg_resources` en Python 3.13. Con `category=Warning` (no `DeprecationWarning`)
+  porque `perth` lo emite como `UserWarning` en este entorno; así queda acotado por
+  mensaje y cubre ambas categorías.
+- `diffusers LoRACompatibleLinear` — por **módulo** (`r"^diffusers\."`), al importar
+  `chatterbox`, para no atarse al texto exacto del mensaje.
+
+Las tres supresiones siguientes son de `logging` (no las gobierna el catch-all) y se
+conservan intactas:
 - `huggingface_hub` HTTP warnings
 - `chatterbox.models.tokenizers.tokenizer` pkuseg
 - `chatterbox.models.t3.inference.alignment_stream_analyzer` repetition

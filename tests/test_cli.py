@@ -3,6 +3,7 @@
 import os
 import pytest
 import sys
+import warnings
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -2062,7 +2063,7 @@ class TestBootstrap:
     def test_apply_sets_expected_env_vars(self, monkeypatch):
         bootstrap = self._reset(monkeypatch)
         for var in (
-            "PYTHONWARNINGS", "HF_HUB_DISABLE_IMPLICIT_TOKEN",
+            "HF_HUB_DISABLE_IMPLICIT_TOKEN",
             "TRANSFORMERS_VERBOSITY", "TRANSFORMERS_NO_ADVISORY_WARNINGS",
             "TOKENIZERS_PARALLELISM",
         ):
@@ -2070,11 +2071,68 @@ class TestBootstrap:
 
         bootstrap.apply()
 
-        assert os.environ["PYTHONWARNINGS"] == "ignore"
         assert os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] == "1"
         assert os.environ["TRANSFORMERS_VERBOSITY"] == "error"
         assert os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] == "1"
         assert os.environ["TOKENIZERS_PARALLELISM"] == "false"
+
+    # -- S2-12: allow-list de warnings en vez de catch-all -------------
+
+    def test_apply_has_no_catch_all_warning_filter(self, monkeypatch):
+        """No debe instalarse ningún filtro catch-all (action='ignore',
+        message='', module='', category=Warning) que silencie todo."""
+        import warnings as _warnings
+
+        bootstrap = self._reset(monkeypatch)
+        # Aislar: arrancar desde una lista de filtros vacía.
+        monkeypatch.setattr(_warnings, "filters", [])
+        # `apply()` es idempotente: desactivarlo para poder reaplicar limpio.
+        bootstrap._applied = False
+        bootstrap.apply()
+
+        # `warnings.filters` almacena los message/module como regex compiladas.
+        def _pattern(value):
+            return value.pattern if hasattr(value, "pattern") else value
+
+        # Ninguna entrada residual debe ser un silencio global.
+        for entry in _warnings.filters:
+            action, _msg, _cat, _mod, _ln = entry
+            assert not (
+                action == "ignore"
+                and _pattern(_msg) == ""
+                and _pattern(_mod) == ""
+                and _cat is Warning
+            )
+
+    def test_silenced_warnings_allow_list_has_expected_entries(self, monkeypatch):
+        """La allow-list `_SILENCED_WARNINGS` debe declarar exactamente las dos
+        supresiones benignas conocidas."""
+        bootstrap = self._reset(monkeypatch)
+        assert (
+            "pkg_resources is deprecated", Warning, None
+        ) in bootstrap._SILENCED_WARNINGS
+        assert (
+            None, DeprecationWarning, r"^diffusers\."
+        ) in bootstrap._SILENCED_WARNINGS
+
+    def test_apply_does_not_silence_unrelated_warnings(self, monkeypatch):
+        """Un UserWarning de control debe propagar (quedar registrado), probando
+        que el catch-all global desapareció."""
+        import warnings as _warnings
+
+        bootstrap = self._reset(monkeypatch)
+        monkeypatch.setattr(_warnings, "filters", [])
+        bootstrap._applied = False
+        bootstrap.apply()
+
+        with _warnings.catch_warnings(record=True) as recorded:
+            _warnings.simplefilter("always")
+            _warnings.warn("control S2-12", UserWarning)
+
+        assert any(
+            w.category is UserWarning and "control S2-12" in str(w.message)
+            for w in recorded
+        )
 
     def test_apply_reconfigures_streams_to_utf8(self, monkeypatch):
         """S2-14: la reconfiguración UTF-8 de stdout/stderr, antes en el nivel de

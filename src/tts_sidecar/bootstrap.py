@@ -24,6 +24,26 @@ from pathlib import Path
 
 _applied = False
 
+# S2-12: allow-list explícita de warnings silenciados en el arranque.
+# NO usamos un catch-all `warnings.filterwarnings("ignore")` (ni
+# `PYTHONWARNINGS=ignore`), porque enmascararía deprecaciones propias y de
+# terceros y erosionaría la observabilidad. Cada entrada silencia un único
+# warning benigno de una dependencia, y es el punto único y auditable de la
+# lista de silencios. Ver la sección «Warnings silenciados» de CLAUDE.md.
+#
+# Formato de cada entrada: (message, category, module)
+#   - ("pkg_resources is deprecated", Warning): lo emite `perth` (dep. de
+#     chatterbox) al importar `pkg_resources` en Python 3.13. `category=Warning`
+#     (no DeprecationWarning) porque `perth` lo emite como UserWarning en esta
+#     versión; con Warning queda acotado por mensaje y cubre ambas categorías.
+#   - (None, DeprecationWarning, r"^diffusers\."): el warning de
+#     `LoRACompatibleLinear` al importar `chatterbox`; se filtra por módulo
+#     para no atarnos al texto exacto del mensaje.
+_SILENCED_WARNINGS: list[tuple[str | None, type[Warning], str | None]] = [
+    ("pkg_resources is deprecated", Warning, None),
+    (None, DeprecationWarning, r"^diffusers\."),
+]
+
 
 def _install_pkg_resources_mock() -> None:
     """Instala un mock mínimo de `pkg_resources` si no está disponible.
@@ -80,12 +100,13 @@ def apply() -> None:
                 # arranque: se conserva la codificación por defecto.
                 pass
 
-    warnings.filterwarnings("ignore")
-    # S1-02: supresión específica del warning de pkg_resources, anticipando la
-    # allow-list de S2-12. Cubre también la ruta de import directo de audio.py
-    # en tests, sin depender del filtro local que se eliminó de audio.py.
-    warnings.filterwarnings("ignore", message="pkg_resources is deprecated", category=DeprecationWarning)
-    os.environ["PYTHONWARNINGS"] = "ignore"
+    # S2-12: allow-list explícita en vez de catch-all. Silencia solo los
+    # warnings benignos declarados en `_SILENCED_WARNINGS`, preservando la
+    # visibilidad de cualquier otra deprecación (propia o de terceros).
+    for _msg, _cat, _mod in _SILENCED_WARNINGS:
+        warnings.filterwarnings(
+            "ignore", message=_msg or "", category=_cat, module=_mod or ""
+        )
     os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
     os.environ["TRANSFORMERS_VERBOSITY"] = "error"
     os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
