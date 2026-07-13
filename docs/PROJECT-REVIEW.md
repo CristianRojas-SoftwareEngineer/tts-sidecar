@@ -203,26 +203,27 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 
 #### S2-07 — Pines de versión duplicados en CI y scripts
 - **Categoría**: Mantenibilidad / DevOps
-- **Área/plataforma**: `scripts/build_utils.py:53` (PyInstaller 6.21.0), `.circleci/config.yml:415,564,670,794`; Python `3.13.14` en `config.yml:115,170,369`; pytest `9.1.1` en `83,170,271`; Inno `6.3.3` en `build_utils.py` + `config.yml`; repo en `render_cask.py:19-22` + `config.yml:23,962,976,982,1037`
-- **Evidencia**: Versiones hardcodeadas en múltiples lugares: PyInstaller ×5, Python ×4, pytest ×3, Inno ×2, repo ×5.
+- **Área/plataforma**: Python `3.13.14` en `.circleci/config.yml:139,240-241,393,732` (+ claves de caché pyenv); pytest `9.1.1` en `config.yml:107,194,295`; Inno `6.3.3` en `build_utils.py:54` (`INNOSETUP_PIN`) + `config.yml:450`; repo en `render_cask.py:19-22` + `config.yml:23,962,976,982,1037`
+- **Evidencia**: Versiones hardcodeadas en múltiples lugares: Python ×4, pytest ×3, Inno ×2, repo ×5.
 - **Confianza**: Alta
 - **Causa**: Sin fuente única de verdad para los pines.
 - **Impacto**: Una actualización de versión exige N cambios manuales sincronizados; alta probabilidad de desincronización.
 - **Corrección(es) propuesta(s)**: Ver «Alternativas y trade-offs».
 - **Decisión requerida**: Sí — elegir la fuente única de verdad (YAML vs. Python) y su alcance.
 - **Prioridad**: P1
+- **Actualización post-lote (S2-09)**: la remediación de **S2-09** ya **eliminó la duplicación de PyInstaller** (antes ×5): hoy `PYINSTALLER_PIN` en `scripts/build_utils.py:53` es la fuente única que genera `requirements-lock-build.txt`, y los cuatro jobs de CI instalan con `pip install -r requirements-lock-build.txt --require-hashes` (`config.yml:439,588,684,798`) en vez de hardcodear `pyinstaller==6.21.0`. El hallazgo se estrecha a los pines que **siguen** duplicados: Python, pytest, Inno (el pin de Inno ya está medio-centralizado en la constante `INNOSETUP_PIN`, pero se repite en `config.yml:450`) y el repo. La existencia de `build_utils.py` como fuente única de un pin (PyInstaller/Inno) es evidencia de que la opción B ya está parcialmente adoptada.
 - **Alternativas y trade-offs**:
   - **A) Anchors YAML centralizados** en `.circleci/config.yml`.
-    - *Pros*: simple, declarativo, visible en el propio CI.
-    - *Contras*: solo cubre CI; no sincroniza con `build_utils.py`/`render_cask.py` (que también hardcodean pines, ver evidencia); los scripts fuera de CircleCI quedan fuera.
-  - **B) Generar los steps de instalación desde `build_utils.py`** (fuente única en Python).
-    - *Pros*: una sola fuente para CI + scripts; elimina los N lugares de divergencia.
-    - *Contras*: el CI deja de ser declarativo (los pines viven en código Python); más acoplamiento build↔CI; superficie mayor si `build_utils.py` cambia.
+    - *Pros*: simple, declarativo, visible en el propio CI; cubre bien Python/pytest, que hoy solo viven en el YAML.
+    - *Contras*: solo cubre CI; no sincroniza con `build_utils.py`/`render_cask.py` (que también hardcodean pines, ver evidencia); los scripts fuera de CircleCI quedan fuera. Deja el pin de Inno con dos fuentes (YAML + `INNOSETUP_PIN`).
+  - **B) Generar los steps de instalación desde `build_utils.py`** (fuente única en Python), **extendiendo el patrón ya usado para PyInstaller/Inno**.
+    - *Pros*: una sola fuente para CI + scripts; elimina los N lugares de divergencia; es coherente con lo que S2-09 ya hizo para PyInstaller (consistencia de patrón).
+    - *Contras*: el CI deja de ser declarativo (los pines viven en código Python); más acoplamiento build↔CI; superficie mayor si `build_utils.py` cambia. Python/pytest son pines de entorno-CI, no de build: forzarlos a Python puede ser antinatural.
   - **C) Test/lint de consistencia** que falle si los pines divergen (sin cambiar la estructura).
-    - *Pros*: no altera el flujo, solo vigila la deriva.
-    - *Contras*: no elimina la duplicación, solo la detecta.
+    - *Pros*: no altera el flujo, solo vigila la deriva; barato y aplicable a los cuatro grupos de pines a la vez.
+    - *Contras*: no elimina la duplicación, solo la detecta; requiere mantener la lista de pines a vigilar.
   - **Trampa del parche barato**: mover a anchors solo en `config.yml` y olvidar `build_utils.py`/`render_cask.py` → la deriva persiste en los scripts de build.
-  - **Qué se necesita del humano**: (1) fuente única = YAML o Python; (2) si el alcance cubre también los scripts fuera de CI.
+  - **Qué se necesita del humano**: (1) fuente única = YAML o Python (posiblemente **mixta**: YAML para pines de entorno-CI como Python/pytest, Python para pines de build como Inno/repo, siguiendo el precedente de PyInstaller); (2) si el alcance cubre también los scripts fuera de CI; (3) si basta con la vigilancia de la opción C dado que la duplicación restante ya es acotada tras S2-09.
 
 #### S2-08 — Smoke tests duplicados en CI
 - **Categoría**: DevOps
@@ -416,22 +417,43 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 
 ### S1 — Bajos
 
-#### S1-01 — Logging redundante en `_emit_audio`
+#### S1-01 — Logging redundante al guardar en modo directo
 - **Categoría**: Calidad de código
-- **Área/plataforma**: `src/tts_sidecar/cli.py:280-303`
-- **Evidencia**: `engine.speak` ya registra el guardado; `_emit_audio` lo vuelve a registrar.
+- **Área/plataforma**: `src/tts_sidecar/cli.py:299-301` (`cmd_speak`, ruta directa) vs `src/tts_sidecar/engine.py:573-574` (`_save_wav`)
+- **Evidencia**: En **modo directo**, `engine.speak(output_path=...)` guarda el archivo y `_save_wav` ya loguea `"   -> Archivo guardado"` (`engine.py:574`); acto seguido `cmd_speak` loguea de nuevo `"[Archivo] Audio guardado: {output}"` (`cli.py:301`) para el mismo evento. La formulación original («`_emit_audio` lo vuelve a registrar») es **imprecisa**: en modo directo `_emit_audio` se invoca con `output=None` (`cli.py:303`), así que su log NO es el duplicado; el `[Archivo] Audio guardado` de `_emit_audio` (`cli.py:107`) solo corre en la ruta **daemon**, donde el `_save_wav` del engine ocurrió en el proceso **servidor** (su log no llega al cliente) y por tanto NO es redundante. El doble mensaje real es únicamente `engine.py:574` + `cli.py:301` en la ruta directa.
 - **Confianza**: Alta
-- **Impacto**: Doble mensaje "Archivo guardado" para el mismo evento.
-- **Corrección**: Eliminar el log redundante o suprimirlo en el engine con un flag.
+- **Impacto**: Doble mensaje "Archivo guardado" para el mismo evento, solo en modo directo. Puramente cosmético (ruido en el log/consola); sin efecto funcional.
+- **Decisión requerida**: No (corrección directa una vez elegida la variante), pero conviene fijar **dónde** debe vivir el mensaje canónico.
+- **Alternativas y trade-offs**:
+  - **A) Quitar el log de `cli.py:301`** y dejar que el mensaje del engine (`_save_wav`, `engine.py:574`) sea el único.
+    - *Pros*: cambio mínimo; el engine ya es quien sabe que escribió; elimina el duplicado en la ruta directa.
+    - *Contras*: el mensaje del engine (`"   -> Archivo guardado"`, sin la ruta) es menos informativo que el del CLI (`"[Archivo] Audio guardado: {output}"`, con ruta); habría que enriquecer el del engine o se pierde la ruta en la salida directa. Además el CLI deja de tener un punto único de "salida al usuario".
+  - **B) Quitar el log de `_save_wav` (`engine.py:574`)** y dejar que el **CLI** sea siempre quien anuncia el guardado (tanto en directo `cli.py:301` como en daemon vía `_emit_audio` `cli.py:107`).
+    - *Pros*: mensaje uniforme y con ruta en ambos modos; el engine deja de emitir salida orientada a usuario (mejor separación de capas: el engine no debería decidir el formato de consola del CLI); mensaje único y consistente.
+    - *Contras*: si algún otro consumidor del engine dependía de ese log, lo pierde (hoy no hay evidencia de tal consumidor); toca el engine, no solo el CLI.
+  - **C) Flag `log_save: bool = True` en `engine.speak`/`_save_wav`** que el CLI ponga en `False` cuando él va a loguear.
+    - *Pros*: preserva ambos comportamientos según el llamador.
+    - *Contras*: **sobre-ingeniería para un mensaje cosmético**; añade un parámetro de acoplamiento cross-capa por un log; peor que B en simplicidad.
+  - **Trampa del parche barato**: borrar `cli.py:301` sin notar que el mensaje del engine no lleva la ruta → se pierde la ruta en la salida del modo directo. O tocar `_emit_audio` creyendo que es el duplicado (no lo es).
+  - **Recomendación**: **B** (el CLI es el dueño de la salida a usuario; el engine no debería formatear consola), enriqueciendo si hace falta que el CLI loguee con ruta en ambos modos. Emparentado con la separación de responsabilidades de S2-10 (el God object mezcla síntesis con logging de presentación).
 - **Prioridad**: P3
 
 #### S1-02 — Filtro de warning redundante en `audio.py`
 - **Categoría**: Calidad de código
 - **Área/plataforma**: `src/tts_sidecar/audio.py:6-7`
-- **Evidencia**: `warnings.filterwarnings("ignore", message="pkg_resources is deprecated")` duplica lo que ya hace `bootstrap.py`.
+- **Evidencia**: `warnings.filterwarnings("ignore", message="pkg_resources is deprecated")` en las líneas 6-7 se ejecuta a nivel módulo, **antes** de cualquier import pesado de `audio.py`. Solapa parcialmente con el filtro equivalente de `bootstrap.py`.
 - **Confianza**: Media
-- **Impacto**: Ruido de mantenimiento; inofensivo en runtime.
-- **Corrección**: Remover o documentar como fallback para `import tts_sidecar.audio` sin bootstrap.
+- **Verificación (lectura directa)**: el filtro de `audio.py:6-7` corre **antes** de que `bootstrap.apply()` haya podido ejecutarse en escenarios donde `audio.py` se importa directamente (p. ej. `import tts_sidecar.audio` fuera del CLI, o tooling/tests que tocan el módulo de audio sin pasar por `cli.py`/`__main__`/`daemon.run`). En esas rutas `bootstrap` **no** garantiza haber corrido, así que el filtro local **no es puramente redundante**: es un **fallback legítimo** que asegura el arranque limpio del módulo de audio con independencia del bootstrap. NO borrar a ciegas.
+- **Impacto**: Ruido de mantenimiento (dos sitios silencian el mismo warning); inofensivo en runtime. El riesgo real es de **legibilidad**: sin un comentario, un futuro lector lo cree duplicado y lo borra, reintroduciendo el warning en la ruta de import directo.
+- **Decisión requerida**: No — la acción correcta es documentar, no remover; se mantiene como no-decisión pero con la aclaración de que la opción "remover" queda **descartada** por la verificación.
+- **Alternativas y trade-offs**:
+  - **A) Mantener + documentar** (recomendada). Añadir un comentario en `audio.py:6-7` explicando que es un fallback intencional para el import directo del módulo sin bootstrap, no un duplicado accidental.
+    - *Pros*: preserva el arranque limpio en todas las rutas de import; barato; evita que un futuro refactor lo borre por error.
+    - *Contras*: convive con `bootstrap.py` (dos sitios), pero es intencional y ahora explícito.
+  - **B) Remover el filtro local** y confiar solo en `bootstrap.py`.
+    - *Pros*: un solo sitio.
+    - *Contras*: **rompe el arranque limpio** cuando `audio.py` se importa sin pasar por bootstrap; reintroduce el warning `pkg_resources`. **Descartada por la verificación.**
+  - **Relación**: acoplado a **S2-12** (política global de warnings en `bootstrap`). Si S2-12 migra a una allow-list explícita, este filtro local debería alinearse con esa allow-list (misma entrada `pkg_resources`), no vivir como caso aparte. Conviene resolver S1-02 **después** o **junto** con S2-12 para no dejar dos criterios de silenciado divergentes.
 - **Prioridad**: P3
 
 #### S1-03 — `import subprocess` bajo guarda de plataforma
@@ -445,11 +467,23 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 
 #### S1-04 — `_paths_allowed_by_daemon` no valida existencia de archivos
 - **Categoría**: Calidad de código
-- **Área/plataforma**: `src/tts_sidecar/cli.py:127-136`
-- **Evidencia**: Valida que la ruta caiga en `allowed_audio_dirs()` con `realpath`, pero no que el archivo exista; el fallo se pospone al daemon (404/400).
+- **Área/plataforma**: `src/tts_sidecar/cli.py:116-136` (`_paths_allowed_by_daemon`)
+- **Evidencia**: La función valida que la ruta caiga en `allowed_audio_dirs()` vía `realpath` (`cli.py:127-135`), pero **no** comprueba que el archivo exista. Si el usuario pasa `--voice-audio`/`--speech-audio` a una ruta inexistente dentro de un dir permitido, el cliente la deja pasar y el fallo se pospone al **daemon**, que responde 400/404 (mensaje más opaco). Su docstring (N-02, `cli.py:119-123`) aclara que la función solo **anticipa la sandbox del servidor** para dar un mensaje accionable; la existencia es una dimensión distinta que hoy no cubre.
 - **Confianza**: Media
-- **Impacto**: Mensaje de error menos preciso de lo necesario.
-- **Corrección**: Validar existencia antes de llamar a `_paths_allowed_by_daemon`.
+- **Impacto**: Mensaje de error menos preciso de lo necesario en la ruta daemon: el usuario ve un 400/400 remoto en vez de un "archivo no encontrado" local e inmediato. Sin impacto de seguridad (la sandbox del servidor sigue validando).
+- **Decisión requerida**: No en lo técnico, pero conviene fijar **dónde** vive la validación de existencia para no duplicar responsabilidades cliente/servidor (mismo tema que S1-01/S2-13).
+- **Alternativas y trade-offs**:
+  - **A) Validar existencia en el cliente antes del despacho** (junto a `_paths_allowed_by_daemon` o dentro de él), abortando con un mensaje local claro.
+    - *Pros*: error temprano y accionable ("archivo no existe: X") sin round-trip al daemon; mejor UX en la ruta más común (archivo tecleado mal).
+    - *Contras*: introduce un chequeo `os.path.isfile` en el cliente que el servidor **también** hace (`_validate_audio_path`, `server.py:117`) → validación en dos sitios (aunque intencional, como la simetría documentada de S2-13); riesgo teórico de TOCTOU cliente↔servidor (el archivo desaparece entre el chequeo del cliente y el uso del servidor), pero el servidor revalida, así que es benigno.
+  - **B) Dejar la validación solo en el daemon** (status quo) y mejorar el **mensaje** que el cliente muestra ante el 400/404 del servidor.
+    - *Pros*: una sola fuente de validación (el servidor); sin duplicación.
+    - *Contras*: el mensaje sigue viniendo tras el round-trip; el cliente tendría que mapear el 400 genérico a algo accionable, lo que reintroduce acoplamiento al contrato de error del servidor.
+  - **C) Validar existencia solo en modo directo** (donde el propio proceso abrirá el archivo) y delegar al daemon en modo daemon.
+    - *Pros*: sin duplicación; cada modo valida donde va a usar el archivo.
+    - *Contras*: comportamiento asimétrico entre modos (un mismo error se reporta distinto según `--daemon`), lo que complica el modelo mental.
+  - **Trampa del parche barato**: añadir `os.path.exists` dentro de `_paths_allowed_by_daemon` cambiando su semántica (hoy responde "¿permitido?", no "¿existe?") → mezcla dos preguntas en un booleano y confunde al llamador. Si se valida existencia, hacerlo en un chequeo aparte con su propio mensaje.
+  - **Qué se necesita del humano**: (1) ¿prioriza UX de error temprano (A) o mínima duplicación (B)?; (2) si A, mantener el chequeo de existencia **separado** del de contención (no colapsar ambos en `_paths_allowed_by_daemon`).
 - **Prioridad**: P3
 
 #### S1-05 — `list_voices` es O(n²)
@@ -626,6 +660,9 @@ Nota: el conteo de tests **no** es una discrepancia. `pytest --collect-only` rec
 - **Confianza**: Alta
 - **Impacto**: Ninguno; es una excepción documentada.
 - **Corrección**: Mantener como está.
+- **Decisión requerida**: No (no-acción documentada). El framing de decisión es **aceptar-vs-actuar**, no una elección entre alternativas de implementación:
+  - **Aceptar (status quo, recomendada)**: pyenv sin pin. *Pro*: sigue la política de Homebrew (que no lo fija) y evita mantener un pin que la imagen podría no proveer; el CPython resultante **sí** está pineado a `3.13.14`, así que la reproducibilidad del intérprete no depende de la versión de pyenv. *Contra*: una regresión en pyenv upstream podría afectar el `pyenv install`.
+  - **Actuar**: fijar pyenv a una versión exacta. *Pro*: reproducibilidad total de la herramienta. *Contra*: la imagen de CI puede no traer ese patch → build roto; contradice la razón documentada del comentario. Solo tendría sentido si aparece una regresión concreta de pyenv.
 - **Prioridad**: P3
 
 #### S0-04 — Naming inconsistente de arquitectura en artefactos
@@ -635,6 +672,10 @@ Nota: el conteo de tests **no** es una discrepancia. `pytest --collect-only` rec
 - **Confianza**: Media
 - **Impacto**: Confusión cosmética para el usuario final.
 - **Corrección**: Documentar la convención por SO; no unificar forzosamente.
+- **Decisión requerida**: No (no-acción salvo documentación). El framing es **documentar-vs-unificar**:
+  - **Documentar la convención por SO (recomendada)**: dejar cada naming como está y explicar en `docs/` que cada SO sigue su convención nativa (`uname -m` en Linux, el estilo de cada instalador en Windows/macOS). *Pro*: respeta las expectativas de cada plataforma (un usuario Linux espera `aarch64`, uno macOS `arm64`); cero riesgo de romper nombres de artefacto que scripts/instaladores externos ya consumen. *Contra*: el naming sigue siendo heterogéneo entre artefactos.
+  - **Unificar a un esquema único** (p. ej. todos `arm64`/`x86_64`): *Pro*: consistencia visual entre artefactos. *Contra*: rompe la convención nativa de cada SO y potencialmente enlaces/scripts que ya dependen del nombre actual (`aarch64` en las AppImage de Linux); cambio con riesgo desproporcionado para un problema cosmético. **No recomendada.**
+  - **Trampa del parche barato**: renombrar artefactos "para que se vean iguales" sin auditar quién consume esos nombres (installers one-liner, cask, release assets) → enlaces rotos.
 - **Prioridad**: P3
 
 #### S0-05 — TOCTOU en validación de audio del daemon — verificado ya mitigado
