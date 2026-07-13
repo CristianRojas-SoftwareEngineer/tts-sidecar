@@ -15,7 +15,7 @@ Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolida
 | S3-01 | Funcionalidad central del engine sin tests (gestión de voces, carga de modelo, conditionals) | S3 — Alto | P1 | engine / Testing | No | Resuelto |
 | S3-02 | Límite de seguridad del sandbox del daemon sin tests directos | S3 — Alto | P1 | daemon / Testing-Security | No | Resuelto |
 | S2-01 | Acoplamiento del servidor al engine vía globals, sin DI | S2 — Medio | P2 | daemon / Arquitectura | Sí | Pendiente |
-| S2-02 | Excepciones silenciadas sin logging en rutas críticas | S2 — Medio | P1 | engine/audio/timing/daemon / Fiabilidad | No | Pendiente |
+| S2-02 | Excepciones silenciadas sin logging en rutas críticas | S2 — Medio | P1 | engine/audio/timing/daemon / Fiabilidad | Sí | Pendiente |
 | S2-03 | Modelo no liberado en shutdown del daemon | S2 — Medio | P2 | daemon / Fiabilidad | No | Pendiente |
 | S2-04 | Worker del daemon no cancelable al desconectar el cliente | S2 — Medio | P2 | daemon / Escalabilidad | No | Pendiente |
 | S2-05 | `ipc.py` no reutiliza los modelos de `protocol.py` | S2 — Medio | P2 | daemon / Calidad de código | No | Pendiente |
@@ -23,7 +23,7 @@ Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolida
 | S2-07 | Pines de versión duplicados en CI y scripts | S2 — Medio | P1 | CI / Mantenibilidad-DevOps | No | Pendiente |
 | S2-08 | Smoke tests duplicados en CI | S2 — Medio | P2 | CI / DevOps | No | Pendiente |
 | S2-09 | Lockfiles omiten herramientas de build (PyInstaller/Pillow) | S2 — Medio | P1 | build / Dependencias | No | Pendiente |
-| S2-10 | God object `ChatterboxEngine` | S2 — Medio | P2 | engine / Mantenibilidad | No | En progreso |
+| S2-10 | God object `ChatterboxEngine` | S2 — Medio | P2 | engine / Mantenibilidad | Sí | En progreso |
 | S2-11 | Estado global `_active_spinner` en `timing.py` | S2 — Medio | P2 | timing / Mantenibilidad | No | Pendiente |
 | S2-12 | `bootstrap` usa `warnings.filterwarnings("ignore")` global | S2 — Medio | P2 | bootstrap / Observabilidad | No | Pendiente |
 | S2-13 | Creación de directorios duplicada `_emit_audio` vs `_save_wav` | S2 — Medio | P2 | cli/engine / Mantenibilidad | No | Pendiente |
@@ -99,8 +99,17 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Confianza**: Alta
 - **Causa**: Estado de servidor en globals mutados por funciones externas.
 - **Impacto**: Dificulta testabilidad, extensibilidad y desacoplamiento del motor TTS; un motor alternativo exigiría tocar `server.py`.
-- **Corrección(es) propuesta(s)**: Inyectar el engine al construir la app FastAPI (recomendada). O, como paso intermedio, encapsular globals en un objeto `DaemonState` pasado por dependencia.
-- **Decisión requerida**: Sí — elegir entre refactor completo con DI vs. contenedor de estado.
+- **Corrección(es) propuesta(s)**: Ver «Alternativas y trade-offs».
+- **Decisión requerida**: Sí — elegir el nivel de desacople (contenedor de estado vs. DI completa) y su alcance.
+- **Alternativas y trade-offs**:
+  - **A) Contenedor `DaemonState` (dataclass) vía `Depends(get_daemon_state)`**. Encapsula `engine`/`server`/`start_time`; `run.py` construye el estado y lo inyecta, eliminando los setters módulo-level.
+    - *Pros*: cambio acotado y reversible; elimina los globals mutables; cada test crea su propio `DaemonState` sin ensuciar estado compartido.
+    - *Contras*: persiste un punto de wiring en `run.py`; no habilita múltiples engines "gratis" salvo que se generalice; hay que tocar cada endpoint para recibir la dependencia.
+  - **B) DI completa con factory `create_app(engine)`**. La app deja de ser un singleton a nivel módulo y se construye con sus dependencias.
+    - *Pros*: desacople real; un motor alternativo no toca `server.py`; soporta múltiples instancias; es la opción más robusta a largo plazo.
+    - *Contras*: cirugía mayor: afecta el wiring de uvicorn, y **toda la suite que hace `TestClient(server.app)` / importa `server.app`** debe migrar; mayor superficie de regresión.
+  - **Trampa del parche barato**: envolver los tres globals en una dataclass pero **seguir mutándola desde `run.py` con funciones módulo-level**. Cambia la forma pero no rompe el acoplamiento: sigue sin poder instanciarse dos veces ni testearse sin estado global.
+  - **Relación**: coordinar con **S2-11** (spinner global) y con la propuesta `SynthesisMetrics` del deep-dive (`_synthesis_timing` leído por `server.py` vía globals). Decidir si el alcance cubre solo el engine o también timing/metrics define si esto se cierra una vez o se reabre.
 
 #### S2-02 — Excepciones silenciadas sin logging en rutas críticas
 - **Categoría**: Fiabilidad / Mantenibilidad
@@ -109,9 +118,20 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Confianza**: Alta
 - **Causa**: Supresión defensiva de errores esperados sin registrar causa.
 - **Impacto**: Degradación silenciosa (p. ej. configuración subóptima de PyTorch, pérdida de progreso de tokens, fallos de subsistema de audio) sin diagnóstico; erosiona la observabilidad del path principal.
-- **Corrección(es) propuesta(s)**: Sustituir `except Exception: pass` por logging de nivel `debug`/`warning` con la causa (recomendada). Tipificar las excepciones esperadas donde sea posible.
-- **Decisión requerida**: No
+- **Corrección(es) propuesta(s)**: Ver «Alternativas y trade-offs».
+- **Decisión requerida**: Sí — fijar la política de logging (niveles, `exc_info`) y, por sitio, decidir qué excepciones deben propagarse en vez de suprimirse.
 - **Prioridad**: P1
+- **Alternativas y trade-offs**:
+  - **A) Política uniforme de logging** (reemplazo mecánico). Cada `except Exception: pass` pasa a `except Exception: logging.debug(..., exc_info=True)` conservando la supresión del control de flujo.
+    - *Pros*: esfuerzo mínimo; mejora la observabilidad sin cambiar comportamiento; seguro (no introduce nuevos fallos).
+    - *Contras*: **no distingue "error esperado" de "bug"**; puede inundar los logs; no corrige los swallows que en realidad ocultan defectos → es un parche que disfraza la degradación en lugar de eliminarla.
+  - **B) Triage por sitio** (tipar + decidir supresión vs. propagación). En cada uno de los ~11 puntos: tipar la excepción realmente esperada y dejar propagar lo inesperado.
+    - *Pros*: corrige la raíz; los fallos reales dejan de ser silenciosos; robusto.
+    - *Contras*: caro; exige entender cada sitio; **cambia comportamiento** (algo que antes se tragaba ahora puede romper) — deseable, pero necesita tests que cubran cada ruta antes de tocarla.
+  - **C) Híbrido (recomendado)**: aplicar la política de logging por defecto en los sitios inocuos (progreso, spinner) y hacer triage con tipado en los críticos (configuración de PyTorch `engine.py:80/93/99`, subsistema de audio `audio.py:186-205`, ciclo de vida del daemon `daemon.py`).
+    - *Trade-off*: balancea costo y robustez, pero requiere el criterio humano para clasificar cada sitio.
+  - **Trampa del parche barato**: el reemplazo masivo de la opción A aplicado a todo, incluidos los sitios críticos. Añade ruido y "cierra" el hallazgo sin arreglar ni un solo swallow incorrecto.
+  - **Qué se necesita del humano**: (1) la política de logging (nivel por defecto, si se incluye `exc_info`); (2) la lista de sitios donde el error debe **propagarse** en vez de registrarse-y-seguir.
 
 #### S2-03 — Modelo no liberado en shutdown del daemon
 - **Categoría**: Fiabilidad / Fuga de recursos
@@ -197,9 +217,22 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Confianza**: Alta
 - **Causa**: Responsabilidad no separada (violación de SRP).
 - **Impacto**: Alto acoplamiento interno, difícil de testear aisladamente.
-- **Corrección(es) propuesta(s)**: Extraer `VoiceManager` y `ModelLoader` como colaboradores inyectables (recomendada, incremental). No bloquea el trabajo pero reduce el coste de mantenimiento.
-- **Decisión requerida**: No
+- **Corrección(es) propuesta(s)**: Ver «Alternativas y trade-offs».
+- **Decisión requerida**: Sí — definir el alcance de la descomposición (qué colaboradores extraer) y el criterio de "terminado".
 - **Prioridad**: P2
+- **Alternativas y trade-offs**:
+  - **A) Detenerse tras las extracciones triviales**. Ya extraídos `ModelLoader` y `ConditionalsPreparer`; dejar el resto.
+    - *Pros*: bajo esfuerzo; cierra algo de deuda inmediata.
+    - *Contras*: **trampa del parche barato** — deja intacto el núcleo duro (síntesis `speak`, monkeypatch de `self._tts`, callback de progreso stateful). Repite el patrón "extraer lo fácil y declarar victoria" que perpetúa el God object.
+  - **B) Descomposición completa** según el deep-dive: `ComputeBackendResolver`, `ModelCache` (afecta `run.py:107-110`), `AudioWriter`, `ConditionalsPreparer` (✓), `SynthesisInstrumentation`, más el `VoiceManager` señalado originalmente.
+    - *Pros*: SRP real; el engine queda testeable por piezas; elimina la deuda estructural.
+    - *Contras*: alto esfuerzo y riesgo (especialmente `ModelCache` en el arranque y el estado stateful del callback); exige tests de cada colaborador antes de mover lógica.
+  - **C) Descomposición acotada de alto impacto**. Extraer solo `AudioWriter` y `ComputeBackendResolver` (responsabilidades aislables y bien delimitadas), y dejar `SynthesisInstrumentation`/callback para una fase posterior.
+    - *Pros*: ganancia de testabilidad desproporcionada respecto al costo; menor superficie de regresión que B.
+    - *Contras*: el God object sigue existiendo parcialmente; queda "en progreso" hasta completar el resto.
+  - **Trampa del parche barato**: marcar S2-10 como "Resuelto" tras A. El hallazgo solo está cerrado cuando el núcleo deja de ser un único objeto de 15+ métodos con responsabilidad de síntesis.
+  - **Qué se necesita del humano**: (1) aprobar el **arquitectura destino** (B vs. C); (2) fijar el **criterio de terminado** ("Resuelto" solo cuando el `speak`/`self._tts` stateful deje el God object) para no dejarlo a medias indefinidamente.
+
 - **Estado**: En progreso
 - **Avance parcial (S3-01)**: La extracción de `ModelLoader` y `ConditionalsPreparer` como colaboradores inyectables (Tareas 1-2 de la remediación de S3-01) ya segregó dos de las responsabilidades del God object: la carga/resolución de modelos y la preparación de conditionals. Ambos viven ahora en `src/tts_sidecar/model_loader.py` y `src/tts_sidecar/conditionals.py`, inyectables en `ChatterboxEngine` vía `model_loader`/`conditionals_prep` (kwargs opcionales de `__init__`, compatibles con `get_instance`). Restan por extraer las responsabilidades señaladas en el deep-dive (ComputeBackendResolver, ModelCache, AudioWriter, SynthesisInstrumentation).
 
@@ -243,8 +276,17 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Confianza**: Alta
 - **Causa**: Lógica de bootstrap/entry-point repartida.
 - **Impacto**: Refactorizar imports tempranos rompe la supresión de warnings; patrón de arranque no unívoco.
-- **Corrección(es) propuesta(s)**: Consolidar la configuración de `sys.path`/bootstrap en una única capa invocada por los tres entry points (recomendada).
+- **Corrección(es) propuesta(s)**: Ver «Alternativas y trade-offs».
 - **Decisión requerida**: Sí — definir la capa de bootstrap única y el orden de los entry points.
+- **Alternativas y trade-offs**:
+  - **A) Capa de bootstrap única** (`bootstrap.apply()` idempotente invocada por los tres entry points, con un helper `ensure_path()` que ajusta `sys.path` solo cuando hace falta).
+    - *Pros*: un solo punto de verdad para el orden de arranque; elimina la divergencia de los tres entry points; facil de testear el contrato de warnings.
+    - *Contras*: requiere auditar `bin/tts-sidecar` (ajuste condicional de `sys.path` — el wheel pip no lo necesita), `python -m tts_sidecar` y `daemon.run`; el orden de `apply()` **gobierna la supresión de warnings** documentada en CLAUDE.md, así que hay que verificar que la lista resultante no cambia el contrato observable.
+  - **B) Mantener los tres entry points pero documentar y testear el invariante** (sin unificar el código).
+    - *Pros*: riesgo mínimo; no toca el wiring.
+    - *Contras*: **trampa del parche barato** — deja la duplicación y la fragilidad ("mover un import rompe los warnings"); el hallazgo queda "mitigado por documentación", no resuelto.
+  - **Trampa del parche barato**: reordenar imports de sitio "para que funcione" sin una capa única. El orden de `bootstrap.apply()` es un **invariante de arranque**, no detalle cosmético; un reorden ingenuo lo rompe silenciosamente.
+  - **Qué se necesita del humano**: (1) aprobar la capa única (A); (2) confirmar la lista de warnings silenciados que el contrato de CLAUDE.md exige preservar.
 
 #### S2-15 — `voice add`/`remove` exigen modelo en caché innecesariamente
 - **Categoría**: Diseño
@@ -253,8 +295,20 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Confianza**: Alta
 - **Causa**: Reutilización de un guard demasiado estricto.
 - **Impacto**: Obliga a `setup` previo para registrar voces aunque solo se valide audio.
-- **Corrección(es) propuesta(s)**: Permitir el registro de voces con un path alternativo que no exija el modelo (solo validación de audio) (recomendada).
-- **Decisión requerida**: Sí — decidir si relajar el requisito de modelo para `voice add`/`remove`.
+- **Corrección(es) propuesta(s)**: Ver «Alternativas y trade-offs».
+- **Decisión requerida**: Sí — decidir si relajar el requisito de modelo para `voice add`/`remove` (decisión de producto/UX, no técnica).
+- **Alternativas y trade-offs**:
+  - **A) Relajar el guard** (`cmd_voice_add`/`cmd_voice_remove` ya no invocan `_require_model_cached`; el registro/copia funciona sin `setup` previo).
+    - *Pros*: UX mejor: se pueden registrar voces tras solo validar audio; elimina la dependencia innecesaria del modelo.
+    - *Contras*: requiere verificar que ningún flujo aguas abajo asume "si la voz existe, el modelo está cacheado"; el `precompute` de conditionals ya se difiere al primer `speak`, así que el riesgo es bajo pero debe confirmarse.
+  - **B) Mantener el guard** y documentar por qué (p.ej. para garantizar que el modelo está disponible antes de tocar voces).
+    - *Pros*: comportamiento actual preservado; sin sorpresas.
+    - *Contras*: obliga a `setup` aunque solo se quiera validar/copiar audio — la molestia que motiva el hallazgo.
+  - **C) Relajar solo `voice add` pero mantener el guard en `voice remove`** (o viceversa).
+    - *Pros*: granularidad fina; se puede relajar solo lo que aporte valor.
+    - *Contras*: asimetría que complica el modelo mental del CLI; posible confusión del usuario.
+  - **Trampa del parche barato**: quitar el guard sin rastrear los flujos dependientes — "funciona en el smoke test" pero rompe un caso de borde real.
+  - **Qué se necesita del humano**: (1) el veredicto de producto (¿registrar voces sin modelo es el comportamiento deseado?); (2) confirmar que no hay consumidor que asuma modelo-presente a partir de una voz registrada.
 
 #### S2-16 — Cobertura: `daemon run` (auto-restart, señales) y `setup`/`uninstall` subtesteados
 - **Categoría**: Testing
