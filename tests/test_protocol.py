@@ -139,3 +139,102 @@ class TestStreamEvents:
         assert json.loads(ProgressEvent(stage="t3", tokens=10).model_dump_json())["event"] == "progress"
         assert json.loads(ResultEvent(audio_b64="QUJD").model_dump_json())["event"] == "result"
         assert json.loads(ErrorEvent(detail="x").model_dump_json())["event"] == "error"
+
+
+class TestUnicodeBoundaries:
+    """S1-10: los topes de longitud (MAX_TEXT_LENGTH/MAX_AUDIO_PATH_LENGTH) se
+    validan en Pydantic v2 por longitud de la cadena Python (code points), no
+    por bytes UTF-8: un acento o un emoji no deben contar doble."""
+
+    def test_multibyte_text_at_limit_accepted(self):
+        text = "ñ" * MAX_TEXT_LENGTH
+        req = SynthesizeRequest(text=text)
+        assert len(req.text) == MAX_TEXT_LENGTH
+
+    def test_multibyte_text_over_limit_rejected(self):
+        with pytest.raises(ValueError):
+            SynthesizeRequest(text="ñ" * (MAX_TEXT_LENGTH + 1))
+
+    def test_emoji_counts_as_single_codepoint(self):
+        """Un emoji fuera del BMP es un solo code point en Python 3 (no un par
+        de surrogates UTF-16): no debe contar doble contra el límite."""
+        text = "😀" * MAX_TEXT_LENGTH
+        req = SynthesizeRequest(text=text)
+        assert len(req.text) == MAX_TEXT_LENGTH
+        with pytest.raises(ValueError):
+            SynthesizeRequest(text="😀" * (MAX_TEXT_LENGTH + 1))
+
+    def test_unicode_audio_path_at_limit_accepted(self):
+        ruta = "ñ" * MAX_AUDIO_PATH_LENGTH
+        req = SynthesizeRequest(text="hola", voice_audio=ruta)
+        assert len(req.voice_audio) == MAX_AUDIO_PATH_LENGTH
+
+    def test_unicode_audio_path_over_limit_rejected(self):
+        ruta = "ñ" * (MAX_AUDIO_PATH_LENGTH + 1)
+        with pytest.raises(ValueError):
+            SynthesizeRequest(text="hola", voice_audio=ruta)
+
+    def test_text_with_accents_and_spanish_punctuation_roundtrips(self):
+        text = "¿Cómo estás? ¡Qué bien! Ñoño güiro."
+        req = SynthesizeRequest(text=text)
+        assert req.text == text
+
+
+class TestCrossFieldValidation:
+    """S1-10: voice_audio y speech_audio son independientes entre sí (ambos
+    Optional, cada uno con su propio tope) — se valida que combinarlos no
+    interfiera con la validación individual de cada campo."""
+
+    def test_both_audio_fields_set_simultaneously(self):
+        req = SynthesizeRequest(text="hola", voice_audio="/a/ref.wav", speech_audio="/a/speech.wav")
+        assert req.voice_audio == "/a/ref.wav"
+        assert req.speech_audio == "/a/speech.wav"
+
+    def test_neither_audio_field_set_defaults_to_none(self):
+        req = SynthesizeRequest(text="hola")
+        assert req.voice_audio is None
+        assert req.speech_audio is None
+
+    def test_one_field_at_max_other_none(self):
+        ruta = "a" * MAX_AUDIO_PATH_LENGTH
+        req = SynthesizeRequest(text="hola", voice_audio=ruta, speech_audio=None)
+        assert len(req.voice_audio) == MAX_AUDIO_PATH_LENGTH
+        assert req.speech_audio is None
+
+    def test_both_fields_at_max_simultaneously_accepted(self):
+        ruta = "b" * MAX_AUDIO_PATH_LENGTH
+        req = SynthesizeRequest(text="hola", voice_audio=ruta, speech_audio=ruta)
+        assert len(req.voice_audio) == MAX_AUDIO_PATH_LENGTH
+        assert len(req.speech_audio) == MAX_AUDIO_PATH_LENGTH
+
+    def test_one_field_over_limit_rejects_even_if_other_valid(self):
+        valid = "a" * MAX_AUDIO_PATH_LENGTH
+        excessive = "b" * (MAX_AUDIO_PATH_LENGTH + 1)
+        with pytest.raises(ValueError):
+            SynthesizeRequest(text="hola", voice_audio=valid, speech_audio=excessive)
+
+    def test_speech_audio_over_limit_rejects_even_when_voice_audio_absent(self):
+        excessive = "c" * (MAX_AUDIO_PATH_LENGTH + 1)
+        with pytest.raises(ValueError):
+            SynthesizeRequest(text="hola", speech_audio=excessive)
+
+
+class TestUnicodeInStreamEvents:
+    """Los eventos NDJSON (progress/result/error) también llevan texto libre
+    (stage, detail): deben preservar unicode sin normalizarlo ni truncarlo."""
+
+    def test_progress_event_stage_with_unicode(self):
+        ev = ProgressEvent(stage="síntesis-de-audio", tokens=1)
+        assert ev.stage == "síntesis-de-audio"
+
+    def test_error_event_detail_with_unicode_and_emoji(self):
+        ev = ErrorEvent(detail="Error de síntesis: voz no encontrada 🎙️")
+        assert "síntesis" in ev.detail
+        assert "🎙️" in ev.detail
+
+    def test_error_event_detail_serializes_unicode_correctly_in_json(self):
+        import json
+
+        ev = ErrorEvent(detail="No se pudo cargar la voz «default»")
+        payload = json.loads(ev.model_dump_json())
+        assert payload["detail"] == "No se pudo cargar la voz «default»"
