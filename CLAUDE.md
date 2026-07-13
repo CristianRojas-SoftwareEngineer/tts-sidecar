@@ -65,6 +65,7 @@ src/tts_sidecar/
 ├── engine.py                # Wrapper Chatterbox + síntesis
 ├── audio.py                 # Playback multiplataforma
 ├── timing.py                # StageTimer, log(), timed_command
+├── model_cache.py           # Detección del modelo en la caché de HF (sin torch/chatterbox); usado por engine.py/cli.py
 ├── daemon/                  # Daemon mode (FastAPI + IPC)
 │   ├── server.py            # /synthesize, /health, /voices endpoints
 │   ├── daemon.py            # Lifecycle manager
