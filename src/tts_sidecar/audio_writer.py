@@ -12,6 +12,8 @@ import logging
 import wave
 from pathlib import Path
 
+from .paths import ensure_parent_dir
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -50,7 +52,7 @@ class AudioWriter:
         wav_bytes = self._to_wav_bytes(audio_np, sample_rate)
 
         if path is not None:
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            ensure_parent_dir(path)
             with open(path, 'wb') as f:
                 f.write(wav_bytes)
             log_saved(path)

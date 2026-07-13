@@ -28,6 +28,7 @@ import sys
 # de módulo de abajo son livianos (stdlib + timing) y no arrastran chatterbox;
 # las dependencias pesadas se importan de forma perezosa dentro de cada comando.
 from . import bootstrap
+from .paths import ensure_parent_dir
 
 import argparse
 import os
@@ -94,12 +95,10 @@ def _resolve_voice_paths(args):
 def _emit_audio(audio_bytes, output):
     """Reproduce los bytes de audio, o los escribe a un archivo si se da una ruta de salida."""
     if output:
-        # N-12: simetría con AudioWriter.write (modo directo), que ya crea los
-        # directorios padres; sin esto, --output a un directorio inexistente
-        # solo fallaba vía daemon.
-        parent = os.path.dirname(output)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
+        # N-12 (S2-13): el cliente daemon escribe los bytes recibidos en su
+        # propio filesystem; el helper compartido ensure_parent_dir (paths)
+        # crea el directorio padre, igual que AudioWriter.write en el servidor.
+        ensure_parent_dir(output)
         with open(output, 'wb') as f:
             f.write(audio_bytes)
         log(f"[Archivo] Audio guardado: {output}")

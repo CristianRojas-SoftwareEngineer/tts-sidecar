@@ -31,6 +31,18 @@ import sys
 from pathlib import Path
 
 
+def ensure_parent_dir(path) -> None:
+    """Crea el directorio padre de `path` (recursivo, idempotente).
+
+    Extraído de `AudioWriter.write` y `cli._emit_audio` (S2-13): ambos
+    aseguraban el directorio padre en procesos distintos (engine en el
+    servidor vs cliente daemon) con implementaciones paralelas de la misma
+    lógica. Un solo punto de verdad elimina el olor de código sin alterar el
+    contrato de escritura de archivos del daemon.
+    """
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+
+
 def is_frozen() -> bool:
     """True cuando corremos dentro del ejecutable compilado (onedir)."""
     return getattr(sys, "frozen", False)
