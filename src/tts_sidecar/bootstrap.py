@@ -81,6 +81,10 @@ def apply() -> None:
                 pass
 
     warnings.filterwarnings("ignore")
+    # S1-02: supresión específica del warning de pkg_resources, anticipando la
+    # allow-list de S2-12. Cubre también la ruta de import directo de audio.py
+    # en tests, sin depender del filtro local que se eliminó de audio.py.
+    warnings.filterwarnings("ignore", message="pkg_resources is deprecated", category=DeprecationWarning)
     os.environ["PYTHONWARNINGS"] = "ignore"
     os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
     os.environ["TRANSFORMERS_VERBOSITY"] = "error"

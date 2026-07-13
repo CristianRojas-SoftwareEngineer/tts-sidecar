@@ -3,9 +3,6 @@ Reproducción de audio nativa para Windows, Linux y macOS.
 Usa APIs nativas de cada SO para un rendimiento óptimo.
 """
 
-import warnings
-warnings.filterwarnings("ignore", message="pkg_resources is deprecated")
-
 import logging
 import platform
 import sys
