@@ -5,6 +5,22 @@ Todos los cambios notables de TTS Sidecar se documentan en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
+## [Unreleased]
+
+### Arreglado
+
+- **Cancelación cooperativa de la síntesis al desconectar el cliente (S2-04)**:
+  en el modo daemon, `/synthesize` ahora detecta la desconexión del cliente y
+  aborta la síntesis en curso en vez de malgastar GPU/CPU hasta completarla. El
+  generador del stream setea un `threading.Event` al detectar la desconexión
+  (vía `GeneratorExit`/`OSError`), el callback de progreso del worker eleva
+  `SynthesisCancelled` (nueva excepción compartida en `exceptions.py`) y el
+  engine la re-lanza selectivamente desde `_emit_progress`/`_token_counting_iter`
+  sin romper el contrato best-effort para otras excepciones del callback. El
+  `finally` del worker sigue liberando el semáforo de admisión y la memoria. Es
+  la opción A híbrida: cancelación cooperativa en la fase T3, sin instrumentar
+  S3Gen.
+
 ## [0.6.0] — 2026-07-11
 
 Cierra la última brecha accionable de paridad de experiencia entre los 3 SO

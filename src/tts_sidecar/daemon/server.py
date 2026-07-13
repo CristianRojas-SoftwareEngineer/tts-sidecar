@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 
 from .. import voices
 from ..timing import SynthesisMetrics
+from ..exceptions import SynthesisCancelled
 from .protocol import (
     SynthesizeRequest,
     HealthResponse,
@@ -200,6 +201,10 @@ def synthesize(
     def event_stream():
         q: queue.Queue = queue.Queue()
         SENTINEL = object()
+        # Evento de cancelación cooperativa ligado al estado de la conexión del
+        # cliente (S2-04): el generador lo setea al detectar la desconexión y el
+        # push del worker lo consulta para abortar engine.speak().
+        cancel_event = threading.Event()
 
         def worker():
             try:
@@ -208,6 +213,10 @@ def synthesize(
                 # cruzarían voces. /health responde igual (endpoint aparte).
                 with _synthesis_lock:
                     def push(ev: dict):
+                        # El cliente se desconectó: abortamos la síntesis en el
+                        # próximo punto cooperativo en vez de malgastar GPU/CPU.
+                        if cancel_event.is_set():
+                            raise SynthesisCancelled()
                         q.put(("progress", ev))
 
                     audio_bytes = engine.speak(
@@ -228,6 +237,13 @@ def synthesize(
                             "s3gen_time": float(metrics.s3gen),
                         },
                     ))
+            except SynthesisCancelled:
+                # El cliente se fue a mitad de síntesis: no emitimos result ni
+                # error (la conexión ya no existe para recibirlos). El finally
+                # libera el semáforo y la memoria igual que en éxito/error.
+                logging.getLogger(__name__).debug(
+                    "synthesize: cancelada por desconexión del cliente"
+                )
             except FileNotFoundError as e:
                 # El detalle real (con rutas) queda solo en el log del servidor.
                 logging.getLogger(__name__).warning("synthesize: recurso no encontrado: %s", e)
@@ -243,20 +259,26 @@ def synthesize(
         t = threading.Thread(target=worker, daemon=True)
         t.start()
 
-        while True:
-            kind, payload = q.get()
-            if kind is SENTINEL:
-                break
-            if kind == "progress":
-                yield ProgressEvent(
-                    stage=payload.get("stage"),
-                    tokens=payload.get("tokens"),
-                    elapsed=payload.get("elapsed"),
-                ).model_dump_json() + "\n"
-            elif kind == "result":
-                yield ResultEvent(**payload).model_dump_json() + "\n"
-            elif kind == "error":
-                yield ErrorEvent(**payload).model_dump_json() + "\n"
+        try:
+            while True:
+                kind, payload = q.get()
+                if kind is SENTINEL:
+                    break
+                if kind == "progress":
+                    yield ProgressEvent(
+                        stage=payload.get("stage"),
+                        tokens=payload.get("tokens"),
+                        elapsed=payload.get("elapsed"),
+                    ).model_dump_json() + "\n"
+                elif kind == "result":
+                    yield ResultEvent(**payload).model_dump_json() + "\n"
+                elif kind == "error":
+                    yield ErrorEvent(**payload).model_dump_json() + "\n"
+        except (GeneratorExit, OSError):
+            # El cliente cerró la conexión (o el stream se rompió): señalizamos
+            # la cancelación al worker para que deje de síntetizar y libera sus
+            # recursos vía el finally. No reintentamos yield tras la desconexión.
+            cancel_event.set()
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 

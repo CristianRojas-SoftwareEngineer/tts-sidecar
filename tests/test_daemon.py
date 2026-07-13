@@ -1090,6 +1090,173 @@ class TestServePortInUse:
         assert "no se pudo enlazar" in err
 
 
+class TestSynthesisCancellation:
+    """S2-04: el worker aborta la síntesis al cancelarla el cliente.
+
+    La cancelación es cooperativa: el closure ``push`` eleva
+    ``SynthesisCancelled`` cuando el cliente se desconecta, y el engine la
+    re-lanza (en vez de tragarla como las demás excepciones del callback). El
+    worker la captura, no emite ``result``/``error`` y libera el semáforo.
+    """
+
+    def test_worker_aborts_when_progress_callback_signals_cancellation(self, tmp_path, monkeypatch):
+        """Si el progress_callback eleva SynthesisCancelled, el stream termina
+        sin frame result y el semáforo se libera (otra petición responde 200)."""
+        import base64
+        import json
+        from fastapi.testclient import TestClient
+        from tts_sidecar.daemon import server
+        from tts_sidecar import voices
+        from tts_sidecar.exceptions import SynthesisCancelled
+
+        wav = tmp_path / "voz.wav"
+        wav.write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
+        monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(tmp_path)])
+
+        class FakeEngine:
+            _synthesis_metrics = SynthesisMetrics()
+
+            def speak(self, progress_callback=None, **kwargs):
+                progress_callback({"event": "progress", "stage": "conditionals"})
+                progress_callback({"event": "progress", "stage": "t3", "tokens": 5})
+                # El cliente se fue: señal cooperativa de cancelación.
+                raise SynthesisCancelled()
+
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = FakeEngine()
+        try:
+            with TestClient(server.app) as client:
+                resp = client.post(
+                    "/synthesize", json={"text": "hola", "speech_audio": str(wav)}
+                )
+                assert resp.status_code == 200
+                lines = [json.loads(l) for l in resp.text.splitlines() if l.strip()]
+                # Solo progress; sin result ni error.
+                assert [l["event"] for l in lines] == ["progress", "progress"]
+                assert all("result" != l["event"] for l in lines)
+
+                # El semáforo se liberó: una segunda petición responde 200.
+                second = client.post(
+                    "/synthesize", json={"text": "hola", "speech_audio": str(wav)}
+                )
+                assert second.status_code == 200
+        finally:
+            server.app.state.daemon.engine = old_engine
+
+    def test_synthesis_completes_normally_without_cancellation(self, tmp_path, monkeypatch):
+        """Regresión: una síntesis normal (sin cancelación) emite el frame result."""
+        import base64
+        import json
+        from fastapi.testclient import TestClient
+        from tts_sidecar.daemon import server
+        from tts_sidecar import voices
+
+        wav = tmp_path / "voz.wav"
+        wav.write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
+        monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(tmp_path)])
+        audio = b"RIFF" + b"\x00" * 40
+
+        class FakeEngine:
+            _synthesis_metrics = SynthesisMetrics(t3=1.0, s3gen=2.0)
+
+            def speak(self, progress_callback=None, **kwargs):
+                progress_callback({"event": "progress", "stage": "conditionals"})
+                return audio
+
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = FakeEngine()
+        try:
+            with TestClient(server.app) as client:
+                resp = client.post(
+                    "/synthesize", json={"text": "hola", "speech_audio": str(wav)}
+                )
+                assert resp.status_code == 200
+                lines = [json.loads(l) for l in resp.text.splitlines() if l.strip()]
+                # No debe haber quedado como "interrumpida": hay result.
+                result_frames = [l for l in lines if l["event"] == "result"]
+                assert result_frames, "una síntesis sin cancelación debe emitir result"
+                assert base64.b64decode(result_frames[-1]["audio_b64"]) == audio
+        finally:
+            server.app.state.daemon.engine = old_engine
+
+    def test_client_disconnect_aborts_synthesis(self, tmp_path, monkeypatch):
+        """Extremo a extremo: al desconectarse el cliente (GeneratorExit sobre el
+        generador del stream, igual que lanza uvicorn en producción), el worker
+        deja de síntetizar (contador < total) y no emite frame result.
+
+        Nota: TestClient/httpx no entregan GeneratorExit cuando se cierra el
+        stream (Starlette solo detecta desconexión si ``send`` levanta, que no
+        ocurre en el transporte en memoria). Por eso se conduce el generador
+        real ``event_stream`` devuelto por ``synthesize`` y se simula la
+        desconexión con ``gen.close()`` — idéntico a lo que hace uvicorn en
+        producción —, ejercitando así fielmente el handler de desconexión y el
+        aborto cooperativo del worker.
+        """
+        import json
+        import threading
+        import time
+        from tts_sidecar.daemon import server
+        from tts_sidecar.daemon.protocol import SynthesizeRequest
+        from tts_sidecar import voices
+
+        wav = tmp_path / "voz.wav"
+        wav.write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
+        monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(tmp_path)])
+
+        TOTAL = 50
+
+        class FakeEngine:
+            _synthesis_metrics = SynthesisMetrics()
+            counter = 0
+
+            def speak(self, progress_callback=None, **kwargs):
+                # Bucle largo: cada iteración notifica progreso (y cede) para dar
+                # al cliente tiempo de desconectarse. push aborta vía
+                # SynthesisCancelled cuando cancel_event se activa.
+                for i in range(TOTAL):
+                    type(self).counter = i + 1
+                    if progress_callback is not None:
+                        progress_callback({"event": "progress", "stage": "t3", "tokens": i})
+                    time.sleep(0.01)
+
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = FakeEngine()
+        # Captura el generador síncrono real (event_stream) en el momento en que
+        # synthesize() construye el StreamingResponse: es exactamente el objeto
+        # que produce la función y que uvicorn conduce en producción.
+        captured = {}
+
+        class _CaptureStreaming(server.StreamingResponse):
+            def __init__(self, content, *args, **kwargs):
+                captured["gen"] = content
+                super().__init__(content, *args, **kwargs)
+
+        monkeypatch.setattr(server, "StreamingResponse", _CaptureStreaming)
+        try:
+            req = SynthesizeRequest(text="hola", speech_audio=str(wav))
+            state = server.app.state.daemon
+            # synthesize() valida la ruta, toma el semáforo y construye el
+            # StreamingResponse (captura el generador event_stream).
+            server.synthesize(req, state)
+            gen = captured["gen"]
+            # Avanza el generador: arranca el worker y produce la 1ª línea.
+            first = next(gen)
+            assert json.loads(first)["event"] == "progress"
+
+            # El cliente se desconecta: close() lanza GeneratorExit sobre el
+            # generador (igual que uvicorn en producción), que setea cancel_event.
+            gen.close()
+
+            # Espera a que el worker reaccione a la cancelación.
+            time.sleep(0.5)
+
+            # La síntesis se interrumpió: no llegó a completar las TOTAL
+            # llamadas (no se emitió frame result).
+            assert FakeEngine.counter < TOTAL
+        finally:
+            server.app.state.daemon.engine = old_engine
+
+
 class TestDaemonMemoryClear:
     """El daemon libera la caché CUDA y fuerza GC tras cada síntesis."""
 

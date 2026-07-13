@@ -17,7 +17,7 @@ Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolida
 | S2-01 | Acoplamiento del servidor al engine vía globals, sin DI | S2 — Medio | P2 | daemon / Arquitectura | Sí | Resuelto |
 | S2-02 | Excepciones silenciadas sin logging en rutas críticas | S2 — Medio | P1 | engine/audio/timing/daemon / Fiabilidad | Sí | Resuelto |
 | S2-03 | Modelo no liberado en shutdown del daemon | S2 — Medio | P2 | daemon / Fiabilidad | No | Resuelto |
-| S2-04 | Worker del daemon no cancelable al desconectar el cliente | S2 — Medio | P2 | daemon / Escalabilidad | Sí | Pendiente |
+| S2-04 | Worker del daemon no cancelable al desconectar el cliente | S2 — Medio | P2 | daemon / Escalabilidad | Sí | Resuelto |
 | S2-05 | `ipc.py` no reutiliza los modelos de `protocol.py` | S2 — Medio | P2 | daemon / Calidad de código | Sí | Resuelto |
 | S2-06 | Lógica de dependencias duplicada entre build scripts | S2 — Medio | P1 | build / Mantenibilidad | No | Resuelto |
 | S2-07 | Pines de versión duplicados en CI y scripts | S2 — Medio | P1 | CI / Mantenibilidad-DevOps | Sí | Resuelto |
@@ -176,6 +176,14 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
     - *Contras*: desperdicia GPU/CPU si el cliente se desconecta a mitad; riesgo bajo pero real en uso concurrente.
   - **Trampa del parche barato**: añadir el `Event` pero nunca conectarlo a la desconexión del cliente → queda "implementado" pero inerte; o hacer polling cada milisegundo (thrashing).
   - **Qué se necesita del humano**: (1) mecanismo (polling vs. cooperativo); (2) profundidad — ¿cancelar solo el worker o también interrumpir el engine en medio de la síntesis?
+
+- **Estado**: Resuelto
+- **Remediación (opción A híbrida)**: se eligió la **opción A híbrida** (detección de desconexión en el generador + `threading.Event` de cancelación, sin instrumentar S3Gen — no es la opción B completa). Concretamente:
+  - Nuevo módulo **`src/tts_sidecar/exceptions.py`** con la excepción compartida **`SynthesisCancelled`** (sin imports pesados), que el daemon eleva y el engine re-lanza.
+  - En `daemon/server.py`, `event_stream` crea un `cancel_event = threading.Event()`. El closure `push` del worker lo consulta antes de cada evento y eleva `SynthesisCancelled` cuando el cliente se fue; el `try` del worker la captura (`except SynthesisCancelled`) y omite emitir `result`/`error` (solo registra debug), conservando el `finally` que libera el semáforo de admisión y la memoria (`_clear_model_memory`). El generador del stream envuelve su bucle en `try/except (GeneratorExit, OSError)` y, al detectar la desconexión del cliente, invoca `cancel_event.set()` **sin reintentar `yield`** — así la señal de cancelación queda realmente cableada a la desconexión (sin caer en la trampa del parche barato).
+  - En `engine.py`, `_emit_progress` y `_token_counting_iter` re-lanzan `SynthesisCancelled` (`except SynthesisCancelled: raise`) pero **siguen tragando cualquier otra excepción del callback** (`except Exception: logger.debug(..., exc_info=True)`), preservando el contrato best-effort de S2-02. El engine aborta `speak()` en el próximo punto cooperativo (fase T3, ~60-65% del tiempo), sin tocar el núcleo de síntesis ni S3Gen.
+  - **Tests** (`tests/test_engine_progress.py::TestSynthesisCancelledPropagation` y `tests/test_daemon.py::TestSynthesisCancellation`, 8 tests): el engine propaga `SynthesisCancelled` pero sigue tragando otras excepciones del callback; el worker aborta limpiamente (sin `result`, semáforo liberado) y una síntesis normal sigue emitiendo `result` (regresión); la desconexión del cliente (simulada con `GeneratorExit` sobre el generador real `event_stream`, idéntico a lo que lanza uvicorn en producción) interrumpe la síntesis.
+  - **Decisión de profundidad**: solo se cancela el worker (cooperativo en T3); no se instrumenta S3Gen (no es opción B completa). El `finally` existente ya libera semáforo y memoria, así que no hay fuga: solo se deja de malgastar cómputo.
 
 #### S2-05 — `ipc.py` no reutiliza los modelos de `protocol.py`
 - **Estado**: Resuelto

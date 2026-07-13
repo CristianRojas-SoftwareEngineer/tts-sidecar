@@ -50,6 +50,7 @@ from .conditionals import ConditionalsPreparer
 from .compute_backend import ComputeBackendResolver
 from .audio_writer import AudioWriter
 from .synthesis import SynthesisOrchestrator
+from .exceptions import SynthesisCancelled
 
 logger = logging.getLogger(__name__)
 
@@ -248,6 +249,11 @@ class ChatterboxEngine:
             return
         try:
             cb({"event": "progress", **fields})
+        except SynthesisCancelled:
+            # Señal cooperativa del daemon: la dejamos propagar para abortar la
+            # síntesis (S2-04). No es un error del callback, sino una petición de
+            # cancelación que el worker espera.
+            raise
         except Exception:
             logger.debug("El callback de progreso lanzó; se ignora (best-effort)", exc_info=True)
 
@@ -373,6 +379,10 @@ class ChatterboxEngine:
                 last_emit = now
                 try:
                     cb({"event": "progress", "stage": "t3", "tokens": count})
+                except SynthesisCancelled:
+                    # Señal cooperativa del daemon: la dejamos propagar para
+                    # abortar la síntesis (S2-04). Véase _emit_progress.
+                    raise
                 except Exception:
                     logger.debug("El callback de progreso de tokens lanzó; se ignora (best-effort)", exc_info=True)
             yield item

@@ -9,6 +9,8 @@ Cubren:
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
@@ -190,6 +192,48 @@ class TestSilentExceptionLogging:
         assert any(
             "tokens" in r.message.lower() and r.exc_info for r in caplog.records
         ), "el callback roto de tokens debe registrar un debug con traza"
+
+
+class TestSynthesisCancelledPropagation:
+    """S2-04: el engine deja propagar ``SynthesisCancelled`` desde los
+    callbacks de progreso, pero sigue tragando cualquier otra excepción del
+    callback (contrato best-effort de S2-02)."""
+
+    def test_emit_progress_propagates_cancellation_but_swallows_other_errors(self, tmp_path):
+        from tts_sidecar.exceptions import SynthesisCancelled
+
+        eng = _engine_stub(tmp_path)
+
+        def boom_cancel(ev):
+            raise SynthesisCancelled()
+
+        eng._active_progress_cb = boom_cancel
+        with pytest.raises(SynthesisCancelled):
+            eng._emit_progress(stage="t3")
+
+        def boom_other(ev):
+            raise ValueError("error del callback")
+
+        eng._active_progress_cb = boom_other
+        # Otra excepción del callback no debe propagarse (se traga).
+        eng._emit_progress(stage="t3")
+
+    def test_token_counting_iter_propagates_cancellation(self):
+        from tts_sidecar.engine import ChatterboxEngine
+        from tts_sidecar.exceptions import SynthesisCancelled
+
+        def boom_cancel(ev):
+            raise SynthesisCancelled()
+
+        with pytest.raises(SynthesisCancelled):
+            list(ChatterboxEngine._token_counting_iter(range(100), boom_cancel))
+
+        def boom_other(ev):
+            raise ValueError("error del callback")
+
+        # Otra excepción del callback no debe interrumpir la iteración.
+        salida = list(ChatterboxEngine._token_counting_iter(range(100), boom_other))
+        assert salida == list(range(100))
 
 
 class TestTokenShimInstall:
