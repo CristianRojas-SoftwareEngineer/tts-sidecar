@@ -26,14 +26,14 @@ Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolida
 | S2-10 | God object `ChatterboxEngine` | S2 — Medio | P2 | engine / Mantenibilidad | Sí | Resuelto |
 | S2-11 | Estado global `_active_spinner` en `timing.py` | S2 — Medio | P2 | timing / Mantenibilidad | Sí | Resuelto |
 | S2-12 | `bootstrap` usa `warnings.filterwarnings("ignore")` global | S2 — Medio | P2 | bootstrap / Observabilidad | Sí | Pendiente |
-| S2-13 | Creación de directorios duplicada `_emit_audio` vs `AudioWriter.write` | S2 — Medio | P2 | cli/audio_writer / Mantenibilidad | Sí | Pendiente |
+| S2-13 | Creación de directorios duplicada `_emit_audio` vs `AudioWriter.write` | S2 — Medio | P2 | cli/audio_writer / Mantenibilidad | Sí | Resuelto |
 | S2-14 | Orden de imports de `cli` acoplado a bootstrap + entry points duplicados | S2 — Medio | P1 | cli/bin / Mantenibilidad | Sí | Resuelto |
 | S2-15 | `voice add`/`remove` exigen modelo en caché innecesariamente | S2 — Medio | P2 | cli / Diseño | Sí | Pendiente |
 | S2-16 | Cobertura: `daemon run` (auto-restart, señales) y `setup`/`uninstall` subtesteados | S2 — Medio | P1 | daemon/cli / Testing | No | Resuelto |
 | S2-17 | Cobertura: reproducción de audio por plataforma (macOS/Windows) sin tests | S2 — Medio | P2 | audio / Testing | No | Resuelto |
 | S2-18 | Cobertura: `purge_incomplete_downloads` sin test | S2 — Medio | P2 | model_cache / Testing | No | Resuelto |
 | S1-01 | Logging redundante en `_emit_audio` | S1 — Bajo | P3 | cli / Calidad | No | Pendiente |
-| S1-02 | Filtro de warning redundante en `audio.py` | S1 — Bajo | P3 | audio / Calidad | No | Pendiente |
+| S1-02 | Filtro de warning redundante en `audio.py` | S1 — Bajo | P3 | audio / Calidad | No | Resuelto |
 | S1-03 | `import subprocess` bajo guarda de plataforma | S1 — Bajo | P3 | cli / Calidad | No | Resuelto |
 | S1-04 | `_paths_allowed_by_daemon` no valida existencia de archivos | S1 — Bajo | P3 | cli / Calidad | No | Pendiente |
 | S1-05 | `list_voices` es O(n²) | S1 — Bajo | P3 | voices / Calidad | No | Resuelto |
@@ -52,7 +52,7 @@ Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolida
 | S1-18 | Deriva documental menor (árbol de CLAUDE.md y ruta de voces en DESIGN.md) | S1 — Bajo | P3 | docs / Documentación | No | Resuelto |
 | S0-01 | `bundle_size_mb()` no referenciada externamente | S0 — Informativo | P3 | build / Calidad | No | Resuelto |
 | S0-02 | Estrategia de lockfile CPU-only de Linux no documentada | S0 — Informativo | P3 | build / Dependencias | No | Resuelto |
-| S0-03 | `pyenv` sin pin de versión (decisión consciente) | S0 — Informativo | P3 | CI / DevOps | No | Pendiente |
+| S0-03 | `pyenv` sin pin de versión (decisión consciente) | S0 — Informativo | P3 | CI / DevOps | No | Resuelto |
 | S0-04 | Naming inconsistente de arquitectura en artefactos (aarch64/arm64/x86_64) | S0 — Informativo | P3 | build / Mantenibilidad | No | Pendiente |
 | S0-05 | TOCTOU en validación de audio del daemon — verificado ya mitigado | S0 — Informativo | P3 | daemon / Seguridad | No | Resuelto |
 
@@ -365,6 +365,9 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
     - *Pros*: aparenta eliminar duplicación.
     - *Contras*: **Trampa del parche barato** — `AudioWriter.write` corre en el servidor, no en el cliente; quitar la creación del lado cliente rompe `--output` en modo daemon cuando el dir no existe localmente. No aplicar.
   - **Qué se necesita del humano**: aprobar A (mantener + documentar) o B (helper compartido sin eliminar creación del cliente); rechazar C.
+- **Estado**: Resuelto
+- **Resolución (2026-07-13)**: se aplicó la **opción B** — se extrajo `ensure_parent_dir(path)` en `paths.py` (crea el padre con `Path(path).parent.mkdir(parents=True, exist_ok=True)`) y se usa desde `AudioWriter.write` (`audio_writer.py`) y `_emit_audio` (`cli.py`), eliminando la implementación duplicada **sin** borrar la creación del lado cliente. Los dos `makedirs` NO eran redundantes en runtime: en modo directo el engine escribe a disco; en modo daemon el cliente escribe los bytes recibidos vía `_emit_audio` mientras el servidor llama `engine.speak` sin `output_path` (sin `mkdir`). El helper compartido es el único punto de verdad. Test `TestEnsureParentDir` en `tests/test_paths.py`.
+- **Reversión**: revertir los tres edits y restaurar `Path(path).parent.mkdir(...)` y `os.makedirs(parent, exist_ok=True)` originales.
 
 #### S2-14 — Orden de imports de `cli` acoplado a bootstrap + entry points duplicados
 - **Categoría**: Mantenibilidad
@@ -484,8 +487,11 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
   - **B) Remover el filtro local** y confiar solo en `bootstrap.py`.
     - *Pros*: un solo sitio.
     - *Contras*: **rompe el arranque limpio** cuando `audio.py` se importa sin pasar por bootstrap; reintroduce el warning `pkg_resources`. **Descartada por la verificación.**
-  - **Relación**: acoplado a **S2-12** (política global de warnings en `bootstrap`). Si S2-12 migra a una allow-list explícita, este filtro local debería alinearse con esa allow-list (misma entrada `pkg_resources`), no vivir como caso aparte. Conviene resolver S1-02 **después** o **junto** con S2-12 para no dejar dos criterios de silenciado divergentes.
+  - **Relación**: acoplado a **S2-12** (política global de warnings en `bootstrap`). La supresión centralizada en `bootstrap.apply()` ya usa el filtro específico `pkg_resources`, que es exactamente la entrada que la futura allow-list de S2-12 debe conservar; así S1-02 queda resuelto de forma compatible con S2-12, sin criterios de silenciado divergentes.
 - **Prioridad**: P3
+- **Estado**: Resuelto
+- **Resolución (2026-07-13)**: la supresión de `pkg_resources` se centralizó en `bootstrap.apply()` —filtro específico `warnings.filterwarnings("ignore", message="pkg_resources is deprecated", category=DeprecationWarning)`— cubriendo también la ruta de import directo. `tests/conftest.py` invoca `bootstrap.apply()` vía `pytest_configure` antes de la recolección, así que los imports de módulo de `test_audio.py`/`test_audio_platform.py` ya están cubiertos sin el filtro local. Se eliminó el filtro de `audio.py` (y su `import warnings` sin uso). Compatible con la allow-list de **S2-12**: el filtro específico es exactamente la entrada que dicha allow-list debe conservar, no un caso aparte.
+- **Reversión**: reañadir el filtro local en `audio.py:6-7` y remover el filtro específico de `bootstrap` y el hook `pytest_configure` de `conftest.py`.
 
 #### S1-03 — `import subprocess` bajo guarda de plataforma
 - **Estado**: Resuelto
@@ -712,6 +718,9 @@ Nota: el conteo de tests **no** es una discrepancia. `pytest --collect-only` rec
   - **Aceptar (status quo, recomendada)**: pyenv sin pin. *Pro*: sigue la política de Homebrew (que no lo fija) y evita mantener un pin que la imagen podría no proveer; el CPython resultante **sí** está pineado a `3.13.14`, así que la reproducibilidad del intérprete no depende de la versión de pyenv. *Contra*: una regresión en pyenv upstream podría afectar el `pyenv install`.
   - **Actuar**: fijar pyenv a una versión exacta. *Pro*: reproducibilidad total de la herramienta. *Contra*: la imagen de CI puede no traer ese patch → build roto; contradice la razón documentada del comentario. Solo tendría sentido si aparece una regresión concreta de pyenv.
 - **Prioridad**: P3
+- **Estado**: Resuelto
+- **Resolución (2026-07-13)**: los jobs macOS reemplazan `brew upgrade pyenv` por instalar pyenv desde un tag git fijo vía parámetro de pipeline `pyenv_version` (default `v2.5.3`): `git clone https://github.com/pyenv/pyenv.git "$HOME/.pyenv" && git checkout << pipeline.parameters.pyenv_version >> && export PYENV_ROOT/PATH`. Determinista e independiente de Homebrew. El CPython sigue pineado a `<< pipeline.parameters.python_version >>` (3.13.14), así que el artefacto es reproducible con independencia de la versión de pyenv. La caché `~/.pyenv/versions` se conserva entre runs (solo se re-clona la herramienta).
+- **Reversión**: restaurar `brew update && brew upgrade pyenv` y eliminar el parámetro `pyenv_version` y el `git checkout`.
 
 #### S0-04 — Naming inconsistente de arquitectura en artefactos
 - **Categoría**: Mantenibilidad
