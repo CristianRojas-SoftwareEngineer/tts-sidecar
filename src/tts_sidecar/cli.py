@@ -534,6 +534,8 @@ def _check_avx2() -> tuple[str, str, str]:
     los flags de CPU por una vía estándar de stdlib, así que allí se degrada a
     una nota informativa que remite al requisito documentado en USAGE.md.
     """
+    import subprocess  # Import explícito de la función: lo usa la rama darwin (sysctl).
+
     machine = platform.machine().lower()
     if machine not in ("x86_64", "amd64"):
         return ("SKIP", "CPU AVX2", f"no aplica en {platform.machine()} (solo x86-64)")
@@ -549,7 +551,6 @@ def _check_avx2() -> tuple[str, str, str]:
                 "en esta CPU (requisito documentado en USAGE.md)",
             )
         if sys.platform == "darwin":
-            import subprocess
             out = subprocess.run(
                 ["sysctl", "-n", "machdep.cpu.leaf7_features"],
                 capture_output=True, text=True, timeout=5,
