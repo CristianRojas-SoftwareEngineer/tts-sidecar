@@ -117,16 +117,23 @@ def _resolve_voice_dir(name: str) -> str | None:
 
 
 def list_voices() -> list[str]:
-    """Listar todas las voces disponibles (usuario + fábrica, sin duplicados)."""
-    seen = []
+    """Listar todas las voces disponibles (usuario + fábrica, sin duplicados).
+
+    `seen` es un `set` (membership check O(1)) que solo decide la dedupe; el
+    orden de salida lo sigue dando `result`, poblado en el mismo orden de
+    iteración que antes (usuario→fábrica, alfabético dentro de cada raíz).
+    """
+    seen: set[str] = set()
+    result: list[str] = []
     for root in (voices_root(), factory_voices_root()):
         if not os.path.exists(root):
             continue
         for entry in sorted(os.listdir(root)):
             candidate = os.path.join(root, entry)
             if entry not in seen and os.path.isdir(candidate) and _is_valid_voice_dir(candidate):
-                seen.append(entry)
-    return seen
+                seen.add(entry)
+                result.append(entry)
+    return result
 
 
 def remove_voice(name: str) -> bool:

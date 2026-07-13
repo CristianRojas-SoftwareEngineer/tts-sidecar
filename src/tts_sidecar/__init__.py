@@ -24,4 +24,7 @@ def __getattr__(name):
         return AudioPlayer
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-__all__ = []
+# API pública real: ambos símbolos son imports perezosos resueltos por
+# __getattr__ arriba; declararlos explícitamente evita que `__all__ = []`
+# contradiga lo que el paquete expone de facto (p. ej. `from tts_sidecar import *`).
+__all__ = ["ChatterboxEngine", "AudioPlayer"]

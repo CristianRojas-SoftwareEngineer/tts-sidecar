@@ -15,7 +15,31 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 from build_utils import log
 
-PROJECT_ROOT = Path(__file__).parent.parent
+
+def _find_project_root(start: Path) -> Path:
+    """Resuelve la raíz del repo subiendo desde `start` hasta un marcador conocido.
+
+    Busca `pyproject.toml` (fuente de verdad del paquete) o, si falta, un
+    directorio `.git`, en `start` y en cada padre. Evita asumir que la raíz
+    está siempre a `parent.parent` de este script: ese supuesto se rompe si
+    `clean_build.py` se ejecuta copiado fuera del checkout, symlinkeado, o
+    de cualquier otra forma en la que su ruta en disco no refleje la
+    estructura del repo. Falla con un mensaje accionable en vez de operar
+    silenciosamente sobre una ruta equivocada (y potencialmente borrar
+    directorios `dist`/`build`/`__pycache__` fuera del proyecto).
+    """
+    current = start.resolve()
+    for candidate in (current, *current.parents):
+        if (candidate / "pyproject.toml").is_file() or (candidate / ".git").exists():
+            return candidate
+    raise SystemExit(
+        f"clean_build.py: no se pudo ubicar la raíz del repo (se buscó "
+        f"pyproject.toml o .git subiendo desde {start}). Ejecuta este script "
+        "dentro de un checkout de TTS Sidecar."
+    )
+
+
+PROJECT_ROOT = _find_project_root(Path(__file__).parent)
 DIST_DIR = PROJECT_ROOT / "dist"
 BUILD_DIR = PROJECT_ROOT / "build"          # PyInstaller --workpath
 SPEC_DIR = PROJECT_ROOT / "scripts"         # PyInstaller --specpath
