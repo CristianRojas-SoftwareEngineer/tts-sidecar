@@ -53,12 +53,17 @@ TTS-Sidecar/
 │       ├── voices.py              # Resolución de voces usuario→fábrica
 │       ├── paths.py               # Rutas por SO (user-data-dir, modo congelado)
 │       ├── model_cache.py         # Detección del modelo en la caché de HF
+│       ├── voices/                # Voces de FÁBRICA (commiteadas, empaquetadas, solo lectura)
+│       │   └── default/           # Voz por defecto (derivada de assets/audios/)
+│       │       ├── reference.wav      # Timbre de voz (cualquier largo)
+│       │       └── speech.wav         # Conditioning (10s+)
 │       └── daemon/                # Daemon mode (FastAPI + IPC)
 │           ├── daemon.py          # Gestor del ciclo de vida
 │           ├── server.py          # Endpoints FastAPI
 │           ├── ipc.py             # Cliente HTTP del daemon
 │           ├── protocol.py        # Modelos Pydantic
 │           └── run.py             # Entry point
+│   # Las voces de USUARIO viven en el user-data-dir por SO, no en el repo
 ├── bin/
 │   └── tts-sidecar               # Script de entry point
 ├── scripts/
@@ -66,11 +71,6 @@ TTS-Sidecar/
 │   ├── build_linux.py            # Build PyInstaller para Linux
 │   └── build_macos.py            # Build PyInstaller para macOS
 │                                  # (provisión del modelo: `tts-sidecar setup`)
-├── voices/                       # Voces de FÁBRICA (commiteadas, empaquetadas, solo lectura)
-│   └── default/                  # Voz por defecto (derivada de assets/audios/)
-│       ├── reference.wav         # Timbre de voz (cualquier largo)
-│       └── speech.wav            # Conditioning (10s+)
-│   # Las voces de USUARIO viven en el user-data-dir por SO, no en el repo
 ├── assets/                       # Material fuente (audios, logo)
 │   ├── audios/                   # Audios fuente (voz default) y de prueba
 │   │   ├── Voice Sampler.wav
@@ -128,17 +128,18 @@ TTS-Sidecar/
 Las voces se separan en dos orígenes y se resuelven por nombre con precedencia
 **usuario→fábrica** (`voices.py`):
 
-- **Fábrica**: `voices/` en la raíz del repo, versionadas y empaquetadas en el
+- **Fábrica**: `src/tts_sidecar/voices/`, versionadas y empaquetadas en el
   ejecutable vía `--add-data`; de solo lectura. Se resuelven en
-  `paths.bundled_voices_dir()` (raíz del repo en modo fuente, `sys._MEIPASS`
-  congelado). Incluye la voz `default`, derivada de `assets/audios/`.
-- **Usuario**: `data_root()/voices` (user-data-dir por SO congelado; escribible),
+  `paths.bundled_voices_dir()`, siempre relativa al paquete: en modo fuente y
+  pip/uv-installed es `tts_sidecar/voices/` dentro del árbol del paquete; en
+  modo congelado (PyInstaller) es el mismo subdirectorio dentro de
+  `sys._MEIPASS`. Incluye la voz `default`, derivada de `assets/audios/`.
+- **Usuario**: `data_root()/voices` (user-data-dir por SO; escribible),
   registradas con `voice add`. Una voz de usuario homónima sobrescribe a la de
   fábrica.
 
 Sin `--voice` ni audios explícitos, la CLI usa la voz `default`, de modo que
-`tts-sidecar speak --text "Hola"` funciona sin registrar nada. El repositorio ya
-no usa `src/voices/` como origen de voces.
+`tts-sidecar speak --text "Hola"` funciona sin registrar nada.
 
 ## Comandos CLI
 

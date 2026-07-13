@@ -267,14 +267,28 @@ async def shutdown():
     servidor termine su ciclo de vida de forma ordenada. Se responde antes de
     que uvicorn cierre: el flag se procesa en la siguiente iteración del loop.
 
+    Libera la referencia global al engine y fuerza la misma limpieza de
+    memoria (`_clear_model_memory`) que corre tras cada síntesis (S3-04,
+    a50fc6d): sin esto, un auto-restart frecuente del daemon podía dejar
+    memoria GPU retenida entre reinicios porque nada liberaba `_engine` en el
+    apagado. Simétrico por diseño: mismo helper, mismas garantías (no-op sin
+    CUDA, gc.collect() incondicional).
+
     Riesgo aceptado (SUGGESTION-02): no lleva token ni confirmación explícita.
     El daemon bindea exclusivamente a 127.0.0.1 (ver run.py), por lo que solo
     un proceso con acceso local a la máquina puede invocarlo; se acepta ese
     riesgo residual en vez de añadir un secreto que el propio cliente IPC
     tendría que gestionar y persistir.
     """
+    global _engine
+
     if _server is not None:
         _server.should_exit = True
+        # Libera la referencia al engine (permite al GC recolectar los
+        # tensores/modelos que retiene) y limpia la caché CUDA fragmentada,
+        # igual que al final de cada síntesis.
+        _engine = None
+        _clear_model_memory()
         return {"status": "shutting_down"}
     # Sin instancia registrada (no debería ocurrir): el kill por PID es la red de seguridad.
     raise HTTPException(status_code=503, detail="Servidor no disponible para apagado graceful")

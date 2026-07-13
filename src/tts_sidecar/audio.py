@@ -14,6 +14,12 @@ from typing import Optional
 
 import numpy as np
 
+# Divisor de normalización PCM int16 -> float32 en [-1, 1). 2**15: el rango
+# entero de int16 es [-32768, 32767] (asimétrico); dividir por 32768.0 (no por
+# 32767.0) es la convención estándar para que -32768 mapee exactamente a -1.0,
+# aceptando que +32767 quede a un ULP de +1.0 en vez de tocarlo.
+INT16_MAX_F = 32768.0
+
 
 class AudioPlayer:
     """
@@ -141,7 +147,7 @@ class SoundDevicePlayer:
 
         # Convierte a float32 normalizado en [-1, 1]
         audio_np = np.frombuffer(audio_data, dtype=np.int16)
-        audio_np = audio_np.astype(np.float32) / 32768.0
+        audio_np = audio_np.astype(np.float32) / INT16_MAX_F
 
         # Un WAV multicanal llega intercalado: sin el reshape, sounddevice lo
         # reproduciría como mono al doble de velocidad.

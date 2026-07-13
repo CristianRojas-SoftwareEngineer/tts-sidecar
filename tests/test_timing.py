@@ -112,6 +112,72 @@ class TestTimedDecorator:
         assert "[MyStage]" in captured.err
         assert "working" in captured.out
 
+    def test_preserves_positional_args(self, capsys):
+        @timed("Sum")
+        def add(a, b):
+            return a + b
+
+        result = add(2, 3)
+        assert result == 5
+        assert "[Sum]" in capsys.readouterr().err
+
+    def test_preserves_keyword_args(self, capsys):
+        @timed("Greet")
+        def greet(name, greeting="Hola"):
+            return f"{greeting}, {name}!"
+
+        result = greet(name="Mundo", greeting="Hola")
+        assert result == "Hola, Mundo!"
+        assert "[Greet]" in capsys.readouterr().err
+
+    def test_mixed_args_and_kwargs(self, capsys):
+        @timed("Mixed")
+        def build(a, b, *, c=None):
+            return (a, b, c)
+
+        result = build(1, 2, c=3)
+        assert result == (1, 2, 3)
+        assert "[Mixed]" in capsys.readouterr().err
+
+    def test_return_value_of_none_still_returns_none(self, capsys):
+        @timed("NoReturn")
+        def no_return():
+            pass
+
+        assert no_return() is None
+        assert "[NoReturn]" in capsys.readouterr().err
+
+    def test_wraps_preserves_function_metadata(self):
+        @timed("Meta")
+        def documented():
+            """docstring de prueba."""
+            pass
+
+        assert documented.__name__ == "documented"
+        assert documented.__doc__ == "docstring de prueba."
+
+    def test_exception_propagates_without_logging_stage(self, capsys):
+        """timed() no envuelve la llamada en try/except: una excepción se
+        propaga tal cual y el log de duración (posterior a func()) no llega
+        a emitirse, a diferencia de timed_command que sí registra el fallo."""
+        @timed("Failing")
+        def failing():
+            raise ValueError("boom")
+
+        with pytest.raises(ValueError, match="boom"):
+            failing()
+        assert "[Failing]" not in capsys.readouterr().err
+
+    def test_measures_nonzero_duration_for_slow_call(self, capsys):
+        @timed("Slow")
+        def slow():
+            time.sleep(0.05)
+
+        slow()
+        captured = capsys.readouterr()
+        assert "[Slow]" in captured.err
+        assert "Done (" in captured.err
+
 
 class TestStageTimer:
     def test_stage_timer_entry_exit(self, capsys):

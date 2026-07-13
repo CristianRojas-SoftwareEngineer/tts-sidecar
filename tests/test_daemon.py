@@ -310,27 +310,29 @@ class TestDaemonSessionSandbox:
     """R-01: el sandbox real acota el tempdir a `<tempdir>/tts-sidecar/`; el
     tempdir compartido general ya no es un directorio permitido."""
 
-    def test_rejects_wav_in_general_tempdir(self, monkeypatch):
-        import os
-        import tempfile
+    def test_rejects_wav_in_general_tempdir(self, monkeypatch, tmp_path):
+        """S1-12: usa el tmp_path aislado de pytest en vez de escribir en la
+        raíz de tempfile.gettempdir() (riesgo de colisión entre runs
+        concurrentes y limpieza manual). tmp_path sigue siendo un directorio
+        DISTINTO de daemon_session_dir() (<tempdir>/tts-sidecar/), así que el
+        test sigue ejerciendo exactamente lo que se busca: rutas fuera de los
+        directorios permitidos deben rechazarse."""
         from fastapi.testclient import TestClient
         from tts_sidecar.daemon import server
 
-        wav = os.path.join(tempfile.gettempdir(), "tts_sidecar_test_reject.wav")
-        with open(wav, "wb") as f:
-            f.write(b"RIFF\x00\x00\x00\x00WAVE")
+        wav = tmp_path / "tts_sidecar_test_reject.wav"
+        wav.write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
 
         old_engine = server._engine
         server.set_engine(MagicMock())
         try:
             with TestClient(server.app) as client:
                 resp = client.post(
-                    "/synthesize", json={"text": "hola", "speech_audio": wav}
+                    "/synthesize", json={"text": "hola", "speech_audio": str(wav)}
                 )
                 assert resp.status_code == 400
         finally:
             server.set_engine(old_engine)
-            os.remove(wav)
 
     def test_accepts_wav_in_namespaced_session_dir(self):
         import os

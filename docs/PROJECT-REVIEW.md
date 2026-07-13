@@ -16,42 +16,42 @@ Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolida
 | S3-02 | Límite de seguridad del sandbox del daemon sin tests directos | S3 — Alto | P1 | daemon / Testing-Security | No | Resuelto |
 | S2-01 | Acoplamiento del servidor al engine vía globals, sin DI | S2 — Medio | P2 | daemon / Arquitectura | Sí | Pendiente |
 | S2-02 | Excepciones silenciadas sin logging en rutas críticas | S2 — Medio | P1 | engine/audio/timing/daemon / Fiabilidad | Sí | Pendiente |
-| S2-03 | Modelo no liberado en shutdown del daemon | S2 — Medio | P2 | daemon / Fiabilidad | No | Pendiente |
+| S2-03 | Modelo no liberado en shutdown del daemon | S2 — Medio | P2 | daemon / Fiabilidad | No | Resuelto |
 | S2-04 | Worker del daemon no cancelable al desconectar el cliente | S2 — Medio | P2 | daemon / Escalabilidad | Sí | Pendiente |
 | S2-05 | `ipc.py` no reutiliza los modelos de `protocol.py` | S2 — Medio | P2 | daemon / Calidad de código | Sí | Pendiente |
-| S2-06 | Lógica de dependencias duplicada entre build scripts | S2 — Medio | P1 | build / Mantenibilidad | No | Pendiente |
+| S2-06 | Lógica de dependencias duplicada entre build scripts | S2 — Medio | P1 | build / Mantenibilidad | No | Resuelto |
 | S2-07 | Pines de versión duplicados en CI y scripts | S2 — Medio | P1 | CI / Mantenibilidad-DevOps | Sí | Pendiente |
-| S2-08 | Smoke tests duplicados en CI | S2 — Medio | P2 | CI / DevOps | No | Pendiente |
-| S2-09 | Lockfiles omiten herramienta de build (PyInstaller) | S2 — Medio | P1 | build / Dependencias | No | Pendiente |
+| S2-08 | Smoke tests duplicados en CI | S2 — Medio | P2 | CI / DevOps | No | Resuelto |
+| S2-09 | Lockfiles omiten herramienta de build (PyInstaller) | S2 — Medio | P1 | build / Dependencias | No | Resuelto |
 | S2-10 | God object `ChatterboxEngine` | S2 — Medio | P2 | engine / Mantenibilidad | Sí | En progreso |
 | S2-11 | Estado global `_active_spinner` en `timing.py` | S2 — Medio | P2 | timing / Mantenibilidad | Sí | Pendiente |
 | S2-12 | `bootstrap` usa `warnings.filterwarnings("ignore")` global | S2 — Medio | P2 | bootstrap / Observabilidad | Sí | Pendiente |
 | S2-13 | Creación de directorios duplicada `_emit_audio` vs `_save_wav` | S2 — Medio | P2 | cli/engine / Mantenibilidad | Sí | Pendiente |
 | S2-14 | Orden de imports de `cli` acoplado a bootstrap + entry points duplicados | S2 — Medio | P1 | cli/bin / Mantenibilidad | Sí | Pendiente |
 | S2-15 | `voice add`/`remove` exigen modelo en caché innecesariamente | S2 — Medio | P2 | cli / Diseño | Sí | Pendiente |
-| S2-16 | Cobertura: `daemon run` (auto-restart, señales) y `setup`/`uninstall` subtesteados | S2 — Medio | P1 | daemon/cli / Testing | No | Pendiente |
-| S2-17 | Cobertura: reproducción de audio por plataforma (macOS/Windows) sin tests | S2 — Medio | P2 | audio / Testing | No | Pendiente |
-| S2-18 | Cobertura: `purge_incomplete_downloads` sin test | S2 — Medio | P2 | model_cache / Testing | No | Pendiente |
+| S2-16 | Cobertura: `daemon run` (auto-restart, señales) y `setup`/`uninstall` subtesteados | S2 — Medio | P1 | daemon/cli / Testing | No | Resuelto |
+| S2-17 | Cobertura: reproducción de audio por plataforma (macOS/Windows) sin tests | S2 — Medio | P2 | audio / Testing | No | Resuelto |
+| S2-18 | Cobertura: `purge_incomplete_downloads` sin test | S2 — Medio | P2 | model_cache / Testing | No | Resuelto |
 | S1-01 | Logging redundante en `_emit_audio` | S1 — Bajo | P3 | cli / Calidad | No | Pendiente |
 | S1-02 | Filtro de warning redundante en `audio.py` | S1 — Bajo | P3 | audio / Calidad | No | Pendiente |
-| S1-03 | `import subprocess` bajo guarda de plataforma | S1 — Bajo | P3 | cli / Calidad | No | Pendiente |
+| S1-03 | `import subprocess` bajo guarda de plataforma | S1 — Bajo | P3 | cli / Calidad | No | Resuelto |
 | S1-04 | `_paths_allowed_by_daemon` no valida existencia de archivos | S1 — Bajo | P3 | cli / Calidad | No | Pendiente |
-| S1-05 | `list_voices` es O(n²) | S1 — Bajo | P3 | voices / Calidad | No | Pendiente |
-| S1-06 | `__init__.py` declara `__all__ = []` | S1 — Bajo | P3 | package / Calidad | No | Pendiente |
-| S1-07 | Valores mágicos sin nombrar | S1 — Bajo | P3 | varios / Calidad | No | Pendiente |
-| S1-08 | `_install_pkg_resources_mock` (edge cases) sin test | S1 — Bajo | P2 | bootstrap / Testing | No | Pendiente |
-| S1-09 | Decorador `timed()` sin test | S1 — Bajo | P2 | timing / Testing | No | Pendiente |
-| S1-10 | `protocol.py`: edge cases (longitudes, unicode) sin test | S1 — Bajo | P2 | daemon / Testing | No | Pendiente |
-| S1-11 | Fixtures muertas en `conftest.py` | S1 — Bajo | P2 | tests / Mantenibilidad | No | Pendiente |
-| S1-12 | Patrones frágiles en tests (symlinks Windows, tempdir, `time.sleep`) | S1 — Bajo | P3 | tests / Testing | No | Pendiente |
-| S1-13 | `render_cask.py` usa `.format()` sin validación de campos | S1 — Bajo | P3 | build / Calidad | No | Pendiente |
+| S1-05 | `list_voices` es O(n²) | S1 — Bajo | P3 | voices / Calidad | No | Resuelto |
+| S1-06 | `__init__.py` declara `__all__ = []` | S1 — Bajo | P3 | package / Calidad | No | Resuelto |
+| S1-07 | Valores mágicos sin nombrar | S1 — Bajo | P3 | varios / Calidad | No | Resuelto |
+| S1-08 | `_install_pkg_resources_mock` (edge cases) sin test | S1 — Bajo | P2 | bootstrap / Testing | No | Resuelto |
+| S1-09 | Decorador `timed()` sin test | S1 — Bajo | P2 | timing / Testing | No | Resuelto |
+| S1-10 | `protocol.py`: edge cases (longitudes, unicode) sin test | S1 — Bajo | P2 | daemon / Testing | No | Resuelto |
+| S1-11 | Fixtures muertas en `conftest.py` | S1 — Bajo | P2 | tests / Mantenibilidad | No | Resuelto |
+| S1-12 | Patrones frágiles en tests (symlinks Windows, tempdir, `time.sleep`) | S1 — Bajo | P3 | tests / Testing | No | Resuelto |
+| S1-13 | `render_cask.py` usa `.format()` sin validación de campos | S1 — Bajo | P3 | build / Calidad | No | Resuelto |
 | S1-14 | `create_installer_windows.py`: rutas ISCC hardcodeadas | S1 — Bajo | P3 | build / Mantenibilidad | No | Resuelto |
-| S1-15 | `clean_build.py` asume ubicación relativa al repo | S1 — Bajo | P3 | build / Mantenibilidad | No | Pendiente |
-| S1-16 | `build_utils.py` importa PIL duplicado en `ensure_ico`/`ensure_icns` | S1 — Bajo | P3 | build / Calidad | No | Pendiente |
+| S1-15 | `clean_build.py` asume ubicación relativa al repo | S1 — Bajo | P3 | build / Mantenibilidad | No | Resuelto |
+| S1-16 | `build_utils.py` importa PIL duplicado en `ensure_ico`/`ensure_icns` | S1 — Bajo | P3 | build / Calidad | No | Resuelto |
 | S1-17 | Validación de nombre de voz no previene symlinks dentro del dir permitido | S1 — Bajo | P3 | voices / Seguridad | Sí | Pendiente |
-| S1-18 | Deriva documental menor (árbol de CLAUDE.md y ruta de voces en DESIGN.md) | S1 — Bajo | P3 | docs / Documentación | No | Pendiente |
+| S1-18 | Deriva documental menor (árbol de CLAUDE.md y ruta de voces en DESIGN.md) | S1 — Bajo | P3 | docs / Documentación | No | Resuelto |
 | S0-01 | `bundle_size_mb()` no referenciada externamente | S0 — Informativo | P3 | build / Calidad | No | Resuelto |
-| S0-02 | Estrategia de lockfile CPU-only de Linux no documentada | S0 — Informativo | P3 | build / Dependencias | No | Pendiente |
+| S0-02 | Estrategia de lockfile CPU-only de Linux no documentada | S0 — Informativo | P3 | build / Dependencias | No | Resuelto |
 | S0-03 | `pyenv` sin pin de versión (decisión consciente) | S0 — Informativo | P3 | CI / DevOps | No | Pendiente |
 | S0-04 | Naming inconsistente de arquitectura en artefactos (aarch64/arm64/x86_64) | S0 — Informativo | P3 | build / Mantenibilidad | No | Pendiente |
 | S0-05 | TOCTOU en validación de audio del daemon — verificado ya mitigado | S0 — Informativo | P3 | daemon / Seguridad | No | Resuelto |
@@ -703,3 +703,34 @@ Durante la consolidación se verificaron dos afirmaciones de alta severidad prop
 Esto confirma la disciplina de rigor de evidencia del flujo: ningún hallazgo se promueve a severidad alta sin lectura directa del código.
 
 3. **Discrepancia de conteo de tests (F1/F10 del sub-agente de docs)**: verificado en ejecución que `pytest --collect-only` recolecta **350 tests** y hay 336 funciones `def test_`. `CLAUDE.md` («~350») y `GOAL.md` («336/336») son coherentes; `USAGE.md` no declara ningún conteo. La afirmación de que GOAL/USAGE decían «314» era incorrecta → se eliminó la parte de conteos de S2-19 (reclasificado a S1-18 con solo las omisiones reales del árbol de `CLAUDE.md` y la ruta de `DESIGN.md:131`).
+
+## Remediación en lote (hallazgos sin decisión, resolución robusta)
+
+Se remediaron en paralelo los **21 hallazgos sin decisión requerida** cuya corrección es directa y sistémica (no parche), delegando en 4 sub-agentes por área (archivos disjuntos), integrados en la rama `chore/project-review-batch` y validados con **`pytest tests/ -q` → 443 passed, 0 failed** (baseline 350). Quedan deliberadamente fuera de este lote los hallazgos «Decisión requerida: Sí» y las no-acciones/parches (S0-03 «mantener como está», S0-04 «documentar sin unificar», S1-01/S1-02/S1-04 por depender de un criterio o verificación previa).
+
+**Grupo 1 — Consolidación DRY build/CI**
+- **S2-06**: extraídos `install_lockfile_dependencies(lockfile)` y `check_sounddevice()` a `scripts/build_utils.py`; `build_windows/macos.py` delegan directamente y `build_linux.py` conserva `ensure_runtime_dependencies(target_arch)` (requerido por `tests/test_build_linux.py`) reducido a resolver el lockfile y delegar.
+- **S1-16**: helper `_generate_pillow_icon(...)` común a `ensure_ico`/`ensure_icns` (texto de log/warning preservado).
+- **S2-09**: nuevo `requirements-lock-build.txt` (con hashes, pin de PyInstaller alineado a `PYINSTALLER_PIN`); `check_pyinstaller()` instala con `--require-hashes` y los 4 steps de CI consumen ese lockfile.
+- **S2-08**: nuevo `command` `smoke_test_frozen_bundle` en `.circleci/config.yml` parametrizado por `executable_path`, invocado por los jobs x64 y ARM64.
+
+**Grupo 2 — Corrección de raíz en runtime**
+- **S2-03**: `/shutdown` libera `_engine = None` y llama `_clear_model_memory()` (mismo helper que la limpieza por-síntesis). Cambio de comportamiento intencional (fiabilidad).
+- **S1-05**: `list_voices()` deduplica con `set` (membership O(1)) preservando el orden usuario→fábrica.
+- **S1-07**: `INT16_MAX_F = 32768.0` (`audio.py`), `COINIT_MULTITHREADED = 0x8` (`pyinstaller_wrapper.py`); `ipc.py`/`model_cache.py` ya tenían nombre+rationale (sin cambio).
+- **S1-06**: `__all__ = ["ChatterboxEngine", "AudioPlayer"]` (símbolos reales de `__getattr__`).
+- **S1-03**: `import subprocess` movido al inicio de `_check_avx2()`.
+- **S1-15**: `PROJECT_ROOT` vía `_find_project_root()` (busca `pyproject.toml`/`.git`, `SystemExit` accionable).
+- **S1-13**: **verificado ya cubierto** — `tests/test_cask.py` ejercita `render_cask()`/`render_cask_from_tag()` con datos reales y afirma las stanzas `cask`/`version`/`sha256`/`url`; un typo en los campos de `_CASK_TEMPLATE.format(...)` produce `KeyError` atrapado en CI. Cerrado por cobertura preexistente, sin cambio de código (patrón de re-scoping, cf. S3-01/S3-02).
+
+**Grupo 3 — Cobertura de tests** (net +93 tests recolectados)
+- **S2-16**: `tests/test_daemon_run.py` (13) — `serve()`/`signal_handler`/`atexit`/`main()`, auto-restart y `max_retries`, `EADDRINUSE` sin reintento, SIGTERM/SIGINT. `cmd_setup --uninstall/--remove-path/--force-update` ya cubierto en `test_cli.py`.
+- **S2-17**: `tests/test_audio_platform.py` (18) — `WindowsAudioPlayer`, `MacOSAudioPlayer`, dispatch de `AudioPlayer`, rama Darwin de `get_audio_devices_with_status`.
+- **S2-18**: `tests/test_model_cache.py` (11) — `purge_incomplete_downloads()` sobre caché HF sintética.
+- **S1-08** (`test_cli.py::TestBootstrap`, +4), **S1-09** (`test_timing.py::TestTimedDecorator`, +7), **S1-10** (`test_protocol.py`, +15: unicode/límites/validación cruzada).
+- **S1-11**: eliminadas `mock_engine`/`mock_daemon_client` de `conftest.py` (verificado sin referencias).
+- **S1-12**: `tmp_path` aislado en vez del tempdir global; skip de symlinks Windows centralizado y accionable; timeouts de `test_daemon.py` revisados (son cotas de sincronización, no `sleep`; sin cambio).
+
+**Grupo 4 — Documentación**
+- **S1-18**: `CLAUDE.md` añade `model_cache.py` al árbol (`tests/installer/` ya estaba); `DESIGN.md` corrige la ruta de voces de fábrica a `src/tts_sidecar/voices/` y la descripción de `bundled_voices_dir()`.
+- **S0-02**: `docs/BUILD.md` documenta el porqué de `--index-strategy unsafe-best-match` (mecanismo `first-index` de `uv`, índice CPU de PyTorch, trade-off de dependency-confusion y cuándo regenerar).

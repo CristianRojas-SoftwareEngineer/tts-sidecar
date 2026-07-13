@@ -19,7 +19,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from build_utils import (
     log, StageTimer, BuildTimer, copy_license_files, get_version,
     check_pyinstaller, common_pyinstaller_args, bundle_size_mb, run_pyinstaller,
-    BUILD_SUBPROCESS_TIMEOUT, PYINSTALLER_TIMEOUT, INSTALLER_TIMEOUT,
+    install_lockfile_dependencies,
+    PYINSTALLER_TIMEOUT, INSTALLER_TIMEOUT,
 )
 
 # Plantilla del archivo de versión PE (formato pyinstaller-versionfile /
@@ -86,32 +87,15 @@ def _write_version_file(dest_dir: Path) -> Path:
     return version_file
 
 
-def ensure_runtime_dependencies():
-    """Instala las dependencias runtime desde el lockfile (requerido para builds reproducibles)."""
-    lockfile = PROJECT_ROOT / "requirements-lock.txt"
-    if not lockfile.exists():
-        log(f"ERROR: No se encontró {lockfile}; instala primero con: pip install -r requirements-lock.txt --require-hashes")
-        sys.exit(1)
-
-    log("Instalando dependencias runtime desde lockfile...")
-    try:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-r", str(lockfile), "--require-hashes"],
-            check=True,
-            timeout=BUILD_SUBPROCESS_TIMEOUT,
-        )
-    except subprocess.CalledProcessError as exc:
-        log(f"ERROR: Falló la instalación del lockfile (rc={exc.returncode})")
-        sys.exit(1)
-    except subprocess.TimeoutExpired:
-        log(f"ERROR: La instalación del lockfile excedió {BUILD_SUBPROCESS_TIMEOUT}s")
-        sys.exit(1)
-
-
 def check_dependencies():
-    """Verifica que las dependencias requeridas estén instaladas."""
+    """Verifica que las dependencias requeridas estén instaladas.
+
+    La instalación del lockfile en sí (existencia, pip --require-hashes,
+    manejo de timeout/fallo) vive en build_utils.install_lockfile_dependencies,
+    fuente única compartida con build_linux.py y build_macos.py (S2-06).
+    """
     check_pyinstaller()
-    ensure_runtime_dependencies()
+    install_lockfile_dependencies(PROJECT_ROOT / "requirements-lock.txt")
 
 
 def build_windows(target_arch="x86_64", no_installer=False):

@@ -29,12 +29,17 @@ import subprocess
 import sys
 import tempfile
 
+# Valor de sys.coinit_flags para inicializar COM en modo apartment libre
+# (multithreaded): evita el CoUninitialize() bloqueante de atexit descrito
+# arriba. Ver la constante homónima en pywin32/comtypes.constants.
+COINIT_MULTITHREADED = 0x8
+
 # El bootstrap se ejecuta como proceso hijo: fija coinit_flags antes de importar
 # nada de PyInstaller (que arrastra pycaw -> comtypes) y sale con os._exit para
 # saltarse el CoUninitialize() de atexit que cuelga el shutdown.
-_BOOTSTRAP = """\
+_BOOTSTRAP = f"""\
 import sys
-sys.coinit_flags = 0x8  # COINIT_MULTITHREADED: antes de cualquier import de comtypes
+sys.coinit_flags = {COINIT_MULTITHREADED}  # COINIT_MULTITHREADED: antes de cualquier import de comtypes
 import os
 try:
     from PyInstaller.__main__ import run

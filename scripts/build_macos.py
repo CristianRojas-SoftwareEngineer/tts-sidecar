@@ -28,50 +28,28 @@ sys.path.insert(0, str(Path(__file__).parent))
 from build_utils import (
     log, StageTimer, BuildTimer, copy_license_files, get_version,
     check_pyinstaller, common_pyinstaller_args, bundle_size_mb, run_pyinstaller,
-    ensure_icns, ensure_build_dependency, module_available,
-    BUILD_SUBPROCESS_TIMEOUT, PYINSTALLER_TIMEOUT,
+    ensure_icns, check_sounddevice, ensure_build_dependency,
+    install_lockfile_dependencies, BUILD_SUBPROCESS_TIMEOUT, PYINSTALLER_TIMEOUT,
 )
 
 
-def ensure_runtime_dependencies():
-    """Instala las dependencias runtime desde el lockfile (requerido para builds reproducibles)."""
-    lockfile = PROJECT_ROOT / "requirements-lock.txt"
-    if not lockfile.exists():
-        log(f"ERROR: No se encontró {lockfile}; instala primero con: pip install -r requirements-lock.txt --require-hashes")
-        sys.exit(1)
-
-    log("Instalando dependencias runtime desde lockfile...")
-    try:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-r", str(lockfile), "--require-hashes"],
-            check=True,
-            timeout=BUILD_SUBPROCESS_TIMEOUT,
-        )
-    except subprocess.CalledProcessError as exc:
-        log(f"ERROR: Falló la instalación del lockfile (rc={exc.returncode})")
-        sys.exit(1)
-    except subprocess.TimeoutExpired:
-        log(f"ERROR: La instalación del lockfile excedió {BUILD_SUBPROCESS_TIMEOUT}s")
-        sys.exit(1)
-
-
 def check_dependencies():
-    """Check required dependencies are installed."""
+    """Check required dependencies are installed.
+
+    La instalación del lockfile en sí (existencia, pip --require-hashes,
+    manejo de timeout/fallo) vive en build_utils.install_lockfile_dependencies,
+    fuente única compartida con build_windows.py y build_linux.py (S2-06).
+    """
     check_pyinstaller()
-    ensure_runtime_dependencies()
+    install_lockfile_dependencies(PROJECT_ROOT / "requirements-lock.txt")
 
     with StageTimer("CheckDeps", "Verificando dependencias"):
         # sounddevice es dependencia del producto en macOS: afplay reproduce,
         # pero doctor/setup/devices enumeran dispositivos con sounddevice
         # (audio.py). Sin ella en el bundle, todo Mac congelado reportaría
-        # FAIL de audio. required. Sin pin: es dependencia de runtime
-        # gobernada por requirements.txt, no una herramienta de build.
-        ensure_build_dependency(
-            "sounddevice",
-            lambda: module_available("sounddevice"),
-            install_cmd=[sys.executable, "-m", "pip", "install", "sounddevice"],
-            required=True,
-        )
+        # FAIL de audio. check_sounddevice es fuente única compartida con
+        # build_linux.py (S2-06).
+        check_sounddevice()
 
         # create-dmg es un script de shell (Homebrew), no un paquete de
         # PyPI: se invoca como binario vía subprocess, no se importa como

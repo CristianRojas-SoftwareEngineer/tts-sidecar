@@ -519,8 +519,28 @@ class TestCmdDevicesError:
         assert "Error" in err
 
 
+# S1-12: en Windows, crear symlinks sin privilegios elevados exige Developer
+# Mode (SeCreateSymbolicLinkPrivilege) habilitado; en CI/runners sin esa
+# configuración, os.symlink levanta OSError (WinError 1314). En Linux/macOS
+# los symlinks de usuario funcionan sin configuración especial, así que el
+# skip real solo ocurre en Windows sin Developer Mode. La razón del skip es
+# explícita y accionable (a diferencia de un return silencioso) para que un
+# run local en un Windows sin Developer Mode explique por qué faltan estos
+# tests en vez de aparentar cobertura completa.
+_SYMLINK_SKIP_REASON = (
+    "el entorno no permite crear symlinks (en Windows: habilita Developer "
+    "Mode en Configuración > Privacidad y seguridad > Para programadores, o "
+    "corre con privilegios elevados)"
+)
+
+
 def _symlinks_supported(tmp_path) -> bool:
-    """En Windows crear symlinks exige Developer Mode o privilegios; se sondea."""
+    """Sondea si el proceso actual puede crear symlinks en `tmp_path`.
+
+    En Windows depende de Developer Mode o de privilegios elevados; en
+    Linux/macOS los symlinks de usuario no requieren configuración especial,
+    así que esto normalmente solo es False en Windows sin Developer Mode.
+    """
     probe = tmp_path / "_symlink_probe"
     try:
         probe.symlink_to(tmp_path)
@@ -548,7 +568,7 @@ class TestSetupLinuxPath:
 
     def test_creates_symlink_from_appimage(self, monkeypatch, tmp_path, capsys):
         if not _symlinks_supported(tmp_path):
-            pytest.skip("el entorno no permite crear symlinks")
+            pytest.skip(_SYMLINK_SKIP_REASON)
         from tts_sidecar.cli import _integrate_linux_path
 
         home = self._fake_home(monkeypatch, tmp_path)
@@ -566,7 +586,7 @@ class TestSetupLinuxPath:
         # en ~/.local/opt/tts-sidecar/, sin correr dentro de un runtime AppImage
         # real. El symlink debe crearse igual que si lo exportara el runtime.
         if not _symlinks_supported(tmp_path):
-            pytest.skip("el entorno no permite crear symlinks")
+            pytest.skip(_SYMLINK_SKIP_REASON)
         from tts_sidecar.cli import _integrate_linux_path
 
         home = self._fake_home(monkeypatch, tmp_path)
@@ -597,7 +617,7 @@ class TestSetupLinuxPath:
 
     def test_updates_existing_symlink_idempotent(self, monkeypatch, tmp_path, capsys):
         if not _symlinks_supported(tmp_path):
-            pytest.skip("el entorno no permite crear symlinks")
+            pytest.skip(_SYMLINK_SKIP_REASON)
         from tts_sidecar.cli import _integrate_linux_path
 
         home = self._fake_home(monkeypatch, tmp_path)
@@ -640,7 +660,7 @@ class TestSetupLinuxPath:
 
     def test_remove_path_elimina_symlink(self, monkeypatch, tmp_path, capsys):
         if not _symlinks_supported(tmp_path):
-            pytest.skip("el entorno no permite crear symlinks")
+            pytest.skip(_SYMLINK_SKIP_REASON)
         from tts_sidecar.cli import cmd_setup
 
         home = self._fake_home(monkeypatch, tmp_path)
@@ -680,7 +700,7 @@ class TestSetupLinuxPath:
         # L-01: la línea sugerida debe ser bash válido (forward slashes),
         # nunca rutas con backslashes que romperían el shell profile.
         if not _symlinks_supported(tmp_path):
-            pytest.skip("el entorno no permite crear symlinks")
+            pytest.skip(_SYMLINK_SKIP_REASON)
         from tts_sidecar.cli import _integrate_linux_path
 
         self._fake_home(monkeypatch, tmp_path)
@@ -702,7 +722,7 @@ class TestSetupLinuxPath:
         # comando en el PATH, en paridad con Windows y macOS. Se usa un FAIL
         # no-audio porque el de audio ya no aborta setup (A-01).
         if not _symlinks_supported(tmp_path):
-            pytest.skip("el entorno no permite crear symlinks")
+            pytest.skip(_SYMLINK_SKIP_REASON)
         import tts_sidecar.cli as cli
 
         home = self._fake_home(monkeypatch, tmp_path)
@@ -1231,7 +1251,7 @@ class TestSetupUninstall:
 
     def test_uninstall_elimina_symlink_y_directorio(self, monkeypatch, tmp_path, capsys):
         if not _symlinks_supported(tmp_path):
-            pytest.skip("el entorno no permite crear symlinks")
+            pytest.skip(_SYMLINK_SKIP_REASON)
         from tts_sidecar.cli import cmd_setup
 
         home = self._fake_home_linux(monkeypatch, tmp_path)
@@ -1271,7 +1291,7 @@ class TestSetupUninstall:
         # El reorden vuelve la cancelación atómica: cancelar el cleanup (primer
         # paso) aborta la desinstalación sin tocar PATH ni binario.
         if not _symlinks_supported(tmp_path):
-            pytest.skip("el entorno no permite crear symlinks")
+            pytest.skip(_SYMLINK_SKIP_REASON)
         from tts_sidecar.cli import cmd_setup
 
         home = self._fake_home_linux(monkeypatch, tmp_path)
@@ -1294,7 +1314,7 @@ class TestSetupUninstall:
         # «No hay nada que limpiar» NO es cancelación: la desinstalación continúa
         # y borra symlink + directorio.
         if not _symlinks_supported(tmp_path):
-            pytest.skip("el entorno no permite crear symlinks")
+            pytest.skip(_SYMLINK_SKIP_REASON)
         from tts_sidecar.cli import cmd_setup
 
         home = self._fake_home_linux(monkeypatch, tmp_path)
@@ -1321,7 +1341,7 @@ class TestSetupUninstall:
 
     def test_uninstall_json_payload_incluye_rutas_datos(self, monkeypatch, tmp_path, capsys):
         if not _symlinks_supported(tmp_path):
-            pytest.skip("el entorno no permite crear symlinks")
+            pytest.skip(_SYMLINK_SKIP_REASON)
         import json as _json
         from tts_sidecar.cli import cmd_setup
 
@@ -1364,7 +1384,7 @@ class TestSetupUninstall:
 
     def test_uninstall_macos_borra_bundle_symlink_cleanup(self, monkeypatch, tmp_path, capsys):
         if not _symlinks_supported(tmp_path):
-            pytest.skip("el entorno no permite crear symlinks")
+            pytest.skip(_SYMLINK_SKIP_REASON)
         from tts_sidecar.cli import cmd_setup
 
         home = self._fake_macos(monkeypatch, tmp_path)
@@ -1383,7 +1403,7 @@ class TestSetupUninstall:
 
     def test_uninstall_macos_resuelve_symlink_del_ejecutable(self, monkeypatch, tmp_path, capsys):
         if not _symlinks_supported(tmp_path):
-            pytest.skip("el entorno no permite crear symlinks")
+            pytest.skip(_SYMLINK_SKIP_REASON)
         from tts_sidecar.cli import cmd_setup
 
         home = self._fake_macos(monkeypatch, tmp_path)
@@ -1987,3 +2007,66 @@ class TestBootstrap:
         bootstrap.apply()
 
         assert sys.modules["pkg_resources"] is sentinel
+
+    # -- S1-08: resource_filename del mock instalado, sus tres ramas -------
+
+    def _install_mock(self, bootstrap, monkeypatch):
+        """Instala el mock (find_spec('pkg_resources') -> None durante apply)
+        y devuelve el módulo mockeado para invocar resource_filename directamente."""
+        sys.modules.pop("pkg_resources", None)
+        monkeypatch.setattr(bootstrap.importlib.util, "find_spec", lambda name: None)
+        bootstrap.apply()
+        return sys.modules["pkg_resources"]
+
+    def test_resource_filename_falls_back_to_bare_resource_when_spec_is_none(self, monkeypatch):
+        """Paquete no resoluble (find_spec devuelve None): sin __spec__ no hay
+        directorio base, así que se retorna el recurso tal cual se pidió."""
+        bootstrap = self._reset(monkeypatch)
+        mock = self._install_mock(bootstrap, monkeypatch)
+        try:
+            assert mock.resource_filename("paquete.inexistente", "datos/archivo.wav") == "datos/archivo.wav"
+        finally:
+            sys.modules.pop("pkg_resources", None)
+
+    def test_resource_filename_falls_back_when_spec_has_no_search_locations(self, monkeypatch):
+        """Spec válido pero sin submodule_search_locations (módulo simple, no
+        paquete): tampoco hay directorio base resoluble."""
+        import types
+
+        bootstrap = self._reset(monkeypatch)
+        mock = self._install_mock(bootstrap, monkeypatch)
+        try:
+            fake_spec = types.SimpleNamespace(submodule_search_locations=None)
+            monkeypatch.setattr(bootstrap.importlib.util, "find_spec", lambda name: fake_spec)
+            assert mock.resource_filename("algun.modulo", "data.wav") == "data.wav"
+        finally:
+            sys.modules.pop("pkg_resources", None)
+
+    def test_resource_filename_falls_back_when_search_locations_is_empty(self, monkeypatch):
+        """submodule_search_locations existe pero está vacía: mismo fallback
+        que None, ya que la condición es una comprobación de veracidad."""
+        import types
+
+        bootstrap = self._reset(monkeypatch)
+        mock = self._install_mock(bootstrap, monkeypatch)
+        try:
+            fake_spec = types.SimpleNamespace(submodule_search_locations=[])
+            monkeypatch.setattr(bootstrap.importlib.util, "find_spec", lambda name: fake_spec)
+            assert mock.resource_filename("algun.paquete", "data.wav") == "data.wav"
+        finally:
+            sys.modules.pop("pkg_resources", None)
+
+    def test_resource_filename_resolves_path_when_spec_has_search_locations(self, monkeypatch, tmp_path):
+        """Paquete resoluble con directorio base: arma la ruta absoluta
+        uniendo la primera search location con el recurso pedido."""
+        import types
+
+        bootstrap = self._reset(monkeypatch)
+        mock = self._install_mock(bootstrap, monkeypatch)
+        try:
+            fake_spec = types.SimpleNamespace(submodule_search_locations=[str(tmp_path)])
+            monkeypatch.setattr(bootstrap.importlib.util, "find_spec", lambda name: fake_spec)
+            result = mock.resource_filename("tts_sidecar", "voices/default/reference.wav")
+            assert result == str(tmp_path / "voices/default/reference.wav")
+        finally:
+            sys.modules.pop("pkg_resources", None)
