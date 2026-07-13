@@ -6,9 +6,9 @@
 # arrastra lo necesario. Este archivo replica esos límites para el entorno de
 # desarrollo y añade las herramientas de build.
 #
-# El CI y los builds NO instalan desde aquí: usan `requirements-lock.txt`, un
-# lock universal con hashes generado desde pyproject.toml con uv
-# (`uv pip compile --universal --generate-hashes`) e instalado con
+# El CI y los builds NO instalan desde aquí: usan `requirements-lock.txt`
+# (runtime) y `requirements-lock-build.txt` (PyInstaller, herramienta de
+# build), ambos locks con hashes generados con uv e instalados con
 # `--require-hashes` para builds reproducibles e íntegros. Ver docs/BUILD.md
 # («Lockfile de dependencias») para el flujo de regeneración.
 
@@ -25,5 +25,8 @@ pydantic>=2.0.0           # Daemon: modelos request/response
 pycaw>=20240210; sys_platform == 'win32'
 
 # Herramientas de build
+# pyinstaller: límite inferior para desarrollo; el pin exacto usado por CI/
+# scripts/build_*.py vive en PYINSTALLER_PIN (scripts/build_utils.py) y en
+# requirements-lock-build.txt (con hashes).
 pyinstaller>=6.0.0
 pillow>=10.0.0  # Conversión del logo a .ico/.icns en build
