@@ -1,10 +1,8 @@
 """
 Escritura de audio a WAV (en memoria o a archivo).
 
-Extraído de `ChatterboxEngine` (S2-10): fusiona `_audio_to_wav` (conversión de
-un array/tensor a bytes WAV) y `_save_wav` (escritura a disco). A diferencia
-del original, ya no lee el sample rate del modelo: lo recibe por parámetro,
-así que el orquestador es dueño del flujo de síntesis.
+Extraído de `ChatterboxEngine`: fusiona `_audio_to_wav` (conversión de
+un array/tensor a bytes WAV) y `_save_wav` (escritura a disco).
 """
 
 import io

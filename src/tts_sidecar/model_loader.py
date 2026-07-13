@@ -1,7 +1,7 @@
 """
 Carga y resolución de modelos de Chatterbox.
 
-Colaborador extraído de `engine.py` (ver docs/PROJECT-REVIEW.md — S3-01 / S2-10)
+Colaborador extraído de `engine.py`
 para aislar la lógica de carga del modelo del engine y hacerla testeable por
 inyección, sin instanciar `ChatterboxEngine` ni descargar pesos.
 
@@ -76,9 +76,8 @@ class ModelLoader:
         if not ve_path.exists():
             # Intenta la caché del modelo base honrando la revisión fijada
             # (BASE_MODEL_REVISION): la carga resuelve exclusivamente el snapshot
-            # del pin, igual que 'setup' lo descarga y la detección lo valida
-            # (cierre de R-03: la carga ya no cae al fallback refs/main→mtime, así
-            # que un bump de revisión no reintroduce el ve.safetensors viejo).
+            # del pin, igual que 'setup' lo descarga y la detección lo valida;
+            # un bump de revisión no reintroduce el ve.safetensors viejo.
             base_snapshot = _resolve_cached_snapshot(
                 hub_cache_path() / cache_folder_for("ResembleAI/chatterbox"),
                 revision=BASE_MODEL_REVISION,

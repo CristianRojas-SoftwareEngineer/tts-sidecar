@@ -66,7 +66,7 @@ def _apprun_script() -> str:
     El runtime del AppImage ejecuta este script; se limita a localizar el
     directorio real del AppDir (resolviendo symlinks) y delegar en el ejecutable
     del bundle onedir con los argumentos tal cual. Pura función (sin I/O) para
-    poder testearla desde tests/test_build_linux.py (R-24).
+    poder testearla desde tests/test_build_linux.py.
     """
     return (
         '#!/bin/sh\n'
@@ -102,7 +102,7 @@ def ensure_runtime_dependencies(target_arch="x86_64"):
     el lockfile correcto por arquitectura; la instalación en sí (existencia, pip
     --require-hashes, manejo de timeout/fallo) vive en
     build_utils.install_lockfile_dependencies, fuente única compartida con
-    build_windows.py y build_macos.py (S2-06).
+    build_windows.py y build_macos.py.
     """
     if target_arch == "x86_64":
         lockfile = PROJECT_ROOT / "requirements-lock-linux-cpu.txt"
@@ -119,7 +119,7 @@ def check_dependencies(target_arch="x86_64"):
     with StageTimer("CheckDeps", "Verificando dependencias"):
         # sounddevice es dependencia del producto (sin ella el bundle saldría
         # sin audio): required. check_sounddevice es fuente única compartida
-        # con build_macos.py (S2-06).
+        # con build_macos.py.
         check_sounddevice()
 
         # appimagetool + runtime estático empaquetan el AppImage a partir del

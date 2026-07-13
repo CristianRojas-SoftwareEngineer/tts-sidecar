@@ -1,5 +1,5 @@
 """
-Tests deterministas de `ConditionalsPreparer` (extracción de engine.py — S3-01).
+Tests deterministas de `ConditionalsPreparer` (extracción de engine.py).
 
 Cubren `compute` (ramas con/sin voice_audio), `load_precomputed` (presente/
 ausente) y `precompute_and_save`, sin el modelo real: se stubbean `librosa`,

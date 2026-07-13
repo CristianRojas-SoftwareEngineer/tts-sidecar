@@ -164,7 +164,7 @@ def get_audio_devices_with_status() -> tuple[list[dict], bool]:
     Returns:
         Tupla (dispositivos, degraded): `degraded` es True cuando la enumeración
         real falló y se devolvió el fallback genérico "Default" — usado por
-        `doctor`/`setup` (WARNING-03) para distinguir un subsistema de audio
+        `used by `doctor`/`setup` to distinguish a real audio subsystem
         real de uno degradado, algo que `import pycaw` por sí solo no revela.
     """
     system = platform.system()

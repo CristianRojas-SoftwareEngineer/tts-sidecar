@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 def pytest_configure(config):
-    """Corre el bootstrap antes de la recolección (S1-02).
+    """Corre el bootstrap antes de la recolección.
 
     Asegura que la supresión de warnings (incl. `pkg_resources`) esté activa
     antes de que los tests importen módulos como `tts_sidecar.audio` a nivel

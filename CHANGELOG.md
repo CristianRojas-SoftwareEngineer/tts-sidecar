@@ -9,7 +9,7 @@ y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Arreglado
 
-- **Cancelación cooperativa de la síntesis al desconectar el cliente (S2-04)**:
+- **Cancelación cooperativa de la síntesis al desconectar el cliente**:
   en el modo daemon, `/synthesize` ahora detecta la desconexión del cliente y
   aborta la síntesis en curso en vez de malgastar GPU/CPU hasta completarla. El
   generador del stream setea un `threading.Event` al detectar la desconexión
@@ -237,7 +237,7 @@ de roadmap en `docs/GOAL.md`.
 
 ## [0.1.1] — 2026-07-07
 
-Ciclo perfectivo que corrige los 12 hallazgos Menores y el residuo `WARNING-01`
+Ciclo perfectivo que corrige los 12 hallazgos Menores 
 identificados durante la revisión final del release `0.1.0`, más el ciclo
 correctivo de la auditoría de production-readiness: cierra la única grieta
 funcional (el release gate del pin de revisiones en la carga del engine) y siete
@@ -248,24 +248,24 @@ de contrato son aditivos: los códigos de salida existentes no cambian y
 
 ### Añadido
 
-- **`--json` en los cuatro comandos de escritura** (R-03): `voice add`
+- **`--json` en los cuatro comandos de escritura**: `voice add`
   (`{name, reference, speech}`), `voice remove` (`{name, removed}`), `setup`
   (`{model, already_cached, downloaded, cache_dir}`, con variante para
   `--remove-path`) y `cleanup` (`{removed, dry_run}`). El contrato programático
   queda simétrico: ningún comando obliga a parsear texto. `cleanup --json`
   exige `--yes` o `--dry-run` (exit 4 sin ellos) y envía sus listados
   informativos a stderr.
-- **Referencia de esquemas `--json` en `USAGE.md`** (R-04): las claves de los
+- **Referencia de esquemas `--json` en `USAGE.md`**: las claves de los
   nueve payloads (tipo y significado) declaradas por escrito como parte del
   contrato, sin necesidad de ingeniería inversa.
-- **Revisión fijada del modelo por release** (R-15): `setup` descarga ambos
+- **Revisión fijada del modelo por release**: `setup` descarga ambos
   repos de HuggingFace con `revision=` (commit hash auditado, constantes
   `MODEL_REVISIONS`/`BASE_MODEL_REVISION` en `model_cache.py`) y la detección
   de caché valida el snapshot de esa revisión en ambos repos (ciclo posterior
-  cerró el residuo `WARNING-01` del repo base); el bump del pin es un paso del
+  cerró el residuo del repo base); el bump del pin es un paso del
   runbook de release (`docs/RELEASING.md`) y su alcance está descrito en
   `SECURITY.md`.
-- **Plantillas de Issue/PR en `.github/`** (R-12): formularios de bug (versión,
+- **Plantillas de Issue/PR en `.github/`**: formularios de bug (versión,
   SO, comando reproducible, salida) y de propuesta, `blank_issues_enabled:
   false` con la vía de seguridad señalizada, y checklist de PR alineado a
   `CONTRIBUTING.md`.
@@ -279,17 +279,17 @@ de contrato son aditivos: los códigos de salida existentes no cambian y
   (incluido el bloqueo del navegador y la cuarentena de antivirus de terceros,
   siempre tras verificar el SHA-256) y la ruta prevista de firma de código vía
   SignPath Foundation (gratuita para proyectos open source).
-- **`daemon stop` honesto durante la ventana de arranque** (R-05): detecta el
+- **`daemon stop` honesto durante la ventana de arranque**: detecta el
   daemon en arranque por cmdline (sin PID file), avisa «arrancando; aún no
   acepta conexiones» y termina con exit 5 en vez de reportar un éxito falso;
   no mata el proceso. Documentado en `docs/DAEMON-MODE.md`.
-- **CI con imágenes fijadas por digest y pip pineado** (R-14): las tres
+- **CI con imágenes fijadas por digest y pip pineado**: las tres
   referencias `cimg/python:3.13` usan `@sha256:<digest>` (manifest list
   multi-arch) y los siete `pip install --upgrade pip` pasaron a versión exacta.
   Excepciones documentadas: `brew upgrade pyenv` (necesario para el parche
   3.13.14; no altera el artefacto) y `create-dmg` (Homebrew no pinea).
   Implicaciones y procedimiento de bump en `docs/BUILD.md` §Reproducibilidad.
-- **Exactitud documental** (R-11, R-13): stack de reproducción real
+- **Exactitud documental**: stack de reproducción real
   (winsound/sounddevice/afplay) en `docs/DESIGN.md` y `docs/ARCHITECTURE.md`
   (antes describían pycaw-WASAPI/pyalsaaudio/AVFoundation); árboles de
   estructura con `voices.py`, `paths.py` y `model_cache.py`; CI descrito como
@@ -331,19 +331,19 @@ de contrato son aditivos: los códigos de salida existentes no cambian y
 
 ### Corregido
 
-- **`voice list` ante un directorio de voces ilegible** (R-01): el mensaje
+- **`voice list` ante un directorio de voces ilegible**: el mensaje
   apunta al directorio de voces de usuario implicado en vez de remitir a
   `tts-sidecar setup` (que no resuelve un problema de filesystem); conserva
   exit 3.
-- **`speak --daemon --no-daemon`** (R-02): los flags contradictorios producen
+- **`speak --daemon --no-daemon`**: los flags contradictorios producen
   un error claro en stderr y exit 4 antes de cualquier trabajo, en vez de que
   `--daemon` gane en silencio.
-- **Validación de integridad de los tres checkpoints** (R-07): `is_model_cached`
+- **Validación de integridad de los tres checkpoints**: `is_model_cached`
   valida el header safetensors también de `s3gen_v3.safetensors` y
   `ve.safetensors` (antes solo del T3): una descarga truncada de cualquiera se
   reporta como «no cacheado» y `doctor` remite a `setup`, en vez de reventar
   con un error críptico en el primer `speak`.
-- **Fixture `mock_daemon_client` alineada con el cliente real** (R-10): la
+- **Fixture `mock_daemon_client` alineada con el cliente real**: la
   firma de `synthesize` coincide con `DaemonIPCClient.synthesize`
   (`on_progress` en vez de los inexistentes `model`/`compute_backend`).
 - **La detección de vida del daemon valida la identidad del servicio**
@@ -353,7 +353,7 @@ de contrato son aditivos: los códigos de salida existentes no cambian y
   confunde con un falso «daemon ya corriendo» (que derivaba en síntesis fallidas
   con exit 5 difícil de atribuir). `DaemonManager` delega en el mismo chequeo.
 - **Detección del Voice Encoder honra la revisión fijada del repo base**
-  (`WARNING-01`, residuo de R-06): `is_ve_cached` resuelve el snapshot del
+  (residuo): `is_ve_cached` resuelve el snapshot del
   repo `ResembleAI/chatterbox` exclusivamente contra `BASE_MODEL_REVISION` (un
   VE de otra revisión ya no cuenta como caché válida), simétrico con la
   descarga de `setup` y con la rama del language pack. Cobertura nueva: caso

@@ -84,8 +84,8 @@ toolchain (torch, onnxruntime); ver el callout anterior.
 > propios del proyecto usan el esquema `arm64`/`x86_64` en los tres SO, alineado
 > con el flag `--arch` de los scripts de build (ya unificado a `arm64`/`x86_64`)
 > y con la nomenclatura de macOS/Windows. El AppImage de Linux de ARM, que antes
-> se publicaba como `*-aarch64.AppImage`, pasó a `*-arm64.AppImage` (resuelto en
-> S0-04) para eliminar la única divergencia internamente controlable.
+> se publicaba como `*-aarch64.AppImage`, pasó a `*-arm64.AppImage`
+> para eliminar la única divergencia internamente controlable.
 >
 > **Divergencia `aarch64` deliberadamente fuera de alcance (no es una brecha).**
 > Tres cadenas `aarch64` se conservan por ser contratos externos o canónicos, no
@@ -467,7 +467,7 @@ conjunto manualmente, incrementar el prefijo versionado (`v1-` → `v2-`) en
 `HOMEBREW_NO_AUTO_UPDATE=1` para suprimir el `brew update` implícito (minutos
 de wall-time que no aportan: create-dmg no se pinea).
 
-### Reproducibilidad: pines por digest y sus implicaciones (R-14)
+### Reproducibilidad: pines por digest y sus implicaciones
 
 Recompilar el mismo tag semanas después debe producir los mismos artefactos.
 Para cerrar las fuentes de deriva controlables, el CI fija:

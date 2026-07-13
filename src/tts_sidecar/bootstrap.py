@@ -24,7 +24,7 @@ from pathlib import Path
 
 _applied = False
 
-# S2-12: allow-list explícita de warnings silenciados en el arranque.
+# allow-list explícita de warnings silenciados en el arranque.
 # NO usamos un catch-all `warnings.filterwarnings("ignore")` (ni
 # `PYTHONWARNINGS=ignore`), porque enmascararía deprecaciones propias y de
 # terceros y erosionaría la observabilidad. Cada entrada silencia un único
@@ -100,7 +100,7 @@ def apply() -> None:
                 # arranque: se conserva la codificación por defecto.
                 pass
 
-    # S2-12: allow-list explícita en vez de catch-all. Silencia solo los
+    # allow-list explícita en vez de catch-all. Silencia solo los
     # warnings benignos declarados en `_SILENCED_WARNINGS`, preservando la
     # visibilidad de cualquier otra deprecación (propia o de terceros).
     for _msg, _cat, _mod in _SILENCED_WARNINGS:

@@ -271,7 +271,7 @@ tests/                   # Tests pytest (~506 tests) + smoke-tests de instalador
 
 `src/tts_sidecar/bootstrap.py` (`apply()`) silencia mediante una **allow-list explícita**
 (`_SILENCED_WARNINGS`), **no** un catch-all global `warnings.filterwarnings("ignore")`
-ni `PYTHONWARNINGS=ignore` (remediado en S2-12, para no enmascarar deprecaciones propias
+ni `PYTHONWARNINGS=ignore` (para no enmascarar deprecaciones propias
 ni de terceros). La allow-list acota solo dos warnings benignos del módulo `warnings`:
 
 - `pkg_resources is deprecated` — por **mensaje**; lo emite `perth` al importar

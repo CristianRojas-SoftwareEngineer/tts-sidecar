@@ -1,4 +1,4 @@
-"""Tests para ComputeBackendResolver (S2-10): detección, resolución y clave de caché.
+"""Tests para ComputeBackendResolver: detección, resolución y clave de caché.
 
 El módulo es puro (no carga el modelo); los tests controlan torch vía monkeypatch
 para ser deterministas en cualquier host.

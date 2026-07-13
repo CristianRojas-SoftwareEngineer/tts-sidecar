@@ -274,7 +274,7 @@ def test_common_pyinstaller_args_includes_noupx(tmp_path):
 
 
 def test_linux_cpu_lock_contains_no_nvidia_packages():
-    """N-05: el AppImage x86_64 debe quedar libre del stack CUDA."""
+    """El AppImage x86_64 debe quedar libre del stack CUDA."""
     repo_root = Path(__file__).resolve().parent.parent
     lock_path = repo_root / "requirements-lock-linux-cpu.txt"
     assert lock_path.exists(), "requirements-lock-linux-cpu.txt no existe"

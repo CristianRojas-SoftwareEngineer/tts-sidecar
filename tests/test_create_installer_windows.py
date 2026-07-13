@@ -100,7 +100,7 @@ def test_without_key_manual_uninstall(iss):
 
 
 def test_info_after_offers_gplv3_source_code():
-    """R-34: la página InfoAfter del instalador debe ofrecer el código fuente
+    """La página InfoAfter del instalador debe ofrecer el código fuente
     bajo GPLv3 y enlazar al repositorio (GPLv3 §6)."""
     from create_installer_windows import info_after_text
 
@@ -109,7 +109,7 @@ def test_info_after_offers_gplv3_source_code():
     assert "github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar" in text
     # Debe seguir explicando la provisión del modelo (compatibilidad con W-03).
     assert "tts-sidecar setup" in text
-    # N-08: el instalador NO incluye el código fuente junto al programa; la
+    # El instalador NO incluye el código fuente junto al programa; la
     # oferta GPLv3 §6d correcta es la disponibilidad pública en el repositorio.
     assert "accompanido" not in text
     assert "LICENSE.txt" not in text
@@ -117,7 +117,7 @@ def test_info_after_offers_gplv3_source_code():
 
 
 def test_main_builds_installer_with_mocked_iscc(tmp_path, monkeypatch):
-    """N-01: main() debe llegar a invocar ISCC con un .iss válido. La regresión
+    """main() debe llegar a invocar ISCC con un .iss válido. La regresión
     de 8a18fad dejó el bloque de compilación inalcanzable dentro de
     info_after_text(): main() retornaba tras mkdir sin compilar nada, y ningún
     test lo detectaba porque solo se ejercitaban funciones puras."""
@@ -159,7 +159,7 @@ def test_main_builds_installer_with_mocked_iscc(tmp_path, monkeypatch):
 
     ciw.main()
 
-    # Si main() retorna sin invocar ISCC, la regresión N-01 ha vuelto.
+    # Si main() retorna sin invocar ISCC, la regresión ha vuelto.
     assert len(invocations) == 1
     cmd = invocations[0]
     assert cmd[0] == fake_iscc

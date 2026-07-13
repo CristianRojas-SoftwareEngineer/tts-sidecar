@@ -207,7 +207,7 @@ class Spinner:
         try:
             return bool(self._stream.isatty())
         except Exception:
-            # Silencio deliberado (S2-02): este guarda protege el propio I/O de
+            # Silencio deliberado: este guarda protege el propio I/O de
             # stderr; loguear aquí escribiría al mismo stream que acaba de fallar.
             # Ante la duda, se asume «no es TTY» (el Spinner queda inerte).
             return False
@@ -252,7 +252,7 @@ class Spinner:
             self._stream.write("\r\x1b[K")
             self._stream.flush()
         except Exception:
-            # Silencio deliberado (S2-02): igual que _stream_is_tty, un fallo al
+            # Silencio deliberado: igual que _stream_is_tty, un fallo al
             # escribir en stderr no puede reportarse por stderr; se descarta.
             pass
 

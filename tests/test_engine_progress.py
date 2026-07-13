@@ -35,7 +35,7 @@ def _engine_stub(tmp_path):
             return [0.0]
 
     eng._tts = FakeTTS()
-    # S2-10: speak() delega en el orquestador; lo cableamos igual que __init__.
+    # speak() delega en el orquestador; lo cableamos igual que __init__.
     eng._audio_writer = AudioWriter()
     eng._orchestrator = SynthesisOrchestrator(
         eng, eng._conditionals_prep, eng._audio_writer
@@ -154,7 +154,7 @@ class TestTokenCountingIter:
 
 
 class TestSilentExceptionLogging:
-    """S2-02: los swallows inocuos dejan traza a nivel debug sin propagar.
+    """Los swallows inocuos dejan traza a nivel debug sin propagar.
 
     Antes eran `except Exception: pass` mudos; ahora emiten `logger.debug(...,
     exc_info=True)` para que la degradación sea diagnosticable, conservando la
@@ -195,9 +195,9 @@ class TestSilentExceptionLogging:
 
 
 class TestSynthesisCancelledPropagation:
-    """S2-04: el engine deja propagar ``SynthesisCancelled`` desde los
+    """El engine deja propagar ``SynthesisCancelled`` desde los
     callbacks de progreso, pero sigue tragando cualquier otra excepción del
-    callback (contrato best-effort de S2-02)."""
+    callback (contrato best-effort)."""
 
     def test_emit_progress_propagates_cancellation_but_swallows_other_errors(self, tmp_path):
         from tts_sidecar.exceptions import SynthesisCancelled

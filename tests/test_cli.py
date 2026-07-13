@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 import tempfile
 
 # Directorio temporal compartido para los .wav de prueba que deben existir en
-# disco (S1-04: el cliente ahora valida existencia/extensión antes del despacho).
+# disco el cliente ahora valida existencia/extensión antes del despacho.
 _VOICE_TMP = tempfile.mkdtemp(prefix="tts-sidecar-cli-")
 
 
@@ -118,7 +118,7 @@ class TestCmdVoiceAdd:
     @patch("tts_sidecar.model_cache.is_model_cached", return_value=False)
     @patch("tts_sidecar.voices.register_voice_files")
     def test_cmd_voice_add_success_without_engine(self, mock_register, _cached, capsys):
-        """R-01: voice add registra sin instanciar ChatterboxEngine."""
+        """Voice add registra sin instanciar ChatterboxEngine."""
         from tts_sidecar.cli import cmd_voice_add
 
         mock_register.return_value = ("/path/to/ref.wav", "/path/to/speech.wav")
@@ -134,7 +134,7 @@ class TestCmdVoiceAdd:
     @patch("tts_sidecar.model_cache.is_model_cached", return_value=False)
     @patch("tts_sidecar.voices.register_voice_files")
     def test_cmd_voice_add_succeeds_without_model(self, mock_register, _cached, capsys):
-        """S2-15: sin modelo cacheado, voice add registra la voz (registro libre de modelo)."""
+        """Sin modelo cacheado, voice add registra la voz (registro libre de modelo)."""
         from tts_sidecar.cli import cmd_voice_add
 
         mock_register.return_value = ("/path/to/ref.wav", "/path/to/speech.wav")
@@ -255,7 +255,7 @@ class TestCmdVersion:
 
 
 class TestCmdSpeakDaemonDispatch:
-    """Las tres ramas del despacho daemon/auto/directo (WARNING-06)."""
+    """Las tres ramas del despacho daemon/auto/directo."""
 
     def _args(self, **kw):
         kw.setdefault("voice_audio", _make_wav("v.wav"))
@@ -379,7 +379,7 @@ class TestCmdSpeakLiveProgress:
 
 
 class TestCmdSpeakVoiceAudioDaemonSandbox:
-    """N-02: --voice-audio/--speech-audio fuera de la sandbox del daemon."""
+    """--voice-audio/--speech-audio fuera de la sandbox del daemon."""
 
     def _args(self, **kw):
         kw.setdefault("voice_audio", _make_wav("v.wav"))
@@ -425,7 +425,7 @@ class TestCmdSpeakVoiceAudioDaemonSandbox:
 
 
 class TestCmdSpeakAudioPathExistence:
-    """S1-04 (opción A): el cliente valida existencia/extensión de audio de forma
+    """(Opción A): el cliente valida existencia/extensión de audio de forma
     central antes del modelo (directo) o del round-trip (daemon), con el mismo
     mensaje y exit code (3) en ambos modos."""
 
@@ -533,7 +533,7 @@ class TestCmdSpeak:
 
 
 class TestEnvironmentChecksAudio:
-    """WARNING-03: el chequeo de audio de doctor/setup refleja el estado real
+    """El chequeo de audio de doctor/setup refleja el estado real
     de la enumeración COM en Windows, no solo la disponibilidad del import."""
 
     def test_windows_real_audio_gives_pass(self, monkeypatch):
@@ -567,7 +567,7 @@ class TestEnvironmentChecksAudio:
         assert "no se pudo enumerar" in audio_check[2]
 
     def test_linux_degraded_audio_gives_fail(self, monkeypatch):
-        """WARNING-03: Linux/macOS ahora usan la misma enumeración real que Windows."""
+        """Linux/macOS ahora usan la misma enumeración real que Windows."""
         import platform as platform_module
         from tts_sidecar import cli
 
@@ -612,7 +612,7 @@ class TestCmdDevicesError:
         assert "Error" in err
 
 
-# S1-12: en Windows, crear symlinks sin privilegios elevados exige Developer
+# En Windows, crear symlinks sin privilegios elevados exige Developer
 # Mode (SeCreateSymbolicLinkPrivilege) habilitado; en CI/runners sin esa
 # configuración, os.symlink levanta OSError (WinError 1314). En Linux/macOS
 # los symlinks de usuario funcionan sin configuración especial, así que el
@@ -937,7 +937,7 @@ class TestCheckAvx2:
 
 
 class TestInterruptHandling:
-    """R-02: Ctrl+C termina con código 130 y una línea a stderr, sin traceback."""
+    """Ctrl+C termina con código 130 y una línea a stderr, sin traceback."""
 
     def test_ctrl_c_exits_130_without_traceback(self, monkeypatch, capsys):
         import tts_sidecar.cli as cli
@@ -959,7 +959,7 @@ class TestInterruptHandling:
 
 
 class TestExitCodes:
-    """R-06: cada causa de error mapea a su código del contrato público congelado."""
+    """Cada causa de error mapea a su código del contrato público congelado."""
 
     def test_missing_model_exits_2(self, capsys):
         from tts_sidecar.cli import _require_model_cached, EXIT_MODEL_MISSING
@@ -1023,7 +1023,7 @@ class TestExitCodes:
         assert exc.value.code == EXIT_INVALID_INPUT
 
     def test_daemon_and_no_daemon_conflict_exits_4(self, capsys):
-        """R-02: --daemon y --no-daemon simultáneos → error claro y exit 4,
+        """--daemon y --no-daemon simultáneos → error claro y exit 4,
         antes de cualquier trabajo (incluido el gate de modelo)."""
         from tts_sidecar.cli import cmd_speak, EXIT_INVALID_INPUT
 
@@ -1035,7 +1035,7 @@ class TestExitCodes:
         assert "mutuamente excluyentes" in capsys.readouterr().err
 
     def test_voice_list_filenotfound_points_to_voices_dir_not_setup(self, capsys):
-        """R-01: el FileNotFoundError de voice list menciona el directorio de
+        """El FileNotFoundError de voice list menciona el directorio de
         voces, no remite a 'setup' (la provisión del modelo no lo arregla)."""
         from tts_sidecar.cli import cmd_voice_list, EXIT_NOT_FOUND
 
@@ -1064,7 +1064,7 @@ class TestExitCodes:
         assert exc.value.code == EXIT_DAEMON_UNREACHABLE
 
     def test_daemon_serve_without_model_exits_and_skips_serve(self):
-        """R-04: 'daemon serve' sin modelo en caché falla rápido remitiendo a
+        """'daemon serve' sin modelo en caché falla rápido remitiendo a
         'setup' (exit EXIT_MODEL_MISSING) y NO carga/arranca el servidor."""
         import argparse
         from tts_sidecar.cli import cmd_daemon, EXIT_MODEL_MISSING
@@ -1160,7 +1160,7 @@ class TestCmdCleanup:
         assert propio1.exists() and propio2.exists() and voces.exists()
 
     def test_yes_deletes_without_asking_confirmation(self, tmp_path, monkeypatch, capsys):
-        """N-03: --yes omite input(); útil para invocación programática."""
+        """--yes omite input(); útil para invocación programática."""
         from tts_sidecar.cli import cmd_cleanup
 
         propio1, propio2, ajeno, voces = self._fake_env(tmp_path, monkeypatch)
@@ -1175,7 +1175,7 @@ class TestCmdCleanup:
         assert ajeno.exists()
 
     def test_eof_en_confirmacion_cancela_limpiamente(self, tmp_path, monkeypatch, capsys):
-        """N-03: stdin cerrado (subprocess sin --yes) no debe producir traceback."""
+        """stdin cerrado (subprocess sin --yes) no debe producir traceback."""
         from tts_sidecar.cli import cmd_cleanup
 
         propio1, propio2, ajeno, voces = self._fake_env(tmp_path, monkeypatch)
@@ -1584,7 +1584,7 @@ class TestSetupUninstall:
 
 
 class TestWriteCommandsJSON:
-    """R-03: los cuatro comandos de escritura aceptan --json y emiten un único
+    """Los cuatro comandos de escritura aceptan --json y emiten un único
     objeto JSON en stdout, con los listados informativos en stderr."""
 
     @patch("tts_sidecar.model_cache.is_model_cached", return_value=True)
@@ -1738,7 +1738,7 @@ class TestCmdSpeakEmptyText:
 
 
 class TestSchemaVersionJSON:
-    """R-07: todo payload --json incluye 'schema_version'."""
+    """Todo payload --json incluye 'schema_version'."""
 
     def test_version_json_includes_schema_version(self, capsys):
         import json
@@ -1795,7 +1795,7 @@ class TestSchemaVersionJSON:
 
 
 class TestSpeakLongText:
-    """R-03: un texto muy largo emite una advertencia (no bloqueante) a stderr."""
+    """Un texto muy largo emite una advertencia (no bloqueante) a stderr."""
 
     def test_long_text_warns_and_continues(self, capsys):
         from tts_sidecar.cli import cmd_speak
@@ -1816,7 +1816,7 @@ class TestSpeakLongText:
 
 
 class TestSingleTextLimit:
-    """N-11: texto > MAX_TEXT_LENGTH falla con exit 4 antes de cualquier despacho."""
+    """texto > MAX_TEXT_LENGTH falla con exit 4 antes de cualquier despacho."""
 
     def test_text_exceeds_max_text_length_exits_4_without_daemon(self, capsys):
         from tts_sidecar.cli import cmd_speak, EXIT_INVALID_INPUT
@@ -1840,7 +1840,7 @@ class TestSingleTextLimit:
 
 
 class TestComputeBackendIgnoredViaDaemon:
-    """N-10: --compute-backend explícito con daemon activo emite un warning."""
+    """--compute-backend explícito con daemon activo emite un warning."""
 
     @patch("tts_sidecar.cli._paths_allowed_by_daemon", return_value=True)
     @patch("tts_sidecar.model_cache.is_model_cached", return_value=True)
@@ -1868,7 +1868,7 @@ class TestComputeBackendIgnoredViaDaemon:
 
 
 class TestEmitAudioCreatesParentDirs:
-    """N-12: _emit_audio crea los directorios padres de --output, como el modo directo."""
+    """_emit_audio crea los directorios padres de --output, como el modo directo."""
 
     def test_output_in_nonexistent_dir_is_created(self, tmp_path):
         from tts_sidecar.cli import _emit_audio
@@ -1881,7 +1881,7 @@ class TestEmitAudioCreatesParentDirs:
 
 
 class TestVoiceAddWithoutComputeBackend:
-    """N-15: voice add --compute-backend ya no existe (flag muerta eliminada)."""
+    """voice add --compute-backend ya no existe (flag muerta eliminada)."""
 
     def test_parser_rejects_compute_backend(self, monkeypatch, capsys):
         from tts_sidecar.cli import main
@@ -1896,7 +1896,7 @@ class TestVoiceAddWithoutComputeBackend:
 
 
 class TestDoctorRAM:
-    """R-18: doctor incluye un chequeo de RAM advisory (WARN) que no penaliza."""
+    """doctor incluye un chequeo de RAM advisory (WARN) que no penaliza."""
 
     def test_low_ram_gives_warn(self, capsys):
         import tts_sidecar.cli as cli
@@ -1950,7 +1950,7 @@ class TestDoctorRAM:
 
 
 class TestSetupDiskAndForceUpdate:
-    """R-13/R-14: pre-chequeo de disco y --force-update en setup."""
+    """Pre-chequeo de disco y --force-update en setup."""
 
     def test_insufficient_disk_aborts_before_download(self, monkeypatch, capsys):
         import shutil
@@ -2006,7 +2006,7 @@ class TestSetupDiskAndForceUpdate:
 
 
 class TestSetupLightDownload:
-    """N-17: setup descarga vía snapshot_download, sin instanciar ChatterboxEngine."""
+    """setup descarga vía snapshot_download, sin instanciar ChatterboxEngine."""
 
     def test_setup_downloads_without_instantiating_engine(self, monkeypatch, tmp_path, capsys):
         import tts_sidecar.cli as cli
@@ -2076,7 +2076,7 @@ class TestBootstrap:
         assert os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] == "1"
         assert os.environ["TOKENIZERS_PARALLELISM"] == "false"
 
-    # -- S2-12: allow-list de warnings en vez de catch-all -------------
+    # -- allow-list de warnings en vez de catch-all -------------
 
     def test_apply_has_no_catch_all_warning_filter(self, monkeypatch):
         """No debe instalarse ningún filtro catch-all (action='ignore',
@@ -2127,15 +2127,15 @@ class TestBootstrap:
 
         with _warnings.catch_warnings(record=True) as recorded:
             _warnings.simplefilter("always")
-            _warnings.warn("control S2-12", UserWarning)
+            _warnings.warn("control allow-list", UserWarning)
 
         assert any(
-            w.category is UserWarning and "control S2-12" in str(w.message)
+            w.category is UserWarning and "control allow-list" in str(w.message)
             for w in recorded
         )
 
     def test_apply_reconfigures_streams_to_utf8(self, monkeypatch):
-        """S2-14: la reconfiguración UTF-8 de stdout/stderr, antes en el nivel de
+        """La reconfiguración UTF-8 de stdout/stderr, antes en el nivel de
         módulo de cli.py, es parte de la capa única bootstrap.apply(), de modo
         que las tres vías de entrada (pip/bin/-m) y el daemon heredan el mismo
         contrato de codificación."""
@@ -2198,7 +2198,7 @@ class TestBootstrap:
 
         assert sys.modules["pkg_resources"] is sentinel
 
-    # -- S1-08: resource_filename del mock instalado, sus tres ramas -------
+    # -- resource_filename del mock instalado, sus tres ramas -------
 
     def _install_mock(self, bootstrap, monkeypatch):
         """Instala el mock (find_spec('pkg_resources') -> None durante apply)

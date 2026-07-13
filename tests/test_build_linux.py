@@ -1,4 +1,4 @@
-"""Tests estáticos de los templates generados por build_linux.py (R-24).
+"""Tests estáticos de los templates generados por build_linux.py .
 
 Calcan el patrón de tests/test_create_installer_windows.py: aserciones de
 cadena sobre las funciones puras que emiten los artifacts (AppRun, .desktop).

@@ -1,4 +1,4 @@
-"""Tests de purge_incomplete_downloads (S2-18).
+"""Tests de purge_incomplete_downloads.
 
 model_cache.py no tenía cobertura para la limpieza de blobs '*.incomplete':
 este archivo crea una caché de HuggingFace sintética en tmp_path (mismo patrón

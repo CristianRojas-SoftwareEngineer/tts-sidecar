@@ -113,7 +113,7 @@ def _validate_audio_path(path: str, field: str, allowed_dirs: list[str]) -> str:
     si la ruta:
       - tiene extensión ``.wav`` (case-insensitive) y es un archivo existente,
       - queda contenida en alguno de ``allowed_dirs`` (contención vía realpath
-        para evitar escapes por symlink, WARNING-02), y
+        para evitar escapes por symlink), y
       - es un WAV válido (header RIFF/WAVE de 12 bytes).
 
     En cualquier otro caso lanza ``HTTPException(400)`` con un ``detail`` que
@@ -171,7 +171,7 @@ def synthesize(
 
     # Valida las rutas de audio antes de que lleguen a librosa.load: deben
     # existir, ser .wav y quedar contenidas en un directorio permitido
-    # (WARNING-02: sin esto, cualquier proceso local podía hacer que el daemon
+    # (sin esto, cualquier proceso local podía hacer que el daemon
     # leyera un .wav arbitrario del sistema de archivos). Los mensajes de error
     # no exponen rutas del sistema.
     allowed_dirs = [os.path.realpath(d) for d in voices.allowed_audio_dirs()]
@@ -179,7 +179,7 @@ def synthesize(
     # _validate_audio_path y esa misma ruta (no la cruda de la petición) es la
     # que se pasa a engine.speak: sin esto, quedaba una ventana entre validar
     # y usar en la que el archivo podía cambiar (symlink swap) sin volver a
-    # pasar por la validación (WARNING-02).
+    # pasar por la validación.
     real_paths: dict[str, str] = {}
     for field, path in (("voice_audio", req.voice_audio), ("speech_audio", req.speech_audio)):
         if path is None:
@@ -202,7 +202,7 @@ def synthesize(
         q: queue.Queue = queue.Queue()
         SENTINEL = object()
         # Evento de cancelación cooperativa ligado al estado de la conexión del
-        # cliente (S2-04): el generador lo setea al detectar la desconexión y el
+        # cliente: el generador lo setea al detectar la desconexión y el
         # push del worker lo consulta para abortar engine.speak().
         cancel_event = threading.Event()
 
@@ -302,12 +302,12 @@ async def shutdown(state: DaemonState = Depends(get_daemon_state)):
 
     Libera la referencia al engine (en el DaemonState inyectado) y fuerza la
     misma limpieza de memoria (`_clear_model_memory`) que corre tras cada
-    síntesis (S3-04, a50fc6d): sin esto, un auto-restart frecuente del daemon
+    síntesis: sin esto, un auto-restart frecuente del daemon
     podía dejar memoria GPU retenida entre reinicios porque nada liberaba el
     engine en el apagado. Simétrico por diseño: mismo helper, mismas garantías
     (no-op sin CUDA, gc.collect() incondicional).
 
-    Riesgo aceptado (SUGGESTION-02): no lleva token ni confirmación explícita.
+    Riesgo aceptado: no lleva token ni confirmación explícita.
     El daemon bindea exclusivamente a 127.0.0.1 (ver run.py), por lo que solo
     un proceso con acceso local a la máquina puede invocarlo; se acepta ese
     riesgo residual en vez de añadir un secreto que el propio cliente IPC

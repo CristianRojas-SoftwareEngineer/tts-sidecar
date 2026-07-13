@@ -53,7 +53,7 @@ class TestSynthesizeRequest:
         assert "compute_backend" not in campos
 
     def test_excessive_audio_path_rejected(self):
-        """SUGGESTION-01: voice_audio/speech_audio tienen tope de longitud."""
+        """voice_audio/speech_audio tienen tope de longitud."""
         ruta_excesiva = "a" * (MAX_AUDIO_PATH_LENGTH + 1)
         with pytest.raises(ValueError):
             SynthesizeRequest(text="hola", voice_audio=ruta_excesiva)
@@ -142,7 +142,7 @@ class TestStreamEvents:
 
 
 class TestUnicodeBoundaries:
-    """S1-10: los topes de longitud (MAX_TEXT_LENGTH/MAX_AUDIO_PATH_LENGTH) se
+    """Los topes de longitud (MAX_TEXT_LENGTH/MAX_AUDIO_PATH_LENGTH) se
     validan en Pydantic v2 por longitud de la cadena Python (code points), no
     por bytes UTF-8: un acento o un emoji no deben contar doble."""
 
@@ -181,7 +181,7 @@ class TestUnicodeBoundaries:
 
 
 class TestCrossFieldValidation:
-    """S1-10: voice_audio y speech_audio son independientes entre sí (ambos
+    """voice_audio y speech_audio son independientes entre sí (ambos
     Optional, cada uno con su propio tope) — se valida que combinarlos no
     interfiera con la validación individual de cada campo."""
 

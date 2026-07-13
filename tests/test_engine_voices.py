@@ -1,5 +1,4 @@
-"""
-Tests de `ChatterboxEngine` a nivel voz (remediación S3-01).
+"""Tests de `ChatterboxEngine` a nivel voz.
 
 Cubren `add_voice` (ramas precompute/force) y los delegates
 `list_voices`/`remove_voice`/`resolve_voice`, inyectando colaboradores falsos

@@ -206,7 +206,7 @@ class ChatterboxEngine:
         self.model_name = self.MODELS.get(model, model)
 
         # Colaboradores inyectables: por defecto se crean aquí para no alterar el
-        # comportamiento en producción; en tests se sustituyen por dobles (S3-01).
+        # comportamiento en producción; en tests se sustituyen por dobles.
         self._model_loader = model_loader or ModelLoader()
         self._conditionals_prep = conditionals_prep or ConditionalsPreparer()
 
@@ -231,7 +231,7 @@ class ChatterboxEngine:
         # Aplica los parámetros de síntesis optimizados y el timing por sub-etapa
         self._apply_synthesis_optimizations()
 
-        # Colaboradores de síntesis (S2-10): el orquestador es dueño del flujo
+        # Colaboradores de síntesis: el orquestador es dueño del flujo
         # speak y del ciclo de vida de _active_progress_cb; el engine queda como
         # façade / composition root que posee el modelo y los colaboradores.
         self._audio_writer = AudioWriter()
@@ -251,7 +251,7 @@ class ChatterboxEngine:
             cb({"event": "progress", **fields})
         except SynthesisCancelled:
             # Señal cooperativa del daemon: la dejamos propagar para abortar la
-            # síntesis (S2-04). No es un error del callback, sino una petición de
+            # síntesis. No es un error del callback, sino una petición de
             # cancelación que el worker espera.
             raise
         except Exception:
@@ -381,7 +381,7 @@ class ChatterboxEngine:
                     cb({"event": "progress", "stage": "t3", "tokens": count})
                 except SynthesisCancelled:
                     # Señal cooperativa del daemon: la dejamos propagar para
-                    # abortar la síntesis (S2-04). Véase _emit_progress.
+                    # abortar la síntesis. Véase _emit_progress.
                     raise
                 except Exception:
                     logger.debug("El callback de progreso de tokens lanzó; se ignora (best-effort)", exc_info=True)
@@ -392,7 +392,7 @@ class ChatterboxEngine:
         from huggingface_hub import snapshot_download
         import os
 
-        # Revisión fijada del repo (R-03): la resolución de carga y la descarga de
+        # Revisión fijada del repo: la resolución de carga y la descarga de
         # respaldo honran el mismo pin que 'setup' y la detección de caché, de modo
         # que un bump futuro de MODEL_REVISIONS no puede producir síntesis silenciosa
         # con el modelo viejo que 'refs/main' seguiría prefiriendo. Acepta tanto el
@@ -484,7 +484,7 @@ class ChatterboxEngine:
         if voice_audio and not speech_audio:
             speech_audio = voice_audio
 
-        # Façade delgado (S2-10): el flujo de síntesis y el ciclo de vida de
+        # Façade delgado: el flujo de síntesis y el ciclo de vida de
         # _active_progress_cb viven en el orquestador, no en el engine.
         return self._orchestrator.synthesize(
             text, voice_audio, speech_audio, output_path, progress_callback

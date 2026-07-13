@@ -14,7 +14,7 @@ from tts_sidecar.timing import SynthesisMetrics
 
 class TestServerConcurrency:
     def test_health_responds_during_synthesis(self, tmp_path, monkeypatch):
-        """Una síntesis bloqueada no debe congelar /health (WARNING-03)."""
+        """Una síntesis bloqueada no debe congelar /health."""
         import threading
         from fastapi.testclient import TestClient
         from tts_sidecar.daemon import server
@@ -197,7 +197,7 @@ class TestServerAdmissionControl:
 
 class TestSynthesizeAllowedPaths:
     def test_rejects_path_outside_allowed_dirs(self, tmp_path, monkeypatch):
-        """WARNING-02: una ruta .wav fuera de voices_root()/tempdir se rechaza con 400."""
+        """Una ruta .wav fuera de voices_root()/tempdir se rechaza con 400."""
         from fastapi.testclient import TestClient
         from tts_sidecar.daemon import server
         from tts_sidecar import voices
@@ -223,7 +223,7 @@ class TestSynthesizeAllowedPaths:
             server.app.state.daemon.engine = old_engine
 
     def test_accepts_path_within_voices_root(self, tmp_path, monkeypatch):
-        """Una ruta dentro de voices_root() sigue siendo aceptada tras WARNING-02."""
+        """Una ruta dentro de voices_root() sigue siendo aceptada."""
         from fastapi.testclient import TestClient
         from tts_sidecar.daemon import server
         from tts_sidecar import voices
@@ -309,11 +309,11 @@ class TestSynthesizeHeaderValidationAndCanonicalPath:
 
 
 class TestDaemonSessionSandbox:
-    """R-01: el sandbox real acota el tempdir a `<tempdir>/tts-sidecar/`; el
+    """El sandbox real acota el tempdir a `<tempdir>/tts-sidecar/`; el
     tempdir compartido general ya no es un directorio permitido."""
 
     def test_rejects_wav_in_general_tempdir(self, monkeypatch, tmp_path):
-        """S1-12: usa el tmp_path aislado de pytest en vez de escribir en la
+        """Usa el tmp_path aislado de pytest en vez de escribir en la
         raíz de tempfile.gettempdir() (riesgo de colisión entre runs
         concurrentes y limpieza manual). tmp_path sigue siendo un directorio
         DISTINTO de daemon_session_dir() (<tempdir>/tts-sidecar/), así que el
@@ -373,7 +373,7 @@ class TestKillPidVerified:
         return psutil_mock, proc
 
     def test_does_not_kill_foreign_processes(self, capsys):
-        """WARNING-04: si otro servicio ocupa el puerto, no se le hace terminate()."""
+        """Si otro servicio ocupa el puerto, no se le hace terminate()."""
         from tts_sidecar.daemon.daemon import DaemonManager
 
         psutil_mock, proc = self._fake_psutil(["node", "otro-servidor.js"])
@@ -396,7 +396,7 @@ class TestKillPidVerified:
 
 
 class TestStopDuringStartupWindow:
-    """R-05: 'daemon stop' durante la ventana de arranque (puerto cerrado)
+    """'daemon stop' durante la ventana de arranque (puerto cerrado)
     detecta el proceso por cmdline, avisa y devuelve False, sin matarlo."""
 
     def _manager_offline(self):
@@ -495,7 +495,7 @@ class TestDaemonManager:
 
     @patch("requests.get")
     def test_is_running_false_foreign_service_on_port(self, mock_get):
-        """R-02: un 200 de otro servicio en el puerto 8765, cuyo cuerpo no valida
+        """Un 200 de otro servicio en el puerto 8765, cuyo cuerpo no valida
         como HealthResponse, se trata como «no es el daemon»."""
         from tts_sidecar.daemon import DaemonIPCClient
         mock_resp = MagicMock()
@@ -834,7 +834,7 @@ class TestSynthesizeStreaming:
 
 
 class TestDaemonStateInjection:
-    """S2-01: los endpoints reciben el estado del daemon por inyección de
+    """Los endpoints reciben el estado del daemon por inyección de
     dependencias (Depends(get_daemon_state)), no de globals de módulo. Se puede
     sustituir con app.dependency_overrides sin tocar app.state ni estado
     compartido — justo lo que un global mutable de módulo no permitía."""
@@ -1091,7 +1091,7 @@ class TestServePortInUse:
 
 
 class TestSynthesisCancellation:
-    """S2-04: el worker aborta la síntesis al cancelarla el cliente.
+    """El worker aborta la síntesis al cancelarla el cliente.
 
     La cancelación es cooperativa: el closure ``push`` eleva
     ``SynthesisCancelled`` cuando el cliente se desconecta, y el engine la

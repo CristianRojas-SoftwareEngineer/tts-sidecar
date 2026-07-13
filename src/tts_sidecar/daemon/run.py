@@ -84,7 +84,7 @@ def serve(port: int = DEFAULT_PORT, auto_restart: bool = False, max_retries: int
         # Composition root: se construye un DaemonState fresco por iteración
         # (relevante en --auto-restart) y se puebla conforme se crean el engine
         # y el uvicorn.Server. Los endpoints lo reciben vía Depends, no como
-        # global de módulo (S2-01).
+        # global de módulo.
         app.state.daemon = DaemonState(start_time=time.time())
 
         with StageTimer("Startup", "Iniciando daemon..."):

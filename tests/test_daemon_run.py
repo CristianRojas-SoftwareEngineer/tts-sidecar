@@ -1,6 +1,6 @@
 """Tests para tts_sidecar.daemon.run: serve(), signal_handler, atexit y main().
 
-S2-16: el loop de arranque/reinicio del daemon (--auto-restart/--max-retries),
+El loop de arranque/reinicio del daemon (--auto-restart/--max-retries),
 el registro de manejadores de señal y el registro atexit del pidfile estaban
 sin cubrir (solo existían tests para el fallo de bind de puerto y para
 _remove_own_pidfile en tests/test_daemon.py). Este archivo mockea el motor y

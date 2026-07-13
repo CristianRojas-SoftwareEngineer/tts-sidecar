@@ -30,7 +30,7 @@ def symlink(tmp_path):
 
     Crear symlinks en Windows suele requerir privilegio (SeCreateSymbolicLink);
     sin él, `os.symlink` lanza OSError y el test se omite (no falla). Así los
-    tests de S1-17 corren en Linux/macOS y en Windows con privilegio, y se
+    tests de symlinks corren en Linux/macOS y en Windows con privilegio, y se
     saltan limpiamente donde no aplique.
     """
     probe = tmp_path / "probe" / "t.txt"
@@ -55,7 +55,7 @@ def _make_voice(root, name, reference=True, speech=True):
 
 
 class TestRegisterVoiceFiles:
-    """R-01: el registro de voces valida y copia sin instanciar el motor."""
+    """El registro de voces valida y copia sin instanciar el motor."""
 
     def _audios(self, tmp_path):
         ref = tmp_path / "timbre.wav"
@@ -118,7 +118,7 @@ class TestRegisterVoiceFiles:
         assert (user_root / "existente" / "reference.wav").read_bytes() == b"RIFF-ref"
 
     def test_register_rejects_symlink_target(self, voice_roots, tmp_path, monkeypatch, symlink):
-        """S1-17: no se registra una voz cuyo directorio destino es un symlink.
+        """No se registra una voz cuyo directorio destino es un symlink.
 
         Un symlink como destino haría que `shutil.copy2` escribiera *a través*
         del enlace; `voice_dir`/`register_voice_files` lo rechazan antes de
@@ -214,7 +214,7 @@ class TestNameSanitization:
 
 
 class TestSymlinkRejection:
-    """S1-17: una voz cuyo directorio o sus `.wav` sean symlinks se rechaza.
+    """Una voz cuyo directorio o sus `.wav` sean symlinks se rechaza.
 
     La ventana que cierra este hallazgo es la de cargar un `.wav` arbitrario
     del atacante a través de un symlink dentro del registro. Toda voz con
@@ -252,7 +252,7 @@ class TestSymlinkRejection:
 
 
 class TestCmdVoiceRemoveIOErrors:
-    """WARNING-01: cmd_voice_remove distingue un archivo en uso de un error genérico."""
+    """cmd_voice_remove distingue un archivo en uso de un error genérico."""
 
     def _args(self, name):
         import argparse
@@ -284,7 +284,7 @@ class TestCmdVoiceRemoveIOErrors:
         with pytest.raises(SystemExit) as exc_info:
             cli.cmd_voice_remove(self._args("no_existe"))
 
-        # Contrato de exit codes (T9/R-06): voz no encontrada → EXIT_NOT_FOUND (3),
+        # Contrato de exit codes: voz no encontrada → EXIT_NOT_FOUND (3),
         # distinto del EXIT_ERROR (1) genérico del caso PermissionError de arriba.
         assert exc_info.value.code == 3
         err = capsys.readouterr().err
@@ -293,7 +293,7 @@ class TestCmdVoiceRemoveIOErrors:
 
 
 class TestCapitalizationCollision:
-    """SUGGESTION-06: los nombres de voz se normalizan a minúsculas.
+    """Los nombres de voz se normalizan a minúsculas.
 
     En filesystems case-insensitive (macOS APFS, Docker volumes sobre NTFS),
     `MiVoz` y `mivoz` colisionan. La solución implementada normaliza todos

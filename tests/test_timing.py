@@ -1,6 +1,6 @@
 """Tests para las utilidades de timing.py.
 
-R-05/R-27: todo el flujo de progreso (log, StageTimer, banners de
+Todo el flujo de progreso (log, StageTimer, banners de
 timed_command) se emite a stderr; stdout queda reservado para datos.
 """
 
@@ -267,7 +267,7 @@ class TestSpinner:
         """El spinner activo vive en un ContextVar, no en un global compartido:
         un spinner activo en el hilo principal no se filtra a otro hilo, que ve
         su propio contexto (default None). Este aislamiento es justo lo que un
-        global mutable de módulo no daba y es la razón del refactor de S2-11."""
+        global mutable de módulo no daba y es la razón del refactor."""
         import threading
 
         seen_in_worker = {}

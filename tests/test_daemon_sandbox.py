@@ -1,4 +1,4 @@
-"""Tests aislados del límite de seguridad del sandbox del daemon (S3-02).
+"""Tests aislados del límite de seguridad del sandbox del daemon.
 
 Cubre como unidades, sin el stack FastAPI completo:
 - `voices.allowed_audio_dirs()` y `voices.daemon_session_dir()` (fuente de la
@@ -59,7 +59,7 @@ class TestAllowedAudioDirs:
 
         # El tempdir compartido general NO entra en la frontera: acotarlo evita
         # que cualquier proceso local plante un .wav en %TEMP% para que el
-        # daemon lo lea (WARNING-02).
+        # daemon lo lea.
         assert tempfile.gettempdir() not in voices.allowed_audio_dirs()
 
     def test_daemon_session_dir_is_namespaced(self):
@@ -116,7 +116,7 @@ class TestValidateAudioPath:
         outside_wav.write_bytes(_valid_wav_bytes())
 
         # Symlink DENTRO de allowed_dirs que apunta a un archivo FUERA: el
-        # realpath debe resolverlo fuera y rechazarlo (contención WARNING-02).
+        # realpath debe resolverlo fuera y rechazarlo (contención).
         link = allowed / "escape.wav"
         link.symlink_to(outside_wav)
 

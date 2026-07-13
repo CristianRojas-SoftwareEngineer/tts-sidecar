@@ -38,7 +38,7 @@ def check_dependencies():
 
     La instalación del lockfile en sí (existencia, pip --require-hashes,
     manejo de timeout/fallo) vive en build_utils.install_lockfile_dependencies,
-    fuente única compartida con build_windows.py y build_linux.py (S2-06).
+    fuente única compartida con build_windows.py y build_linux.py.
     """
     check_pyinstaller()
     install_lockfile_dependencies(PROJECT_ROOT / "requirements-lock.txt")
@@ -48,7 +48,7 @@ def check_dependencies():
         # pero doctor/setup/devices enumeran dispositivos con sounddevice
         # (audio.py). Sin ella en el bundle, todo Mac congelado reportaría
         # FAIL de audio. check_sounddevice es fuente única compartida con
-        # build_linux.py (S2-06).
+        # build_linux.py.
         check_sounddevice()
 
         # create-dmg es un script de shell (Homebrew), no un paquete de
@@ -318,7 +318,7 @@ fi
 def _minimum_system_version():
     """Deriva el mínimo de macOS soportado del propio toolchain de build.
 
-    N-07: un literal fijo (p.ej. "12.0") se desincroniza en silencio del SDK
+    Un literal fijo (p.ej. "12.0") se desincroniza en silencio del SDK
     real con el que pyenv compila el CPython empaquetado — un usuario en esa
     versión declarada instalaría un bundle que en realidad no arranca en su
     sistema. `MACOSX_DEPLOYMENT_TARGET` es la fuente de verdad: es el mismo

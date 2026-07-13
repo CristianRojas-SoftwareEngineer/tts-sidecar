@@ -1,7 +1,7 @@
 """
 Resolución del compute backend (cuda/mps/cpu) y clave de caché de instancias.
 
-Extraído de `ChatterboxEngine` (S2-10) para desacoplar la lógica de selección
+Extraído de `ChatterboxEngine` para desacoplar la lógica de selección
 de backend y la construcción de la clave de caché compartida con el daemon
 (`daemon/run.py`), dejando al engine como façade de síntesis.
 """

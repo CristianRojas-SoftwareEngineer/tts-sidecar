@@ -92,7 +92,7 @@ def check_dependencies():
 
     La instalación del lockfile en sí (existencia, pip --require-hashes,
     manejo de timeout/fallo) vive en build_utils.install_lockfile_dependencies,
-    fuente única compartida con build_linux.py y build_macos.py (S2-06).
+    fuente única compartida con build_linux.py y build_macos.py.
     """
     check_pyinstaller()
     install_lockfile_dependencies(PROJECT_ROOT / "requirements-lock.txt")

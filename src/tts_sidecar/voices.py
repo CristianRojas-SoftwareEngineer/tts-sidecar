@@ -32,7 +32,7 @@ def _validate_voice_name(name: str) -> str:
     eliminando la clase de escapes de ruta (p. ej. `voice remove --name ..`
     resolvería al padre del registro y lo borraría).
 
-    SUGGESTION-06: Normaliza a minúsculas para evitar colisiones en filesystems
+    Normaliza a minúsculas para evitar colisiones en filesystems
     case-insensitive (macOS APFS, Docker volumes sobre NTFS, etc.). La defensa
     anti-escape usa realpath así que el directorio real siempre queda dentro del registro.
     """
@@ -76,7 +76,7 @@ def ensure_daemon_session_dir() -> str:
 def allowed_audio_dirs() -> list[str]:
     """Directorios desde los que el daemon puede leer audio de entrada.
 
-    Usado por `/synthesize` (WARNING-02) para acotar `voice_audio`/`speech_audio`
+    Usado por `/synthesize` para acotar `voice_audio`/`speech_audio`
     a rutas confiables: el registro de voces (usuario y fábrica) y un subdirectorio
     namespaced propio bajo el tempdir del SO (`<tempdir>/tts-sidecar/`), de donde
     los clientes IPC pueden preparar audio de sesión. NO se permite el tempdir
@@ -104,7 +104,7 @@ def _is_symlink(path: str) -> bool:
     `os.path.islink` inspecciona solo el segmento nombrado (no sus ancestros),
     de modo que un enlace en `registry/<nombre>` o en `reference.wav` se detecta
     sin recorrer el árbol ni rechazar raíces legítimas que el usuario haya
-    enlazado (p. ej. `data_root` mismo). S1-17: es portable a Windows, a
+    enlazado (p. ej. `data_root` mismo). Es portable a Windows, a
     diferencia de `O_NOFOLLOW` (POSIX).
     """
     return os.path.islink(path)
@@ -114,7 +114,7 @@ def _is_valid_voice_dir(candidate: str) -> bool:
     """Una voz es válida solo con sus dos audios: reference.wav (timbre) y
     speech.wav (conditioning), igual que exige `voice add`.
 
-    S1-17: cualquier componente symlink (el directorio de la voz o sus dos
+    Cualquier componente symlink (el directorio de la voz o sus dos
     `.wav`) la hace inválida, para que `list_voices` y `voice_paths` coincidan
     en rechazarla — un symlink dentro del registro no puede cargar un `.wav`
     arbitrario del atacante. La defensa en profundidad de escape ya vive en
@@ -205,7 +205,7 @@ def register_voice_files(
 
     target = voice_dir(name)
     os.makedirs(target, exist_ok=True)
-    # S1-17: ni el directorio destino ni los dos WAV pueden ser symlinks;
+    # Ni el directorio destino ni los dos WAV pueden ser symlinks;
     # si lo fueran, copy2 escribiría *a través* del enlace (y voice_paths
     # ya los rechaza al leer). Se rechaza antes de tocar el filesystem.
     if _is_symlink(target):

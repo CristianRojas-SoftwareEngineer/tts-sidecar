@@ -24,7 +24,7 @@ MAX_TEXT_LENGTH = 5000
 # Tope de longitud para las rutas de audio: por encima del límite práctico de
 # ruta en los tres SO soportados (Windows MAX_PATH extendido, Linux/macOS
 # PATH_MAX), evita payloads desproporcionados antes de que lleguen a la
-# validación de directorio permitido de /synthesize (SUGGESTION-01).
+# validación de directorio permitido de /synthesize.
 MAX_AUDIO_PATH_LENGTH = 4096
 
 

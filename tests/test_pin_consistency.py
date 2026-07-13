@@ -1,4 +1,4 @@
-"""Tests de consistencia de pines de versión y del slug del repo (S2-07).
+"""Tests de consistencia de pines de versión y del slug del repo.
 
 Fuentes únicas (diseño mixto YAML+Python):
   - **Pines de entorno-CI (Python, pytest)**: pipeline parameters en

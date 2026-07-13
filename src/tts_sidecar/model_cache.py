@@ -20,7 +20,7 @@ MODELS = {
 # language pack es-mx-latam no incluye.
 BASE_MODEL_REPO = "ResembleAI/chatterbox"
 
-# Revisiones fijadas de los repos del modelo (R-15): commit hash de HuggingFace
+# Revisiones fijadas de los repos del modelo: commit hash de HuggingFace
 # auditado por release. 'setup' descarga exactamente estas revisiones y la
 # detección de caché valida contra su snapshot, de modo que un push posterior
 # (malicioso o accidental) al repo del modelo no se propaga a los usuarios.
@@ -70,7 +70,7 @@ def _safetensors_header_ok(path: Path) -> bool:
     el tamaño del propio archivo: ambos casos se detectan aquí sin parsear JSON.
 
     Devuelve True si el header-length está en el rango (0, tamaño_del_archivo). No
-    es una validación criptográfica (no hay SHA) pero cubre el escenario R-04:
+    es una validación criptográfica (no hay SHA) pero cubre el escenario de
     caché truncada que pasa el chequeo de existencia y revienta al cargar.
     """
     try:
@@ -94,7 +94,7 @@ def _resolve_cached_snapshot(
     """
     Resuelve el snapshot vigente de un modelo en la caché de HuggingFace.
 
-    Con una revisión fijada (R-15) resuelve exclusivamente snapshots/<revision>:
+    Con una revisión fijada resuelve exclusivamente snapshots/<revision>:
     un snapshot de cualquier otra revisión no cuenta como caché válida. Sin
     revisión, prefiere la apuntada por refs/main (la que huggingface_hub
     considera actual); si el ref no existe o apunta a un snapshot ausente, cae
@@ -129,15 +129,15 @@ def is_ve_cached(lang_snapshot: Optional[Path] = None) -> bool:
     en el snapshot cacheado del modelo base (BASE_MODEL_REPO): este chequeo
     replica exactamente esa resolución sin disparar descargas.
     """
-    # R-07: existencia + validación de header, igual que los otros checkpoints;
+    # existencia + validación de header, igual que los otros checkpoints;
     # un ve.safetensors truncado por una descarga a medias pasaba el .exists()
     # y reventaba con un error críptico en el primer speak.
     if lang_snapshot is not None:
         ve = lang_snapshot / "ve.safetensors"
         if ve.exists() and _safetensors_header_ok(ve):
             return True
-    # La resolución del repo base honra la revisión fijada (cierre del hueco
-    # residual de R-06): un ve.safetensors de otra revisión no cuenta como
+    # La resolución del repo base honra la revisión fijada:
+    # un ve.safetensors de otra revisión no cuenta como
     # caché válida, igual que 'setup' lo descarga con revision=BASE_MODEL_REVISION.
     base = _resolve_cached_snapshot(
         hub_cache_path() / cache_folder_for(BASE_MODEL_REPO),
@@ -158,7 +158,7 @@ def is_model_cached(model: str = "es-mx-latam") -> bool:
     """
     model_name = MODELS.get(model, model)
 
-    # Revisión fijada del modelo (R-15): acepta tanto el alias como el repo id.
+    # Revisión fijada del modelo: acepta tanto el alias como el repo id.
     revision = MODEL_REVISIONS.get(model)
     if revision is None:
         for alias, repo in MODELS.items():
@@ -176,12 +176,12 @@ def is_model_cached(model: str = "es-mx-latam") -> bool:
     # es-mx-latam exige el checkpoint del language-pack más el Voice Encoder
     # (ve.safetensors, compartido con el modelo base): sin él, el primer speak
     # dispararía una descarga, rompiendo la promesa «100 % offline tras setup».
-    # Además se valida la integridad del header safetensors (R-04): un .pt/.st
+    # Además se valida la integridad del header safetensors: un .pt/.st
     # truncado por una descarga a medias pasa el .exists() pero revienta al
     # cargar, así que se reporta como no cacheado para que 'doctor' lo marque
     # FAIL y remita a 'setup' (re-descarga limpia).
     if model == "es-mx-latam" or "es-mx-latam" in model_name:
-        # R-07: el engine carga tres checkpoints (T3, S3Gen y Voice Encoder);
+        # El engine carga tres checkpoints (T3, S3Gen y Voice Encoder);
         # los tres se validan con el mismo chequeo ligero de header, de modo
         # que un truncamiento en cualquiera se reporte como «no cacheado».
         for filename in ("t3_es_mx_latam.safetensors", "s3gen_v3.safetensors"):

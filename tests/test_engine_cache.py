@@ -21,13 +21,13 @@ from tts_sidecar.model_cache import (
 
 ES_MX_FOLDER = "models--ResembleAI--Chatterbox-Multilingual-es-mx-latam"
 
-# Revisión fijada del language pack (R-15): is_model_cached solo considera
+# Revisión fijada del language pack: is_model_cached solo considera
 # válido el snapshot de esta revisión, así que las cachés sintéticas de estos
 # tests deben crearse bajo ese nombre de snapshot.
 PINNED_REV = MODEL_REVISIONS["es-mx-latam"]
 
 # Revisión fijada del repo base (fuente de ve.safetensors): la resolución del
-# snapshot base en is_ve_cached también la honra (cierre del hueco residual de R-06).
+# snapshot base en is_ve_cached también la honra (cierre del hueco residual).
 BASE_PINNED_REV = BASE_MODEL_REVISION
 
 # Contenido safetensors sintético con header válido: header_length=100 (u64 LE)
@@ -88,10 +88,10 @@ class TestCorruptConditionals:
         eng.compute_backend = "cpu"
         eng._conds_cache_key = None
         eng._active_progress_cb = None
-        # Tras la extracción de ConditionalsPreparer (S3-01), el engine delega la
+        # Tras la extracción de ConditionalsPreparer, el engine delega la
         # carga de conditionals a este colaborador; lo inyectamos igual que __init__.
         eng._conditionals_prep = ConditionalsPreparer()
-        # S2-10: el flujo de síntesis vive en el orquestador; el engine.speak es
+        # El flujo de síntesis vive en el orquestador; el engine.speak es
         # un façade que delega en él. Lo cableamos igual que __init__.
         eng._audio_writer = AudioWriter()
         eng._orchestrator = SynthesisOrchestrator(
@@ -255,7 +255,7 @@ def _hf_env(**env):
 
 
 class TestDownloadModelHonorsPin:
-    """R-03: la resolución de carga del engine honra la revisión fijada, igual
+    """La resolución de carga del engine honra la revisión fijada, igual
     que la detección de caché: un snapshot de otra revisión no se usa aunque
     refs/main lo prefiera (antes la carga caía al fallback refs/main→mtime)."""
 
@@ -281,7 +281,7 @@ class TestDownloadModelHonorsPin:
         (pinned / "t3_es_mx_latam.safetensors").write_bytes(VALID_SAFETENSORS)
 
         # Snapshot de OTRA revisión, más reciente y apuntado por refs/main:
-        # sin honrar el pin, la carga lo preferiría (asimetría de R-03).
+        # sin honrar el pin, la carga lo preferiría (asimetría).
         other = _make_snapshot(model_dir, "otra_revision", mtime=time.time())
         (other / "t3_es_mx_latam.safetensors").write_bytes(VALID_SAFETENSORS)
         _set_ref_main(model_dir, "otra_revision")
@@ -325,8 +325,8 @@ class TestIsModelCached:
         model_dir = hub / ES_MX_FOLDER
         snap = _make_snapshot(model_dir, PINNED_REV)
         _set_ref_main(model_dir, PINNED_REV)
-        # Antes de R-04 bastaba con `b"\x00"` (pasaba el .exists()): ahora se
-        # valida la integridad del header de los tres checkpoints (R-07).
+        # Antes bastaba con `b"\x00"` (pasaba el .exists()): ahora se
+        # valida la integridad del header de los tres checkpoints.
         (snap / "t3_es_mx_latam.safetensors").write_bytes(VALID_SAFETENSORS)
         (snap / "s3gen_v3.safetensors").write_bytes(VALID_SAFETENSORS)
         (snap / "ve.safetensors").write_bytes(VALID_SAFETENSORS)
@@ -360,9 +360,9 @@ class TestIsModelCached:
         assert is_model_cached("es-mx-latam") is True
 
     def test_ve_in_base_of_other_revision_returns_false(self, tmp_path, monkeypatch):
-        """Cierre del hueco residual de R-06: un ve.safetensors bajo un snapshot
-        del repo base de otra revisión no cuenta como caché válida — si un
-        release bumpea BASE_MODEL_REVISION, 'setup' debe re-descargar el VE."""
+        """ve.safetensors bajo un snapshot del repo base de otra revisión no cuenta
+        como caché válida — si un release bumpea BASE_MODEL_REVISION, 'setup' debe
+        re-descargar el VE."""
         hub = self._fake_hub(tmp_path, monkeypatch)
         model_dir = hub / ES_MX_FOLDER
         snap = _make_snapshot(model_dir, PINNED_REV)
@@ -377,7 +377,7 @@ class TestIsModelCached:
         assert is_model_cached("es-mx-latam") is False
 
     def test_snapshot_of_other_revision_returns_false(self, tmp_path, monkeypatch):
-        """R-15: un snapshot completo pero de una revisión distinta a la fijada
+        """Un snapshot completo pero de una revisión distinta a la fijada
         no cuenta como caché válida, aunque refs/main apunte a él."""
         hub = self._fake_hub(tmp_path, monkeypatch)
         model_dir = hub / ES_MX_FOLDER
@@ -389,7 +389,7 @@ class TestIsModelCached:
         assert is_model_cached("es-mx-latam") is False
 
     def test_snapshot_of_pinned_revision_returns_true(self, tmp_path, monkeypatch):
-        """R-15: el snapshot de la revisión fijada valida incluso sin refs/main
+        """El snapshot de la revisión fijada valida incluso sin refs/main
         (hf_hub_download con commit hash no crea refs)."""
         hub = self._fake_hub(tmp_path, monkeypatch)
         model_dir = hub / ES_MX_FOLDER
@@ -400,7 +400,7 @@ class TestIsModelCached:
         assert is_model_cached("es-mx-latam") is True
 
     def test_safetensors_header_truncated_returns_false(self, tmp_path, monkeypatch):
-        """R-04: un t3_es_mx_latam.safetensors truncado (header-length inválido)
+        """Un t3_es_mx_latam.safetensors truncado (header-length inválido)
         debe tratarse como caché corrupta: 'doctor' lo marcará FAIL y remitirá
         a 'setup' para una re-descarga limpia."""
         from tts_sidecar.model_cache import _safetensors_header_ok
@@ -435,7 +435,7 @@ class TestIsModelCached:
         assert is_model_cached("es-mx-latam") is True
 
     def test_s3gen_truncated_returns_false(self, tmp_path, monkeypatch):
-        """R-07: un s3gen_v3.safetensors truncado se reporta como no cacheado,
+        """Un s3gen_v3.safetensors truncado se reporta como no cacheado,
         igual que el T3 (el engine carga los tres checkpoints)."""
         hub = self._fake_hub(tmp_path, monkeypatch)
         model_dir = hub / ES_MX_FOLDER
@@ -447,7 +447,7 @@ class TestIsModelCached:
         assert is_model_cached("es-mx-latam") is False
 
     def test_s3gen_missing_returns_false(self, tmp_path, monkeypatch):
-        """R-07: sin s3gen_v3.safetensors el modelo no está completo."""
+        """Sin s3gen_v3.safetensors el modelo no está completo."""
         hub = self._fake_hub(tmp_path, monkeypatch)
         model_dir = hub / ES_MX_FOLDER
         snap = _make_snapshot(model_dir, PINNED_REV)
@@ -457,7 +457,7 @@ class TestIsModelCached:
         assert is_model_cached("es-mx-latam") is False
 
     def test_ve_truncated_returns_false(self, tmp_path, monkeypatch):
-        """R-07: un ve.safetensors truncado ya no pasa por mera existencia."""
+        """Un ve.safetensors truncado ya no pasa por mera existencia."""
         hub = self._fake_hub(tmp_path, monkeypatch)
         model_dir = hub / ES_MX_FOLDER
         snap = _make_snapshot(model_dir, PINNED_REV)

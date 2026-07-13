@@ -1,7 +1,7 @@
 """
 Cómputo, precomputación y carga de conditionals de Chatterbox.
 
-Colaborador extraído de `engine.py` (ver docs/PROJECT-REVIEW.md — S3-01 / S2-10)
+Colaborador extraído de `engine.py`
 para aislar la preparación de conditionals del estado interno del engine
 (`self._tts`, `self.compute_backend`) y hacerla testeable por inyección,
 sin cargar el modelo real. Las funciones reciben `tts`/`compute_backend` como

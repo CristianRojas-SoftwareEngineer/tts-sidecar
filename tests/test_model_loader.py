@@ -1,5 +1,5 @@
 """
-Tests deterministas de `ModelLoader` (extracción de engine.py — S3-01).
+Tests deterministas de `ModelLoader`.
 
 Cubren el routing es-mx-latam vs multilingüe y el invariante
 `_require_voice_prompt`, sin cargar pesos reales ni disparar descargas de red:

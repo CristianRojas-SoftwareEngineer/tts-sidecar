@@ -2,7 +2,7 @@
 # sus dependencias transitivas) al mismo pin que PYINSTALLER_PIN en
 # scripts/build_utils.py, con hashes para instalación reproducible
 # (--require-hashes). Runtime sigue en requirements-lock.txt /
-# requirements-lock-linux-cpu.txt (S2-09); este archivo cubre solo lo que
+# requirements-lock-linux-cpu.txt; este archivo cubre solo lo que
 # PyInstaller necesita para empaquetar, sin mezclarlo con las dependencias del
 # producto.
 #

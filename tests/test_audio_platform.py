@@ -1,4 +1,4 @@
-"""Tests de los players de audio específicos de plataforma (S2-17).
+"""Tests de los players de audio específicos de plataforma .
 
 Windows (winsound) y macOS (afplay/subprocess) solo se ejercitaban de forma
 indirecta o no se ejercitaban en absoluto: tests/test_audio.py cubre

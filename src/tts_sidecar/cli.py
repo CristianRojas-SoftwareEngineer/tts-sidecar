@@ -24,7 +24,7 @@ import sys
 # La capa única de bootstrap (UTF-8, warnings, env vars, mock de pkg_resources)
 # ya NO corre como efecto colateral de importar este módulo: la invoca main()
 # como su primera acción. Así importar `tts_sidecar.cli` deja de imponer que
-# todo import posterior ocurra tras un apply() implícito (S2-14). Los imports
+# todo import posterior ocurra tras un apply() implícito. Los imports
 # de módulo de abajo son livianos (stdlib + timing) y no arrastran chatterbox;
 # las dependencias pesadas se importan de forma perezosa dentro de cada comando.
 from . import bootstrap
@@ -55,10 +55,10 @@ SCHEMA_VERSION = "1"
 
 # Umbral mínimo de espacio libre en disco para descargar el modelo en 'setup'.
 # El language pack + Voice Encoder ocupan varios cientos de MB; 2 GB deja margen
-# para la descarga, la descompresión y la caché temporal de HuggingFace (R-14).
+# para la descarga, la descompresión y la caché temporal de HuggingFace.
 MIN_FREE_DISK_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
 
-# RAM recomendada para una síntesis fluida (chequeo advisory de 'doctor', R-18).
+# RAM recomendada para una síntesis fluida (chequeo advisory de 'doctor').
 # Por debajo de este umbral la inferencia en CPU funciona pero puede paginar en
 # textos largos; es un WARN, no un FAIL (no altera el exit code).
 RECOMMENDED_RAM_BYTES = 8 * 1024 * 1024 * 1024  # 8 GB
@@ -95,7 +95,7 @@ def _resolve_voice_paths(args):
 def _emit_audio(audio_bytes, output):
     """Reproduce los bytes de audio, o los escribe a un archivo si se da una ruta de salida."""
     if output:
-        # N-12 (S2-13): el cliente daemon escribe los bytes recibidos en su
+        # El cliente daemon escribe los bytes recibidos en su
         # propio filesystem; el helper compartido ensure_parent_dir (paths)
         # crea el directorio padre, igual que AudioWriter.write en el servidor.
         ensure_parent_dir(output)
@@ -113,13 +113,13 @@ def _emit_audio(audio_bytes, output):
 def _paths_allowed_by_daemon(voice_audio, speech_audio) -> bool:
     """Replica la sandbox de rutas del daemon (server.py) en el cliente.
 
-    N-02: permite detectar ANTES del despacho si --voice-audio/--speech-audio
+    Permite detectar ANTES del despacho si --voice-audio/--speech-audio
     quedarán fuera de los directorios que la sandbox del servidor acepta
     (voices.allowed_audio_dirs()), evitando el 400 opaco «la ruta no está en
     un directorio permitido». No relaja ni duplica la sandbox del servidor:
     solo la anticipa para dar un mensaje accionable en el cliente. La
     *existencia/extensión* del archivo la anticipa en cambio la función hermana
-    `_check_audio_paths_present` (N-19, S1-04), dejando aquí solo la contención
+    `_check_audio_paths_present`, dejando aquí solo la contención
     de la sandbox como responsabilidad.
     """
     from . import voices
@@ -139,13 +139,13 @@ def _paths_allowed_by_daemon(voice_audio, speech_audio) -> bool:
 def _check_audio_paths_present(voice_audio, speech_audio) -> str | None:
     """Valida existencia/extensión de los audios en el cliente (UX, no seguridad).
 
-    N-19 (S1-04, opción A): hermana de `_paths_allowed_by_daemon`; responde una
+    Hermana de `_paths_allowed_by_daemon`; responde una
     pregunta distinta —«¿el archivo existe y es .wav?»— y no colapsa ambas en un
-    solo booleano (la contención sigue siendo responsabilidad de N-02). Se invoca
+    solo booleano (la contención sigue siendo responsabilidad de la sandbox). Se invoca
     centralmente en `cmd_speak` antes de cargar el modelo (directo) o del
     round-trip (daemon), fallando temprano y con mensaje uniforme en ambos modos.
 
-    WARNING-02: este chequeo es de UX y **no reemplaza** la frontera de seguridad
+    Este chequeo es de UX y **no reemplaza** la frontera de seguridad
     del servidor. `server.py._validate_audio_path` sigue revalidando con un único
     `realpath` (cierra la ventana TOCTOU de symlink-swap); aquí solo anticipamos
     el error para ahorrar latencia y dar un mensaje accionable al cliente.
@@ -164,7 +164,7 @@ def _check_audio_paths_present(voice_audio, speech_audio) -> str | None:
 
 
 def _warn_compute_backend_ignored(args):
-    """N-10: avisa si --compute-backend se ignora porque la síntesis va vía daemon.
+    """Avisa si --compute-backend se ignora porque la síntesis va vía daemon.
 
     El daemon fija su compute backend una sola vez al arrancar (ver
     docs/DAEMON-MODE.md); un --compute-backend explícito distinto de "auto" en
@@ -226,7 +226,7 @@ def cmd_speak(args):
     """Sintetiza texto; reproduce el audio, o lo guarda a un archivo si se da --output."""
 
     try:
-        # R-02: --daemon y --no-daemon son contradictorios; un consumidor
+        # --daemon y --no-daemon son contradictorios; un consumidor
         # programático espera un diagnóstico, no que uno gane en silencio.
         # Validación manual (no add_mutually_exclusive_group): el exit 2 nativo
         # de argparse colisionaría con EXIT_MODEL_MISSING del contrato congelado.
@@ -238,7 +238,7 @@ def cmd_speak(args):
             print("Error: --text no puede estar vacío.", file=sys.stderr)
             sys.exit(EXIT_INVALID_INPUT)
 
-        # N-11: límite único de texto validado en el cliente antes de cualquier
+        # Límite único de texto validado en el cliente antes de cualquier
         # despacho, con el mismo exit code (4) sin importar la ruta (directo o
         # daemon). El límite del daemon (protocol.MAX_TEXT_LENGTH) queda como
         # defensa en profundidad, no como la única fuente de la validación.
@@ -254,7 +254,7 @@ def cmd_speak(args):
 
         # Advertencia no bloqueante para textos muy largos: el T3 topa a
         # MAX_NEW_TOKENS=500, así que una entrada larga puede truncarse en la
-        # síntesis. Se avisa por stderr (sin abortar) sugiriendo fragmentar (R-03).
+        # síntesis. Se avisa por stderr (sin abortar) sugiriendo fragmentar.
         if len(args.text) > 2000:
             print(
                 f"Advertencia: el texto tiene {len(args.text)} caracteres; los textos "
@@ -270,10 +270,10 @@ def cmd_speak(args):
         # Resuelve las rutas de audio de la voz SIN cargar el modelo.
         voice_audio, speech_audio = _resolve_voice_paths(args)
 
-        # N-19 (S1-04, opción A): validación central de existencia/extensión de
+        # Validación central de existencia/extensión de
         # audio en el cliente, antes de cargar el modelo (directo) o del round-trip
         # (daemon). Falla temprano y con mensaje uniforme en ambos modos; la
-        # frontera de seguridad queda en el servidor (WARNING-02), que revalida.
+        # frontera de seguridad queda en el servidor, que revalida.
         audio_problem = _check_audio_paths_present(voice_audio, speech_audio)
         if audio_problem is not None:
             print(f"Error: {audio_problem}.", file=sys.stderr)
@@ -370,7 +370,7 @@ def cmd_voice_add(args):
 
     Registro ligero: valida y copia los audios sin instanciar el motor de
     inferencia; la precomputación de conditionals se difiere al primer
-    `speak --voice <nombre>`. El registro es libre de modelo (S2-15, opción A):
+    `speak --voice <nombre>`. El registro es libre de modelo:
     no exige `setup` previo, porque validar y copiar audio no necesita el
     checkpoint; la descarga sigue siendo responsabilidad exclusiva de `setup`
     para la síntesis.
@@ -435,7 +435,7 @@ def cmd_voice_remove(args):
             sys.exit(EXIT_NOT_FOUND)
 
     except (PermissionError, OSError) as e:
-        # WARNING-01: en Windows, shutil.rmtree falla con PermissionError si
+        # En Windows, shutil.rmtree falla con PermissionError si
         # reference.wav/speech.wav están abiertos por otro proceso (p. ej. el
         # daemon o un reproductor). Sin esta rama, el except genérico de abajo
         # reportaba el mismo mensaje que un nombre de voz inválido.
@@ -479,7 +479,7 @@ def cmd_voice_list(args):
             print("  tts-sidecar voice add --name mi_voz --reference timbre.wav --speech habla.wav")
 
     except FileNotFoundError as e:
-        # R-01: listar voces es una operación pura de filesystem; remitir a
+        # Listar voces es una operación pura de filesystem; remitir a
         # 'setup' (provisión del modelo) no resuelve un directorio de voces
         # ilegible. Se orienta al directorio real implicado.
         print(f"Error: {e}", file=sys.stderr)
@@ -543,8 +543,7 @@ def _environment_checks() -> list[tuple[str, str, str]]:
     # enumeración real de audio.py (no solo la disponibilidad del import), de
     # modo que el chequeo refleje el estado efectivo del subsistema: un host
     # sin audio real (sesiones RDP/headless, sin backend ALSA/CoreAudio)
-    # importa la librería sin problema pero falla al enumerar en runtime
-    # (WARNING-03).
+    # importa la librería sin problema pero falla al enumerar en runtime.
     try:
         from .audio import get_audio_devices_with_status
         devices, degraded = get_audio_devices_with_status()
@@ -639,7 +638,7 @@ def cmd_doctor(args):
     else:
         checks.append(("SKIP", "Voices directory", "sin voces de usuario aún (opcional)"))
 
-    # Chequea la RAM total (advisory, R-18): por debajo del umbral recomendado la
+    # Chequea la RAM total (advisory): por debajo del umbral recomendado la
     # síntesis funciona pero puede paginar en textos largos. Es un WARN, no un
     # FAIL: no cuenta como chequeo fallido ni altera el exit code.
     try:
@@ -1246,7 +1245,7 @@ def cmd_setup(args):
     model_dir = str(hub_cache_path())
 
     # --force-update: borra los snapshots del modelo antes del gate para forzar
-    # una re-descarga limpia (R-13). Borrado quirúrgico acotado a las carpetas
+    # una re-descarga limpia. Borrado quirúrgico acotado a las carpetas
     # models--ResembleAI--* del proyecto, misma defensa en profundidad que cleanup.
     if getattr(args, "force_update", False):
         import shutil
@@ -1305,7 +1304,7 @@ def cmd_setup(args):
             _emit_setup_json(already_cached=True, downloaded=False)
             return
 
-        # Pre-chequeo de espacio en disco antes de descargar (R-14): el modelo
+        # Pre-chequeo de espacio en disco antes de descargar: el modelo
         # pesa varios cientos de MB; con menos de 2 GB libres la descarga puede
         # fallar a medias y dejar una caché truncada. Se aborta antes de empezar.
         # disk_usage exige una ruta existente: en una máquina limpia la caché aún
@@ -1328,10 +1327,10 @@ def cmd_setup(args):
         print("\nDescargando el modelo es-mx-latam...", file=sys.stderr)
         print("(Puede tardar varios minutos en la primera ejecución)\n", file=sys.stderr)
 
-        # N-17: snapshot_download es solo red/disco, sin cargar el modelo en RAM
+        # snapshot_download es solo red/disco, sin cargar el modelo en RAM
         # (~2 GB) como hacía ChatterboxEngine.get_instance; la carga real queda
         # para doctor/el primer 'speak', que ya validan el header safetensors.
-        # revision= fijada (R-15): la descarga es determinista y un push
+        # revision fijada: la descarga es determinista y un push
         # posterior al repo del modelo no se propaga a los usuarios.
         from huggingface_hub import snapshot_download
         from .model_cache import MODELS, MODEL_REVISIONS
@@ -1466,7 +1465,7 @@ def cmd_cleanup(args):
         try:
             respuesta = input("\n¿Eliminar estas rutas? (s/n): ").strip().lower()
         except EOFError:
-            # N-03: stdin cerrado (invocado vía subprocess sin --yes) no debe
+            # stdin cerrado (invocado vía subprocess sin --yes) no debe
             # producir un traceback crudo indistinguible de un error real.
             print("\nCancelado: no se borró nada.")
             return CleanupResult([], True)

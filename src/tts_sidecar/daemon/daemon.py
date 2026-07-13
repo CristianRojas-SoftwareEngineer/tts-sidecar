@@ -45,7 +45,7 @@ class DaemonManager:
         """
         Inicia el daemon. Idempotente: si ya está corriendo, devuelve True.
 
-        La ventana de carrera del doble arranque (antes SUGGESTION-03) se cierra
+        La ventana de carrera del doble arranque se cierra
         con un lock de arranque atómico: `_acquire_start_lock()` crea el pidfile
         con `os.open(O_CREAT|O_EXCL)` antes de lanzar el subproceso, de modo que
         dos `start()` concurrentes no pueden lanzar dos daemons —el segundo ve el
@@ -145,7 +145,7 @@ class DaemonManager:
                 self._kill_pid(pid)
                 print("Daemon no está corriendo", file=sys.stderr)
                 return True
-            # R-05: durante la ventana de arranque (carga del modelo, 30-90 s)
+            # durante la ventana de arranque (carga del modelo, 30-90 s)
             # el puerto aún está cerrado y ni el health check ni el escaneo de
             # puerto ven al daemon; reportar «no está corriendo» sería un éxito
             # falso.

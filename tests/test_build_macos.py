@@ -1,4 +1,4 @@
-"""Tests estáticos de los templates generados por build_macos.py (R-24).
+"""Tests estáticos de los templates generados por build_macos.py.
 
 Aserciones de cadena sobre las funciones puras: _path_install_script,
 _path_uninstall_script, _info_plist_content.
@@ -19,7 +19,7 @@ from build_macos import (
 
 
 def test_info_plist_version_and_lsminimum():
-    """Info.plist debe llevar la versión y el LSMinimumSystemVersion derivado del toolchain (N-07)."""
+    """Info.plist debe llevar la versión y el LSMinimumSystemVersion derivado del toolchain ."""
     plist = _info_plist_content("9.9.9", icon_name="tts-sidecar")
     assert "<key>CFBundleShortVersionString</key>" in plist
     assert "<string>9.9.9</string>" in plist
@@ -29,7 +29,7 @@ def test_info_plist_version_and_lsminimum():
 
 
 def test_minimum_system_version_uses_deployment_target(monkeypatch):
-    """N-07: prioriza MACOSX_DEPLOYMENT_TARGET; cae a mac_ver() si falta."""
+    """Prioriza MACOSX_DEPLOYMENT_TARGET; cae a mac_ver() si falta."""
     import build_macos
 
     monkeypatch.setattr(

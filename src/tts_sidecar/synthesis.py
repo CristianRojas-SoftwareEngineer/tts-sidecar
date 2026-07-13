@@ -1,5 +1,5 @@
 """
-Orquestación del flujo de síntesis (S2-10).
+Orquestación del flujo de síntesis.
 
 `SynthesisOrchestrator` es dueño del flujo `speak` y del ciclo de vida de
 `engine._active_progress_cb`, sacando la orquestación stateful del God object

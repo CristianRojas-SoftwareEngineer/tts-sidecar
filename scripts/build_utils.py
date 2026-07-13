@@ -31,13 +31,13 @@ _PLACEHOLDER_PNG_1X1 = (
 # Timeout aplicado a los subprocesos de empaquetado de plataforma (appimagetool
 # en Linux, create-dmg en macOS) para que un empaquetador colgado no cuelgue el job
 # de CI indefinidamente; consistente con el timeout ya usado por el instalador de
-# Windows (create_installer_windows.py) (SUGGESTION-05).
+# Windows (create_installer_windows.py).
 BUILD_SUBPROCESS_TIMEOUT = 600
 
 # Timeout para el propio subprocess de PyInstaller, la etapa más larga del
 # build (9-15 min típico según la plataforma): más holgado que
 # BUILD_SUBPROCESS_TIMEOUT para no abortar una compilación legítima que
-# simplemente tarda más en un runner de CI cargado (WARNING-05).
+# simplemente tarda más en un runner de CI cargado.
 PYINSTALLER_TIMEOUT = 1800
 
 # Timeout para la generación del instalador Inno Setup (ISCC): comprimir el
@@ -51,9 +51,9 @@ INSTALLER_TIMEOUT = 1800
 # .circleci/config.yml: un build local con estas versiones produce el mismo
 # artefacto que el CI. Actualizar deliberadamente y en ambos lugares a la vez.
 # INNOSETUP_PIN es la fuente única del pin de Inno (lado Python del diseño
-# mixto de S2-07): tests/test_pin_consistency.py falla si el comando
+# mixto de los builds de Windows): tests/test_pin_consistency.py falla si el comando
 # `choco install innosetup --version=...` de config.yml diverge de esta
-# constante. PYINSTALLER_PIN alimenta requirements-lock-build.txt (S2-09).
+# constante. PYINSTALLER_PIN alimenta requirements-lock-build.txt.
 PYINSTALLER_PIN = "6.21.0"
 INNOSETUP_PIN = "6.3.3"
 
@@ -61,7 +61,7 @@ INNOSETUP_PIN = "6.3.3"
 # dependencias transitivas), separado de los lockfiles de runtime
 # (requirements-lock.txt / requirements-lock-linux-cpu.txt): PyInstaller no es
 # una dependencia del producto (no debe viajar en el wheel de PyPI), así que
-# no pertenece a pyproject.toml ni a sus lockfiles derivados (S2-09). Fija
+# no pertenece a pyproject.toml ni a sus lockfiles derivados. Fija
 # PYINSTALLER_PIN con --require-hashes para que la instalación del compilador
 # sea tan reproducible como la de las dependencias runtime; regenerar tras
 # actualizar PYINSTALLER_PIN (ver cabecera del propio archivo).
@@ -199,12 +199,11 @@ def check_pyinstaller() -> None:
     """Verifica que PyInstaller esté instalado (ofrece instalarlo si falta).
 
     Fuente única para los tres scripts de build: antes cada uno duplicaba este
-    mismo bloque de try/except (SUGGESTION-04). Criticidad required: sin el
+    mismo bloque de try/except. Criticidad required: sin el
     compilador el build no tiene sentido. La instalación manual/ofrecida usa
     PYINSTALLER_LOCKFILE (--require-hashes) en vez de `pip install
     pyinstaller==X.Y.Z` suelto, para que la versión de PyInstaller (y sus
-    dependencias transitivas) sea tan reproducible como el resto del build
-    (S2-09).
+    dependencias transitivas) sea tan reproducible como el resto del build.
     """
     with StageTimer("CheckDeps", "Verificando dependencias"):
         ensure_build_dependency(
@@ -221,7 +220,7 @@ def check_pyinstaller() -> None:
 def install_lockfile_dependencies(lockfile) -> None:
     """Instala las dependencias de runtime desde `lockfile` (--require-hashes).
 
-    Fuente única para los tres scripts de build (S2-06): antes cada uno
+    Fuente única para los tres scripts de build: antes cada uno
     duplicaba el chequeo de existencia, el mensaje de log y el try/except de
     subprocess.run con el mismo manejo de timeout/CalledProcessError. Cada
     build_*.py resuelve su propio lockfile (universal o CPU-only-linux según
@@ -253,7 +252,7 @@ def install_lockfile_dependencies(lockfile) -> None:
 def check_sounddevice() -> None:
     """Verifica que sounddevice esté instalado (dependencia del producto).
 
-    Fuente única para build_linux.py y build_macos.py (S2-06): en Linux
+    Fuente única para build_linux.py y build_macos.py: en Linux
     gobierna reproducción + enumeración de dispositivos; en macOS solo la
     enumeración (afplay reproduce). Sin pin: es dependencia de runtime
     gobernada por requirements.txt, no una herramienta de build. required:
@@ -277,7 +276,7 @@ def common_pyinstaller_args(
     extra_collect_all=(),
     extra_collect_binaries=(),
 ) -> list:
-    """Flags de PyInstaller compartidas por los tres scripts de build (SUGGESTION-04).
+    """Flags de PyInstaller compartidas por los tres scripts de build.
 
     `data_sep` es el separador de `--add-data` según el SO: ';' en Windows,
     ':' en Linux/macOS. `extra_collect_all` añade paquetes `--collect-all`
@@ -341,7 +340,7 @@ def bundle_size_mb(onedir) -> float:
     """Calcula el tamaño total en MB de un directorio de bundle (onedir de PyInstaller).
 
     Fuente única para los tres scripts de build, que antes duplicaban este
-    mismo cálculo (SUGGESTION-13).
+    mismo cálculo.
     """
     total_bytes = sum(f.stat().st_size for f in Path(onedir).rglob("*") if f.is_file())
     return total_bytes / (1024 * 1024)
@@ -385,7 +384,7 @@ def ensure_png_icon(dest_path) -> Path:
 
 
 def _generate_pillow_icon(dest_dir, filename: str, save_kwargs: dict, label: str, fallback_desc: str) -> Path:
-    """Genera un icono nativo desde LOGO_SOURCE con Pillow (S1-16).
+    """Genera un icono nativo desde LOGO_SOURCE con Pillow.
 
     Factoriza la lógica antes duplicada entre ensure_ico y ensure_icns:
     apertura del logo, creación del directorio destino, guardado con Pillow y

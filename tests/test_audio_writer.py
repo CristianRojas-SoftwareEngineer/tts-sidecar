@@ -1,4 +1,4 @@
-"""Tests para AudioWriter (S2-10): conversión a WAV y guardado a disco.
+"""Tests para AudioWriter: conversión a WAV y guardado a disco.
 
 El módulo es puro (no carga el modelo); los tests usan numpy y re-leen el WAV
 resultante con el módulo `wave` para validar la codificación PCM 16-bit mono.

@@ -1,4 +1,4 @@
-"""Tests de la capa de reproducción y enumeración de audio (SUGGESTION-03)."""
+"""Tests de la capa de reproducción y enumeración de audio."""
 
 import io
 import sys
@@ -72,7 +72,7 @@ class TestGetAudioDevicesLinuxMacOS:
     def test_non_import_error_failure_degrades_to_fallback(self, _system, caplog):
         """Un PortAudioError en tiempo de enumeración no debe crashear 'devices'.
 
-        S2-02: además de degradar, el fallo queda registrado a nivel debug con
+        Además de degradar, el fallo queda registrado a nivel debug con
         traza, en vez de tragarse en silencio.
         """
         import logging

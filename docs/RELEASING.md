@@ -3,7 +3,7 @@
 `tts-sidecar` publica sus releases de forma **automática**: al pushear un
 tag `v*`, CircleCI corre los tests, los 4 builds y el job `publish-release`, que
 recolecta los artefactos, genera `SHA256SUMS.txt` y **publica el GitHub Release
-directo** (sin borrador) sobre el tag. Sin firma de código (R-38), el cotejo de
+directo** (sin borrador) sobre el tag. Sin firma de código, el cotejo de
 checksums SHA-256 sigue siendo la cadena de verificación de integridad para el
 usuario final.
 
@@ -36,7 +36,7 @@ humano.
   una línea no participan del canal PyPI). Si cualquiera de esas puertas falla
   en el pipeline del tag, ni los builds ni `publish-pypi` llegan a ejecutarse. Correr la suite en local antes de
   taggear sigue siendo la única manera de anticipar ese resultado.
-- **Revisiones fijadas del modelo auditadas** (R-15): las constantes
+- **Revisiones fijadas del modelo auditadas**: las constantes
   `MODEL_REVISIONS` y `BASE_MODEL_REVISION` de `src/tts_sidecar/model_cache.py`
   apuntan a los commit hashes de HuggingFace que este release distribuye. Si el
   release debe incorporar una versión nueva del modelo: consultar el `sha`

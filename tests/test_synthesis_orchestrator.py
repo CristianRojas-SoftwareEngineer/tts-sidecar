@@ -1,4 +1,4 @@
-"""Tests para SynthesisOrchestrator (S2-10).
+"""Tests para SynthesisOrchestrator.
 
 Validan el flujo extraído de `ChatterboxEngine._speak_impl`: emisión de etapas,
 guardado opcional, ciclo de vida de `_active_progress_cb` (limpieza en finally,
