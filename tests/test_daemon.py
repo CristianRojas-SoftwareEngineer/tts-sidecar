@@ -9,6 +9,8 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from tts_sidecar.timing import SynthesisMetrics
+
 
 class TestServerConcurrency:
     def test_health_responds_during_synthesis(self, tmp_path, monkeypatch):
@@ -31,9 +33,9 @@ class TestServerConcurrency:
         wav.write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
         monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(tmp_path)])
 
-        old_engine = server._engine
-        server.set_engine(SlowEngine())
-        server.set_start_time(0.0)
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = SlowEngine()
+        server.app.state.daemon.start_time = 0.0
         try:
             with TestClient(server.app) as client:
                 result = {}
@@ -55,7 +57,7 @@ class TestServerConcurrency:
                 t.join(timeout=10)
                 assert result["resp"].status_code == 200
         finally:
-            server.set_engine(old_engine)
+            server.app.state.daemon.engine = old_engine
 
 
 class TestServerAdmissionControl:
@@ -82,9 +84,9 @@ class TestServerAdmissionControl:
         monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(tmp_path)])
         monkeypatch.setattr(server, "_admission_semaphore", threading.BoundedSemaphore(1))
 
-        old_engine = server._engine
-        server.set_engine(SlowEngine())
-        server.set_start_time(0.0)
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = SlowEngine()
+        server.app.state.daemon.start_time = 0.0
         try:
             with TestClient(server.app) as client:
                 result = {}
@@ -109,7 +111,7 @@ class TestServerAdmissionControl:
                 t.join(timeout=10)
                 assert result["resp"].status_code == 200
         finally:
-            server.set_engine(old_engine)
+            server.app.state.daemon.engine = old_engine
 
     def test_permit_released_after_synthesis_completes(self, tmp_path, monkeypatch):
         """Al terminar la síntesis, el permiso se reintegra y una petición posterior responde 200."""
@@ -124,13 +126,13 @@ class TestServerAdmissionControl:
         monkeypatch.setattr(server, "_admission_semaphore", threading.BoundedSemaphore(1))
 
         class FakeEngine:
-            _synthesis_timing = {}
+            _synthesis_metrics = SynthesisMetrics()
 
             def speak(self, **kwargs):
                 return b"RIFF" + b"\x00" * 40
 
-        old_engine = server._engine
-        server.set_engine(FakeEngine())
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = FakeEngine()
         try:
             with TestClient(server.app) as client:
                 first = client.post(
@@ -143,7 +145,7 @@ class TestServerAdmissionControl:
                 )
                 assert second.status_code == 200
         finally:
-            server.set_engine(old_engine)
+            server.app.state.daemon.engine = old_engine
 
     def test_503_detail_is_actionable_without_system_paths(self, tmp_path, monkeypatch):
         """El 503 de saturación lleva un detail accionable y no filtra rutas del sistema."""
@@ -166,8 +168,8 @@ class TestServerAdmissionControl:
         monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(tmp_path)])
         monkeypatch.setattr(server, "_admission_semaphore", threading.BoundedSemaphore(1))
 
-        old_engine = server._engine
-        server.set_engine(SlowEngine())
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = SlowEngine()
         try:
             with TestClient(server.app) as client:
                 def synth():
@@ -190,7 +192,7 @@ class TestServerAdmissionControl:
                 release.set()
                 t.join(timeout=10)
         finally:
-            server.set_engine(old_engine)
+            server.app.state.daemon.engine = old_engine
 
 
 class TestSynthesizeAllowedPaths:
@@ -208,8 +210,8 @@ class TestSynthesizeAllowedPaths:
 
         monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(tmp_path / "voices_permitido")])
 
-        old_engine = server._engine
-        server.set_engine(MagicMock())
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = MagicMock()
         try:
             with TestClient(server.app) as client:
                 resp = client.post(
@@ -218,7 +220,7 @@ class TestSynthesizeAllowedPaths:
                 assert resp.status_code == 400
                 assert str(wav) not in resp.text
         finally:
-            server.set_engine(old_engine)
+            server.app.state.daemon.engine = old_engine
 
     def test_accepts_path_within_voices_root(self, tmp_path, monkeypatch):
         """Una ruta dentro de voices_root() sigue siendo aceptada tras WARNING-02."""
@@ -235,10 +237,10 @@ class TestSynthesizeAllowedPaths:
 
         fake_engine = MagicMock()
         fake_engine.speak.return_value = b"RIFF" + b"\x00" * 40
-        fake_engine._synthesis_timing = {}
+        fake_engine._synthesis_metrics = SynthesisMetrics()
 
-        old_engine = server._engine
-        server.set_engine(fake_engine)
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = fake_engine
         try:
             with TestClient(server.app) as client:
                 resp = client.post(
@@ -246,7 +248,7 @@ class TestSynthesizeAllowedPaths:
                 )
                 assert resp.status_code == 200
         finally:
-            server.set_engine(old_engine)
+            server.app.state.daemon.engine = old_engine
 
 
 class TestSynthesizeHeaderValidationAndCanonicalPath:
@@ -263,8 +265,8 @@ class TestSynthesizeHeaderValidationAndCanonicalPath:
 
         monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(allowed_root)])
 
-        old_engine = server._engine
-        server.set_engine(MagicMock())
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = MagicMock()
         try:
             with TestClient(server.app) as client:
                 resp = client.post(
@@ -272,7 +274,7 @@ class TestSynthesizeHeaderValidationAndCanonicalPath:
                 )
                 assert resp.status_code == 400
         finally:
-            server.set_engine(old_engine)
+            server.app.state.daemon.engine = old_engine
 
     def test_passes_canonical_path_to_engine(self, tmp_path, monkeypatch):
         """El motor recibe os.path.realpath(path), resuelto una sola vez en la validación."""
@@ -290,10 +292,10 @@ class TestSynthesizeHeaderValidationAndCanonicalPath:
 
         fake_engine = MagicMock()
         fake_engine.speak.return_value = b"RIFF" + b"\x00" * 40
-        fake_engine._synthesis_timing = {}
+        fake_engine._synthesis_metrics = SynthesisMetrics()
 
-        old_engine = server._engine
-        server.set_engine(fake_engine)
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = fake_engine
         try:
             with TestClient(server.app) as client:
                 resp = client.post(
@@ -303,7 +305,7 @@ class TestSynthesizeHeaderValidationAndCanonicalPath:
                 _, kwargs = fake_engine.speak.call_args
                 assert kwargs["speech_audio"] == os.path.realpath(str(wav))
         finally:
-            server.set_engine(old_engine)
+            server.app.state.daemon.engine = old_engine
 
 
 class TestDaemonSessionSandbox:
@@ -323,8 +325,8 @@ class TestDaemonSessionSandbox:
         wav = tmp_path / "tts_sidecar_test_reject.wav"
         wav.write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
 
-        old_engine = server._engine
-        server.set_engine(MagicMock())
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = MagicMock()
         try:
             with TestClient(server.app) as client:
                 resp = client.post(
@@ -332,7 +334,7 @@ class TestDaemonSessionSandbox:
                 )
                 assert resp.status_code == 400
         finally:
-            server.set_engine(old_engine)
+            server.app.state.daemon.engine = old_engine
 
     def test_accepts_wav_in_namespaced_session_dir(self):
         import os
@@ -347,10 +349,10 @@ class TestDaemonSessionSandbox:
 
         fake_engine = MagicMock()
         fake_engine.speak.return_value = b"RIFF" + b"\x00" * 40
-        fake_engine._synthesis_timing = {}
+        fake_engine._synthesis_metrics = SynthesisMetrics()
 
-        old_engine = server._engine
-        server.set_engine(fake_engine)
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = fake_engine
         try:
             with TestClient(server.app) as client:
                 resp = client.post(
@@ -358,7 +360,7 @@ class TestDaemonSessionSandbox:
                 )
                 assert resp.status_code == 200
         finally:
-            server.set_engine(old_engine)
+            server.app.state.daemon.engine = old_engine
             os.remove(wav)
 
 
@@ -689,15 +691,15 @@ class TestSynthesizeStreaming:
         audio = b"RIFF" + b"\x00" * 40
 
         class FakeEngine:
-            _synthesis_timing = {"t3": 1.5, "s3gen": 2.5}
+            _synthesis_metrics = SynthesisMetrics(t3=1.5, s3gen=2.5)
 
             def speak(self, progress_callback=None, **kwargs):
                 progress_callback({"event": "progress", "stage": "conditionals"})
                 progress_callback({"event": "progress", "stage": "t3", "tokens": 10})
                 return audio
 
-        old_engine = server._engine
-        server.set_engine(FakeEngine())
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = FakeEngine()
         try:
             with TestClient(server.app) as client:
                 resp = client.post(
@@ -713,7 +715,7 @@ class TestSynthesizeStreaming:
                 assert lines[-1]["t3_time"] == 1.5
                 assert lines[-1]["s3gen_time"] == 2.5
         finally:
-            server.set_engine(old_engine)
+            server.app.state.daemon.engine = old_engine
 
     def test_synthesis_error_emits_error_frame(self, tmp_path, monkeypatch):
         import json
@@ -723,13 +725,13 @@ class TestSynthesizeStreaming:
         wav = self._allowed_wav(tmp_path, monkeypatch)
 
         class FakeEngine:
-            _synthesis_timing = {}
+            _synthesis_metrics = SynthesisMetrics()
 
             def speak(self, progress_callback=None, **kwargs):
                 raise RuntimeError("boom interno con /ruta/secreta")
 
-        old_engine = server._engine
-        server.set_engine(FakeEngine())
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = FakeEngine()
         try:
             with TestClient(server.app) as client:
                 resp = client.post(
@@ -742,7 +744,60 @@ class TestSynthesizeStreaming:
                 assert lines[-1]["detail"] == "Error interno de síntesis"
                 assert "secreta" not in resp.text
         finally:
-            server.set_engine(old_engine)
+            server.app.state.daemon.engine = old_engine
+
+
+class TestDaemonStateInjection:
+    """S2-01: los endpoints reciben el estado del daemon por inyección de
+    dependencias (Depends(get_daemon_state)), no de globals de módulo. Se puede
+    sustituir con app.dependency_overrides sin tocar app.state ni estado
+    compartido — justo lo que un global mutable de módulo no permitía."""
+
+    def test_health_uses_injected_state_via_dependency_override(self):
+        from fastapi.testclient import TestClient
+        from tts_sidecar.daemon import server
+
+        override_state = server.DaemonState(engine=MagicMock(), start_time=0.0)
+        server.app.dependency_overrides[server.get_daemon_state] = lambda: override_state
+        try:
+            with TestClient(server.app) as client:
+                body = client.get("/health").json()
+                assert body["model_loaded"] is True
+                assert body["status"] == "healthy"
+        finally:
+            server.app.dependency_overrides.clear()
+
+    def test_synthesize_503_when_injected_state_has_no_engine(self):
+        from fastapi.testclient import TestClient
+        from tts_sidecar.daemon import server
+
+        override_state = server.DaemonState(engine=None)
+        server.app.dependency_overrides[server.get_daemon_state] = lambda: override_state
+        try:
+            with TestClient(server.app) as client:
+                resp = client.post("/synthesize", json={"text": "hola"})
+                assert resp.status_code == 503
+        finally:
+            server.app.dependency_overrides.clear()
+
+    def test_shutdown_releases_engine_on_injected_state(self):
+        """/shutdown libera el engine y señaliza el server sobre el estado
+        inyectado, sin mutar ningún global de módulo."""
+        from fastapi.testclient import TestClient
+        from tts_sidecar.daemon import server
+
+        fake_server = MagicMock()
+        fake_server.should_exit = False
+        override_state = server.DaemonState(engine=MagicMock(), server=fake_server)
+        server.app.dependency_overrides[server.get_daemon_state] = lambda: override_state
+        try:
+            with TestClient(server.app) as client:
+                resp = client.post("/shutdown")
+                assert resp.status_code == 200
+            assert fake_server.should_exit is True
+            assert override_state.engine is None
+        finally:
+            server.app.dependency_overrides.clear()
 
 
 class TestDaemonStartLock:
@@ -970,13 +1025,13 @@ class TestDaemonMemoryClear:
         mock_clear = MagicMock()
 
         class FakeEngine:
-            _synthesis_timing = {}
+            _synthesis_metrics = SynthesisMetrics()
 
             def speak(self, **kwargs):
                 return b"RIFF" + b"\x00" * 40
 
-        old_engine = server._engine
-        server.set_engine(FakeEngine())
+        old_engine = server.app.state.daemon.engine
+        server.app.state.daemon.engine = FakeEngine()
         try:
             with patch("tts_sidecar.daemon.server._clear_model_memory", mock_clear):
                 with TestClient(server.app) as client:
@@ -987,7 +1042,7 @@ class TestDaemonMemoryClear:
 
             mock_clear.assert_called_once()
         finally:
-            server.set_engine(old_engine)
+            server.app.state.daemon.engine = old_engine
 
     def test_clear_model_memory_contract(self):
         """_clear_model_memory llama torch.cuda.empty_cache() y gc.collect()."""

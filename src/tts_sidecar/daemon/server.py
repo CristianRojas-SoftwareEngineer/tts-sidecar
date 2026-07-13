@@ -9,11 +9,14 @@ import logging
 import os
 import queue
 import threading
+from dataclasses import dataclass
+from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse
 
 from .. import voices
+from ..timing import SynthesisMetrics
 from .protocol import (
     SynthesizeRequest,
     HealthResponse,
@@ -24,28 +27,26 @@ from .protocol import (
 )
 
 
-# Estado global (asignado por run.py antes de arrancar uvicorn)
-_engine = None
-_start_time = None
-_server = None
+@dataclass
+class DaemonState:
+    """Estado del daemon inyectado en los endpoints vía Depends(get_daemon_state).
+
+    Sustituye a los globals de módulo `_engine`/`_server`/`_start_time`: vive en
+    `app.state.daemon` (no como variables reasignables de módulo), así los
+    endpoints lo reciben por inyección de dependencias —testeable con
+    `app.dependency_overrides`, sin ensuciar estado global compartido— y el
+    composition root (`run.py`) es el único que lo puebla. No se conservan
+    setters módulo-level: eso solo cambiaría la forma del global sin romper el
+    acoplamiento (la «trampa del parche barato» del hallazgo).
+    """
+    engine: Optional[object] = None
+    server: Optional[object] = None
+    start_time: Optional[float] = None
 
 
-def set_engine(engine):
-    """Asigna la instancia global del engine."""
-    global _engine
-    _engine = engine
-
-
-def set_server(server):
-    """Registra la instancia de uvicorn.Server para permitir el apagado graceful."""
-    global _server
-    _server = server
-
-
-def set_start_time(timestamp: float):
-    """Registra el timestamp de inicio del servidor."""
-    global _start_time
-    _start_time = timestamp
+def get_daemon_state(request: Request) -> "DaemonState":
+    """Provee a los endpoints el DaemonState alojado en app.state (DI de FastAPI)."""
+    return request.app.state.daemon
 
 
 def _clear_model_memory():
@@ -74,16 +75,20 @@ app = FastAPI(
     title="tts-sidecar-daemon",
     description="Daemon TTS persistente con modelo cacheado en memoria",
 )
+# Estado inicial vacío alojado en el propio objeto app (no en globals de módulo):
+# run.py lo puebla al arrancar y los tests lo sustituyen (directamente o vía
+# app.dependency_overrides[get_daemon_state]). Encapsulado y sustituible.
+app.state.daemon = DaemonState()
 
 
 @app.get("/health", response_model=HealthResponse)
-async def health_check():
+async def health_check(state: DaemonState = Depends(get_daemon_state)):
     """Endpoint de health check."""
     import time
     return HealthResponse(
-        status="healthy" if _engine else "initializing",
-        model_loaded=_engine is not None,
-        uptime_seconds=time.time() - _start_time if _start_time else 0,
+        status="healthy" if state.engine else "initializing",
+        model_loaded=state.engine is not None,
+        uptime_seconds=time.time() - state.start_time if state.start_time else 0,
     )
 
 
@@ -139,7 +144,10 @@ def _validate_audio_path(path: str, field: str, allowed_dirs: list[str]) -> str:
 
 
 @app.post("/synthesize")
-def synthesize(req: SynthesizeRequest) -> StreamingResponse:
+def synthesize(
+    req: SynthesizeRequest,
+    state: DaemonState = Depends(get_daemon_state),
+) -> StreamingResponse:
     """
     Sintetiza texto a audio usando el modelo cacheado en memoria.
 
@@ -156,7 +164,8 @@ def synthesize(req: SynthesizeRequest) -> StreamingResponse:
     400/503 de validación sigue siendo una respuesta de error inmediata (no un
     frame del stream).
     """
-    if not _engine:
+    engine = state.engine
+    if not engine:
         raise HTTPException(status_code=503, detail="Modelo no cargado")
 
     # Valida las rutas de audio antes de que lleguen a librosa.load: deben
@@ -167,7 +176,7 @@ def synthesize(req: SynthesizeRequest) -> StreamingResponse:
     allowed_dirs = [os.path.realpath(d) for d in voices.allowed_audio_dirs()]
     # Cada ruta se resuelve a su forma canónica UNA sola vez dentro de
     # _validate_audio_path y esa misma ruta (no la cruda de la petición) es la
-    # que se pasa a _engine.speak: sin esto, quedaba una ventana entre validar
+    # que se pasa a engine.speak: sin esto, quedaba una ventana entre validar
     # y usar en la que el archivo podía cambiar (symlink swap) sin volver a
     # pasar por la validación (WARNING-02).
     real_paths: dict[str, str] = {}
@@ -201,20 +210,22 @@ def synthesize(req: SynthesizeRequest) -> StreamingResponse:
                     def push(ev: dict):
                         q.put(("progress", ev))
 
-                    audio_bytes = _engine.speak(
+                    audio_bytes = engine.speak(
                         text=req.text,
                         voice_audio=real_paths.get("voice_audio"),
                         speech_audio=real_paths.get("speech_audio"),
                         verbose=True,
                         progress_callback=push,
                     )
-                    timing = getattr(_engine, "_synthesis_timing", {})
+                    # Métricas tipadas publicadas por el engine (SynthesisMetrics),
+                    # no un dict suelto leído por convención de claves.
+                    metrics = getattr(engine, "_synthesis_metrics", None) or SynthesisMetrics()
                     q.put((
                         "result",
                         {
                             "audio_b64": base64.b64encode(audio_bytes).decode("ascii"),
-                            "t3_time": float(timing.get("t3", 0.0) or 0.0),
-                            "s3gen_time": float(timing.get("s3gen", 0.0) or 0.0),
+                            "t3_time": float(metrics.t3),
+                            "s3gen_time": float(metrics.s3gen),
                         },
                     ))
             except FileNotFoundError as e:
@@ -251,28 +262,28 @@ def synthesize(req: SynthesizeRequest) -> StreamingResponse:
 
 
 @app.get("/voices", response_model=VoicesResponse)
-async def list_voices():
+async def list_voices(state: DaemonState = Depends(get_daemon_state)):
     """Lista las voces registradas."""
-    if not _engine:
+    if not state.engine:
         raise HTTPException(status_code=503, detail="Modelo no cargado")
 
-    return VoicesResponse(voices=_engine.list_voices())
+    return VoicesResponse(voices=state.engine.list_voices())
 
 
 @app.post("/shutdown")
-async def shutdown():
+async def shutdown(state: DaemonState = Depends(get_daemon_state)):
     """Endpoint de cierre graceful del daemon.
 
     Señaliza `should_exit` sobre la instancia de uvicorn.Server para que el
     servidor termine su ciclo de vida de forma ordenada. Se responde antes de
     que uvicorn cierre: el flag se procesa en la siguiente iteración del loop.
 
-    Libera la referencia global al engine y fuerza la misma limpieza de
-    memoria (`_clear_model_memory`) que corre tras cada síntesis (S3-04,
-    a50fc6d): sin esto, un auto-restart frecuente del daemon podía dejar
-    memoria GPU retenida entre reinicios porque nada liberaba `_engine` en el
-    apagado. Simétrico por diseño: mismo helper, mismas garantías (no-op sin
-    CUDA, gc.collect() incondicional).
+    Libera la referencia al engine (en el DaemonState inyectado) y fuerza la
+    misma limpieza de memoria (`_clear_model_memory`) que corre tras cada
+    síntesis (S3-04, a50fc6d): sin esto, un auto-restart frecuente del daemon
+    podía dejar memoria GPU retenida entre reinicios porque nada liberaba el
+    engine en el apagado. Simétrico por diseño: mismo helper, mismas garantías
+    (no-op sin CUDA, gc.collect() incondicional).
 
     Riesgo aceptado (SUGGESTION-02): no lleva token ni confirmación explícita.
     El daemon bindea exclusivamente a 127.0.0.1 (ver run.py), por lo que solo
@@ -280,14 +291,12 @@ async def shutdown():
     riesgo residual en vez de añadir un secreto que el propio cliente IPC
     tendría que gestionar y persistir.
     """
-    global _engine
-
-    if _server is not None:
-        _server.should_exit = True
+    if state.server is not None:
+        state.server.should_exit = True
         # Libera la referencia al engine (permite al GC recolectar los
         # tensores/modelos que retiene) y limpia la caché CUDA fragmentada,
         # igual que al final de cada síntesis.
-        _engine = None
+        state.engine = None
         _clear_model_memory()
         return {"status": "shutting_down"}
     # Sin instancia registrada (no debería ocurrir): el kill por PID es la red de seguridad.

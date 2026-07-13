@@ -11,9 +11,24 @@ import contextvars
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from functools import wraps
 from typing import Optional
+
+
+@dataclass
+class SynthesisMetrics:
+    """Tiempos por sub-etapa de una síntesis (segundos).
+
+    Value object tipado que reemplaza el dict suelto `{'t3': .., 's3gen': ..}`
+    que el engine exponía y el daemon leía vía `getattr(engine, ...)`. Modelar
+    las métricas de forma explícita rompe ese acoplamiento implícito: el engine
+    publica un `SynthesisMetrics` y el daemon lo consume como un contrato tipado
+    (campos `t3`/`s3gen`) en vez de un dict con claves por convención.
+    """
+    t3: float = 0.0
+    s3gen: float = 0.0
 
 
 # Spinner activo por contexto de ejecución (a lo sumo uno). log() lo consulta

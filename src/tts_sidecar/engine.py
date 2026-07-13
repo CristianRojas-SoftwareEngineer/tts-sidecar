@@ -45,7 +45,7 @@ from .model_cache import (
     hub_cache_path,
     is_model_cached,  # re-export para compatibilidad interna
 )
-from .timing import StageTimer, log
+from .timing import StageTimer, SynthesisMetrics, log
 from .model_loader import ModelLoader
 from .conditionals import ConditionalsPreparer
 
@@ -281,16 +281,16 @@ class ChatterboxEngine:
         - s3gen.inference con n_cfm_timesteps=N_CFM_TIMESTEPS y medición de tiempo
         - bypass del watermarker PerthNet (segunda red neuronal de post-procesado)
 
-        El timing queda en self._synthesis_timing ({'t3': s, 's3gen': s}), que el
-        daemon incluye en el frame `result` del stream NDJSON de /synthesize
-        (campos t3_time / s3gen_time). Las sub-etapas t3/s3gen (y el conteo de
-        tokens del T3, vía el shim de tqdm) también se emiten al progress_callback
-        activo desde estos wrappers.
+        El timing queda en self._synthesis_metrics (SynthesisMetrics con campos
+        t3/s3gen en segundos), que el daemon incluye en el frame `result` del
+        stream NDJSON de /synthesize (campos t3_time / s3gen_time). Las sub-etapas
+        t3/s3gen (y el conteo de tokens del T3, vía el shim de tqdm) también se
+        emiten al progress_callback activo desde estos wrappers.
         """
         import functools
         import time as time_mod
 
-        self._synthesis_timing = {'t3': 0.0, 's3gen': 0.0}
+        self._synthesis_metrics = SynthesisMetrics()
         tts = self._tts
 
         _orig_t3 = tts.t3.inference
@@ -304,8 +304,8 @@ class ChatterboxEngine:
             self._emit_progress(stage="t3")
             t0 = time_mod.time()
             result = _orig_t3(*args, **kwargs)
-            self._synthesis_timing['t3'] = time_mod.time() - t0
-            log(f"   [Etapa 2a] T3 autoregresivo: {self._synthesis_timing['t3']:.1f}s")
+            self._synthesis_metrics.t3 = time_mod.time() - t0
+            log(f"   [Etapa 2a] T3 autoregresivo: {self._synthesis_metrics.t3:.1f}s")
             return result
 
         tts.t3.inference = timed_t3
@@ -319,8 +319,8 @@ class ChatterboxEngine:
             self._emit_progress(stage="s3gen")
             t0 = time_mod.time()
             result = _orig_s3gen(*args, **kwargs)
-            self._synthesis_timing['s3gen'] = time_mod.time() - t0
-            log(f"   [Etapa 2b] S3Gen vocoder:   {self._synthesis_timing['s3gen']:.1f}s")
+            self._synthesis_metrics.s3gen = time_mod.time() - t0
+            log(f"   [Etapa 2b] S3Gen vocoder:   {self._synthesis_metrics.s3gen:.1f}s")
             return result
 
         tts.s3gen.inference = timed_s3gen

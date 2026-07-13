@@ -18,7 +18,7 @@ import time
 
 import uvicorn
 
-from .server import app, set_engine, set_start_time, set_server
+from .server import app, DaemonState
 from .ipc import DEFAULT_PORT
 from ..cli import EXIT_ERROR
 from ..timing import StageTimer, log
@@ -78,7 +78,11 @@ def serve(port: int = DEFAULT_PORT, auto_restart: bool = False, max_retries: int
     atexit.register(_remove_own_pidfile)
 
     while True:
-        set_start_time(time.time())
+        # Composition root: se construye un DaemonState fresco por iteración
+        # (relevante en --auto-restart) y se puebla conforme se crean el engine
+        # y el uvicorn.Server. Los endpoints lo reciben vía Depends, no como
+        # global de módulo (S2-01).
+        app.state.daemon = DaemonState(start_time=time.time())
 
         with StageTimer("Startup", "Iniciando daemon..."):
             # Etapa 1: cargar modelo
@@ -96,7 +100,7 @@ def serve(port: int = DEFAULT_PORT, auto_restart: bool = False, max_retries: int
                 )
 
                 # El engine ya aplica los parámetros de síntesis optimizados,
-                # el timing por sub-etapa (_synthesis_timing) y el bypass del
+                # el timing por sub-etapa (_synthesis_metrics) y el bypass del
                 # watermark como comportamiento propio.
                 engine = ChatterboxEngine.get_instance(
                     model="es-mx-latam",
@@ -104,7 +108,7 @@ def serve(port: int = DEFAULT_PORT, auto_restart: bool = False, max_retries: int
                 )
 
                 log(f"Daemon: compute_backend={compute_backend}")
-                set_engine(engine)
+                app.state.daemon.engine = engine
 
             # Etapa 2: iniciar servidor
             with StageTimer("2-Daemon", "Etapa 2/3: Iniciando servidor"):
@@ -131,7 +135,7 @@ def serve(port: int = DEFAULT_PORT, auto_restart: bool = False, max_retries: int
                 access_log=False,
             )
             server = uvicorn.Server(config)
-            set_server(server)
+            app.state.daemon.server = server
             server.run()
         except OSError as e:
             # Capturamos OSError antes del handler genérico para distinguir
