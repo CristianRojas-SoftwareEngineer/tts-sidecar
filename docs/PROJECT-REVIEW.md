@@ -4,9 +4,9 @@
 
 Auditoría sistémica de **todo el repositorio TTS Sidecar** bajo la lente **calidad y deuda técnica** (perfil **perfectivo**: sin cambio funcional esperado, métrica de mantenibilidad). La investigación se delegó en 6 sub-agentes de exploración en paralelo, cada uno sobre una lonja concreta del código fuente, con evidencia `file:line` verificada.
 
-Veredicto global: el proyecto está **maduro y disciplinado** (485 tests, semáforo de admisión en el daemon, lock de arranque atómico, sandbox de audio con `realpath`). La deuda es **moderada y localizada**, no estructural. No hay hallazgos S4 (críticos). Los riesgos más relevantes son de **observabilidad** (excepciones silenciadas en rutas críticas), **acoplamiento del daemon al engine** (globals, sin inyección de dependencias) y **brechas de cobertura en la funcionalidad central del engine y en el límite de seguridad del sandbox**.
+Veredicto global: el proyecto está **maduro y disciplinado** (488 tests, semáforo de admisión en el daemon, lock de arranque atómico, sandbox de audio con `realpath`). La deuda es **moderada y localizada**, no estructural. No hay hallazgos S4 (críticos). Los riesgos más relevantes son de **observabilidad** (excepciones silenciadas en rutas críticas), **acoplamiento del daemon al engine** (globals, sin inyección de dependencias) y **brechas de cobertura en la funcionalidad central del engine y en el límite de seguridad del sandbox**.
 
-Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolidados). Dos afirmaciones de alta severidad propuestas por los sub-agentes fueron **descartadas como falso positivo** tras verificación directa; además, la presunta discrepancia de conteo de tests no es defecto (ver «Nota de verificación» y «Provenance»). El conteo en el momento de la auditoría era 350 tests recolectados por pytest (336 funciones `def test_`); las remediaciones posteriores de los hallazgos resueltos (S3-01/02, S2-02, S2-07, S1-17, S2-10, etc.) elevaron la suite a **485 tests recolectados**. `CLAUDE.md` (~485) refleja el total actual.
+Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolidados). Dos afirmaciones de alta severidad propuestas por los sub-agentes fueron **descartadas como falso positivo** tras verificación directa; además, la presunta discrepancia de conteo de tests no es defecto (ver «Nota de verificación» y «Provenance»). El conteo en el momento de la auditoría era 350 tests recolectados por pytest (336 funciones `def test_`); las remediaciones posteriores de los hallazgos resueltos (S3-01/02, S2-02, S2-07, S1-17, S2-10, etc.) elevaron la suite a **488 tests recolectados**. `CLAUDE.md` (~488) refleja el total actual.
 
 ### Índice de hallazgos
 
@@ -346,8 +346,8 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 
 #### S2-13 — Creación de directorios duplicada `_emit_audio` vs `AudioWriter.write`
 - **Categoría**: Mantenibilidad
-- **Área/plataforma**: `src/tts_sidecar/cli.py:94-105` (`_emit_audio`) vs `src/tts_sidecar/audio_writer.py` (`AudioWriter.write`)
-- **Evidencia**: `_emit_audio` (CLI) crea el directorio padre con `os.makedirs(parent, exist_ok=True)` (`cli.py:102`) y `AudioWriter.write` (`audio_writer.py`) hace `Path(path).parent.mkdir(parents=True, exist_ok=True)`. Parecen duplicados, pero operan en **procesos distintos**: en modo daemon el servidor escribe vía `AudioWriter.write` en su propio filesystem y devuelve los bytes; el cliente los escribe con `_emit_audio` en **su** filesystem. Por eso el comentario N-12 (`cli.py:99-101`) lo justifica explícitamente como simetría necesaria, no como descuido.
+- **Área/plataforma**: `src/tts_sidecar/cli.py:101` (`_emit_audio` → `ensure_parent_dir`) y `src/tts_sidecar/audio_writer.py:55` (`AudioWriter.write` → `ensure_parent_dir`), ambos vía `src/tts_sidecar/paths.py` (`ensure_parent_dir`)
+- **Evidencia**: `_emit_audio` asegura el directorio padre vía `ensure_parent_dir(output)` (`cli.py:101`) y `AudioWriter.write` vía `ensure_parent_dir(path)` (`audio_writer.py:55`), ambos delegando en el helper compartido `paths.ensure_parent_dir` (extraído en la resolución, S2-13). Operan en **procesos distintos**: en modo daemon el servidor escribe vía `AudioWriter.write` en su propio filesystem y devuelve los bytes; el cliente los escribe con `_emit_audio` en **su** filesystem. Por eso el comentario N-12 (`cli.py:99-100`) lo justifica explícitamente como simetría necesaria, no como descuido.
 - **Confianza**: Alta
 - **Causa**: El límite cliente/servidor del daemon hace que "el engine ya creó el archivo" no sea cierto en el filesystem del cliente; la creación del lado cliente es requerida, no redundante.
 - **Impacto**: Borrar el `makedirs` de `_emit_audio` (el "arreglo obvio") rompería `--output` en modo daemon cuando el directorio no existe en la máquina del cliente — justo la trampa del parche barato.
@@ -453,40 +453,40 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 
 #### S1-01 — Logging redundante al guardar en modo directo
 - **Categoría**: Calidad de código
-- **Área/plataforma**: `src/tts_sidecar/cli.py:299` (`cmd_speak`, ruta directa) vs `src/tts_sidecar/audio_writer.py` (`AudioWriter.write`)
-- **Evidencia**: En **modo directo**, `engine.speak(output_path=...)` guarda el archivo y `AudioWriter.write` ya loguea `"   -> Archivo guardado: {path}"` (`audio_writer.py`); acto seguido `cmd_speak` loguea de nuevo `"[Archivo] Audio guardado: {output}"` (`cli.py:299`) para el mismo evento. La formulación original («`_emit_audio` lo vuelve a registrar») es **imprecisa**: en modo directo `_emit_audio` se invoca con `output=None` (`cli.py:303`), así que su log NO es el duplicado; el `[Archivo] Audio guardado` de `_emit_audio` (`cli.py:105`) solo corre en la ruta **daemon**, donde el `AudioWriter.write` del engine ocurrió en el proceso **servidor** (su log no llega al cliente) y por tanto NO es redundante. El doble mensaje real es únicamente `audio_writer.py` + `cli.py:299` en la ruta directa.
+- **Área/plataforma**: `src/tts_sidecar/cli.py:298` (`cmd_speak`, ruta directa) vs `src/tts_sidecar/audio_writer.py` (`AudioWriter.write`)
+- **Evidencia**: En **modo directo**, `engine.speak(output_path=...)` guarda el archivo y `AudioWriter.write` ya loguea `"   -> Archivo guardado: {path}"` (`audio_writer.py`); acto seguido `cmd_speak` loguea de nuevo `"[Archivo] Audio guardado: {output}"` (`cli.py:298`) para el mismo evento. La formulación original («`_emit_audio` lo vuelve a registrar») es **imprecisa**: en modo directo `_emit_audio` se invoca con `output=None` (`cli.py:300`), así que su log NO es el duplicado; el `[Archivo] Audio guardado` de `_emit_audio` (`cli.py:104`) solo corre en la ruta **daemon**, donde el `AudioWriter.write` del engine ocurrió en el proceso **servidor** (su log no llega al cliente) y por tanto NO es redundante. El doble mensaje real es únicamente `audio_writer.py` + `cli.py:298` en la ruta directa.
 - **Confianza**: Alta
 - **Impacto**: Doble mensaje "Archivo guardado" para el mismo evento, solo en modo directo. Puramente cosmético (ruido en el log/consola); sin efecto funcional.
 - **Decisión requerida**: No (corrección directa una vez elegida la variante), pero conviene fijar **dónde** debe vivir el mensaje canónico.
 - **Alternativas y trade-offs**:
-  - **A) Quitar el log de `cli.py:299`** y dejar que el mensaje del engine (`AudioWriter.write`) sea el único.
+  - **A) Quitar el log de `cli.py:298`** y dejar que el mensaje del engine (`AudioWriter.write`) sea el único.
     - *Pros*: cambio mínimo; el engine ya es quien sabe que escribió; elimina el duplicado en la ruta directa.
     - *Contras*: el mensaje del engine (`"   -> Archivo guardado: {path}"`, con ruta desde el refactor S2-10) es informativo; sin embargo el CLI deja de tener un punto único de "salida al usuario".
-  - **B) Quitar el log de `AudioWriter.write`** y dejar que el **CLI** sea siempre quien anuncia el guardado (tanto en directo `cli.py:299` como en daemon vía `_emit_audio` `cli.py:105`).
+  - **B) Quitar el log de `AudioWriter.write`** y dejar que el **CLI** sea siempre quien anuncia el guardado (tanto en directo `cli.py:298` como en daemon vía `_emit_audio` `cli.py:104`).
     - *Pros*: mensaje uniforme y con ruta en ambos modos; el engine deja de emitir salida orientada a usuario (mejor separación de capas: el engine no debería decidir el formato de consola del CLI); mensaje único y consistente.
     - *Contras*: si algún otro consumidor del engine dependía de ese log, lo pierde (hoy no hay evidencia de tal consumidor); toca el engine, no solo el CLI.
   - **C) Flag `log_save: bool = True` en `engine.speak`/`AudioWriter.write`** que el CLI ponga en `False` cuando él va a loguear.
     - *Pros*: preserva ambos comportamientos según el llamador.
     - *Contras*: **sobre-ingeniería para un mensaje cosmético**; añade un parámetro de acoplamiento cross-capa por un log; peor que B en simplicidad.
-  - **Trampa del parche barato**: borrar `cli.py:301` sin notar que el mensaje del engine no lleva la ruta → se pierde la ruta en la salida del modo directo. O tocar `_emit_audio` creyendo que es el duplicado (no lo es).
+  - **Trampa del parche barato**: borrar `cli.py:298` sin notar que el mensaje del engine no lleva la ruta → se pierde la ruta en la salida del modo directo. O tocar `_emit_audio` creyendo que es el duplicado (no lo es).
   - **Recomendación**: **B** (el CLI es el dueño de la salida a usuario; el engine no debería formatear consola), enriqueciendo si hace falta que el CLI loguee con ruta en ambos modos. Emparentado con la separación de responsabilidades de S2-10 (el God object mezcla síntesis con logging de presentación).
 - **Prioridad**: P3
 
 #### S1-02 — Filtro de warning redundante en `audio.py`
 - **Categoría**: Calidad de código
-- **Área/plataforma**: `src/tts_sidecar/audio.py:6-7`
-- **Evidencia**: `warnings.filterwarnings("ignore", message="pkg_resources is deprecated")` en las líneas 6-7 se ejecuta a nivel módulo, **antes** de cualquier import pesado de `audio.py`. Solapa parcialmente con el filtro equivalente de `bootstrap.py`.
+- **Área/plataforma**: `src/tts_sidecar/bootstrap.py` (`apply`, filtro centralizado) / `tests/conftest.py` (`pytest_configure`) / `src/tts_sidecar/audio.py` (filtro local eliminado)
+- **Evidencia**: el filtro local `warnings.filterwarnings("ignore", message="pkg_resources is deprecated")` que vivía en `audio.py:6-7` (a nivel módulo, antes de cualquier import pesado) fue **eliminado**; la supresión se centralizó en `bootstrap.apply()` (filtro específico `pkg_resources`) y se cubre la ruta de import directo vía `tests/conftest.py` (`pytest_configure` → `bootstrap.apply()`). Ya no hay dos sitios silenciando el mismo warning.
 - **Confianza**: Media
-- **Verificación (lectura directa)**: el filtro de `audio.py:6-7` corre **antes** de que `bootstrap.apply()` haya podido ejecutarse en escenarios donde `audio.py` se importa directamente (p. ej. `import tts_sidecar.audio` fuera del CLI, o tooling/tests que tocan el módulo de audio sin pasar por `cli.py`/`__main__`/`daemon.run`). En esas rutas `bootstrap` **no** garantiza haber corrido, así que el filtro local **no es puramente redundante**: es un **fallback legítimo** que asegura el arranque limpio del módulo de audio con independencia del bootstrap. NO borrar a ciegas.
-- **Impacto**: Ruido de mantenimiento (dos sitios silencian el mismo warning); inofensivo en runtime. El riesgo real es de **legibilidad**: sin un comentario, un futuro lector lo cree duplicado y lo borra, reintroduciendo el warning en la ruta de import directo.
-- **Decisión requerida**: No — la acción correcta es documentar, no remover; se mantiene como no-decisión pero con la aclaración de que la opción "remover" queda **descartada** por la verificación.
+- **Verificación (lectura directa)**: con el filtro de `audio.py` eliminado, la supresión depende en único lugar de `bootstrap.apply()`; `pytest_configure` lo invoca antes de la recolección, así que `import tts_sidecar.audio` a nivel de módulo en `tests/test_audio.py`/`test_audio_platform.py` queda cubierto sin fallback local.
+- **Impacto**: Un solo sitio de supresión (legibilidad y mantenibilidad); inofensivo en runtime.
+- **Decisión requerida**: No — resuelto mediante centralización en `bootstrap` + hook `pytest_configure` y eliminación del filtro local (ver Resolución). La opción "remover" quedó **aplicada**, no descartada.
 - **Alternativas y trade-offs**:
-  - **A) Mantener + documentar** (recomendada). Añadir un comentario en `audio.py:6-7` explicando que es un fallback intencional para el import directo del módulo sin bootstrap, no un duplicado accidental.
+  - **A) Mantener + documentar**. Añadir un comentario en `audio.py:6-7` explicando que es un fallback intencional para el import directo del módulo sin bootstrap, no un duplicado accidental. *(No aplicada: la resolución optó por la opción B — remover el filtro y centralizar en `bootstrap`.)*
     - *Pros*: preserva el arranque limpio en todas las rutas de import; barato; evita que un futuro refactor lo borre por error.
     - *Contras*: convive con `bootstrap.py` (dos sitios), pero es intencional y ahora explícito.
   - **B) Remover el filtro local** y confiar solo en `bootstrap.py`.
     - *Pros*: un solo sitio.
-    - *Contras*: **rompe el arranque limpio** cuando `audio.py` se importa sin pasar por bootstrap; reintroduce el warning `pkg_resources`. **Descartada por la verificación.**
+    - *Contras*: **rompe el arranque limpio** cuando `audio.py` se importa sin pasar por bootstrap; reintroduce el warning `pkg_resources`. **Aplicada en la Resolución (S1-02 se resolvió removiendo el filtro local y centralizando en bootstrap).**
   - **Relación**: acoplado a **S2-12** (política global de warnings en `bootstrap`). La supresión centralizada en `bootstrap.apply()` ya usa el filtro específico `pkg_resources`, que es exactamente la entrada que la futura allow-list de S2-12 debe conservar; así S1-02 queda resuelto de forma compatible con S2-12, sin criterios de silenciado divergentes.
 - **Prioridad**: P3
 - **Estado**: Resuelto
@@ -709,7 +709,7 @@ Nota: el conteo de tests **no** es una discrepancia. `pytest --collect-only` rec
 
 #### S0-03 — `pyenv` sin pin de versión (decisión consciente)
 - **Categoría**: DevOps
-- **Área/plataforma**: `.circleci/config.yml:215, 748`
+- **Área/plataforma**: `.circleci/config.yml:264,776` (jobs macOS: clonado de pyenv desde tag git) + parámetro `pyenv_version` en `parameters`
 - **Evidencia**: Comentario explicita que Homebrew no fija pyenv y que la imagen puede no traer el patch más reciente.
 - **Confianza**: Alta
 - **Impacto**: Ninguno; es una excepción documentada.
