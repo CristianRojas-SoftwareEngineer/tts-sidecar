@@ -17,15 +17,15 @@ Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolida
 | S2-01 | Acoplamiento del servidor al engine vía globals, sin DI | S2 — Medio | P2 | daemon / Arquitectura | Sí | Pendiente |
 | S2-02 | Excepciones silenciadas sin logging en rutas críticas | S2 — Medio | P1 | engine/audio/timing/daemon / Fiabilidad | Sí | Pendiente |
 | S2-03 | Modelo no liberado en shutdown del daemon | S2 — Medio | P2 | daemon / Fiabilidad | No | Pendiente |
-| S2-04 | Worker del daemon no cancelable al desconectar el cliente | S2 — Medio | P2 | daemon / Escalabilidad | No | Pendiente |
-| S2-05 | `ipc.py` no reutiliza los modelos de `protocol.py` | S2 — Medio | P2 | daemon / Calidad de código | No | Pendiente |
+| S2-04 | Worker del daemon no cancelable al desconectar el cliente | S2 — Medio | P2 | daemon / Escalabilidad | Sí | Pendiente |
+| S2-05 | `ipc.py` no reutiliza los modelos de `protocol.py` | S2 — Medio | P2 | daemon / Calidad de código | Sí | Pendiente |
 | S2-06 | Lógica de dependencias duplicada entre build scripts | S2 — Medio | P1 | build / Mantenibilidad | No | Pendiente |
-| S2-07 | Pines de versión duplicados en CI y scripts | S2 — Medio | P1 | CI / Mantenibilidad-DevOps | No | Pendiente |
+| S2-07 | Pines de versión duplicados en CI y scripts | S2 — Medio | P1 | CI / Mantenibilidad-DevOps | Sí | Pendiente |
 | S2-08 | Smoke tests duplicados en CI | S2 — Medio | P2 | CI / DevOps | No | Pendiente |
 | S2-09 | Lockfiles omiten herramientas de build (PyInstaller/Pillow) | S2 — Medio | P1 | build / Dependencias | No | Pendiente |
 | S2-10 | God object `ChatterboxEngine` | S2 — Medio | P2 | engine / Mantenibilidad | Sí | En progreso |
-| S2-11 | Estado global `_active_spinner` en `timing.py` | S2 — Medio | P2 | timing / Mantenibilidad | No | Pendiente |
-| S2-12 | `bootstrap` usa `warnings.filterwarnings("ignore")` global | S2 — Medio | P2 | bootstrap / Observabilidad | No | Pendiente |
+| S2-11 | Estado global `_active_spinner` en `timing.py` | S2 — Medio | P2 | timing / Mantenibilidad | Sí | Pendiente |
+| S2-12 | `bootstrap` usa `warnings.filterwarnings("ignore")` global | S2 — Medio | P2 | bootstrap / Observabilidad | Sí | Pendiente |
 | S2-13 | Creación de directorios duplicada `_emit_audio` vs `_save_wav` | S2 — Medio | P2 | cli/engine / Mantenibilidad | No | Pendiente |
 | S2-14 | Orden de imports de `cli` acoplado a bootstrap + entry points duplicados | S2 — Medio | P1 | cli/bin / Mantenibilidad | Sí | Pendiente |
 | S2-15 | `voice add`/`remove` exigen modelo en caché innecesariamente | S2 — Medio | P2 | cli / Diseño | Sí | Pendiente |
@@ -151,9 +151,21 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Confianza**: Alta
 - **Causa**: Ausencia de evento de cancelación ligado al estado de la conexión.
 - **Impacto**: Consumo innecesario de GPU/CPU si el cliente se va a mitad de síntesis.
-- **Corrección(es) propuesta(s)**: Detectar cierre de conexión y señalizar cancelación al worker (recomendada).
-- **Decisión requerida**: No
+- **Corrección(es) propuesta(s)**: Ver «Alternativas y trade-offs».
+- **Decisión requerida**: Sí — elegir el mecanismo de cancelación y su profundidad.
 - **Prioridad**: P2
+- **Alternativas y trade-offs**:
+  - **A) Sondear `Request.is_disconnected()` desde el worker** (polling en el bucle de generación).
+    - *Pros*: cambio acotado; no toca el núcleo del engine.
+    - *Contras*: latencia de cancelación (el engine sigue corriendo hasta el próximo sondeo); consume GPU/CPU mientras tanto; un polling agresivo introduce thrashing.
+  - **B) `threading.Event` de cancelación + cancelación cooperativa en el engine** (interrumpir el loop de generación T3/S3Gen).
+    - *Pros*: cancelación casi inmediata; libera GPU pronto al irse el cliente.
+    - *Contras*: requiere que el engine exponga un punto de cancelación — toca el núcleo de síntesis y el callback stateful (emparentado con S2-10); más invasivo y con superficie de regresión.
+  - **C) No cancelar** (status quo).
+    - *Pros*: cero cambio.
+    - *Contras*: desperdicia GPU/CPU si el cliente se desconecta a mitad; riesgo bajo pero real en uso concurrente.
+  - **Trampa del parche barato**: añadir el `Event` pero nunca conectarlo a la desconexión del cliente → queda "implementado" pero inerte; o hacer polling cada milisegundo (thrashing).
+  - **Qué se necesita del humano**: (1) mecanismo (polling vs. cooperativo); (2) profundidad — ¿cancelar solo el worker o también interrumpir el engine en medio de la síntesis?
 
 #### S2-05 — `ipc.py` no reutiliza los modelos de `protocol.py`
 - **Categoría**: Calidad de código
@@ -162,9 +174,21 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Confianza**: Alta
 - **Causa**: Lógica de schema duplicada fuera de los modelos Pydantic ya existentes.
 - **Impacto**: Cambios en el contrato exigen tocar dos sitios; riesgo de divergencia.
-- **Corrección(es) propuesta(s)**: Parsear y validar cada línea con `model_validate_json` de los modelos de `protocol.py` (recomendada).
-- **Decisión requerida**: No
+- **Corrección(es) propuesta(s)**: Ver «Alternativas y trade-offs».
+- **Decisión requerida**: Sí — decidir si el cliente IPC debe ser estricto o tolerante ante frames sucios.
 - **Prioridad**: P2
+- **Alternativas y trade-offs**:
+  - **A) `model_validate_json` estricto** por línea con los modelos de `protocol.py`.
+    - *Pros*: una sola fuente de verdad del contrato; validación fuerte de cada frame.
+    - *Contras*: pierde la tolerancia actual — hoy `ipc.py:132-134` hace `except ValueError: continue` ante líneas no-JSON; un frame malformado rompería el stream en vez de ignorarse; riesgo de regresión si el server emite algo no modelado.
+  - **B) Mantener el parseo manual** (status quo).
+    - *Pros*: tolerante a ruido de red/stream.
+    - *Contras*: divergencia de schema; doble mantenimiento del contrato.
+  - **C) Validadores Pydantic preservando la tolerancia**: `model_validate_json` dentro de `try`, y en `ValidationError` hacer `continue` como hoy.
+    - *Pros*: une ambos mundos — validación fuerte cuando el frame es válido, tolerancia cuando no.
+    - *Contras*: un poco más de código; hay que decidir si un `progress` inválido se ignora o aborta el stream.
+  - **Trampa del parche barato**: cambiar a `model_validate_json` sin el `try/except` — rompe la tolerancia que hoy es intencional ("Línea no-JSON (no debería ocurrir): se ignora sin abortar").
+  - **Qué se necesita del humano**: (1) estricto vs. tolerante ante frames sucios; (2) si un `result` inválido debe abortar o caer en `DaemonIPCError`.
 
 #### S2-06 — Lógica de dependencias duplicada entre build scripts
 - **Categoría**: Mantenibilidad
@@ -184,9 +208,21 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Confianza**: Alta
 - **Causa**: Sin fuente única de verdad para los pines.
 - **Impacto**: Una actualización de versión exige N cambios manuales sincronizados; alta probabilidad de desincronización.
-- **Corrección(es) propuesta(s)**: Centralizar pines en variables YAML (anchors) o generar los steps de instalación desde `build_utils.py` (recomendada).
-- **Decisión requerida**: No
+- **Corrección(es) propuesta(s)**: Ver «Alternativas y trade-offs».
+- **Decisión requerida**: Sí — elegir la fuente única de verdad (YAML vs. Python) y su alcance.
 - **Prioridad**: P1
+- **Alternativas y trade-offs**:
+  - **A) Anchors YAML centralizados** en `.circleci/config.yml`.
+    - *Pros*: simple, declarativo, visible en el propio CI.
+    - *Contras*: solo cubre CI; no sincroniza con `build_utils.py`/`render_cask.py` (que también hardcodean pines, ver evidencia); los scripts fuera de CircleCI quedan fuera.
+  - **B) Generar los steps de instalación desde `build_utils.py`** (fuente única en Python).
+    - *Pros*: una sola fuente para CI + scripts; elimina los N lugares de divergencia.
+    - *Contras*: el CI deja de ser declarativo (los pines viven en código Python); más acoplamiento build↔CI; superficie mayor si `build_utils.py` cambia.
+  - **C) Test/lint de consistencia** que falle si los pines divergen (sin cambiar la estructura).
+    - *Pros*: no altera el flujo, solo vigila la deriva.
+    - *Contras*: no elimina la duplicación, solo la detecta.
+  - **Trampa del parche barato**: mover a anchors solo en `config.yml` y olvidar `build_utils.py`/`render_cask.py` → la deriva persiste en los scripts de build.
+  - **Qué se necesita del humano**: (1) fuente única = YAML o Python; (2) si el alcance cubre también los scripts fuera de CI.
 
 #### S2-08 — Smoke tests duplicados en CI
 - **Categoría**: DevOps
@@ -243,9 +279,21 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Confianza**: Alta
 - **Causa**: Acoplamiento implícito vía estado global.
 - **Impacto**: Dificulta pruebas unitarias y thread-safety en escenarios complejos.
-- **Corrección(es) propuesta(s)**: Pasar el spinner por contexto/parámetro en lugar de global (recomendada).
-- **Decisión requerida**: No
+- **Corrección(es) propuesta(s)**: Ver «Alternativas y trade-offs».
+- **Decisión requerida**: Sí — decidir si resolverlo junto con S2-01 y si el alcance incluye `_synthesis_timing`.
 - **Prioridad**: P2
+- **Alternativas y trade-offs**:
+  - **A) Pasar el spinner por contexto/parámetro a `log()`** (eliminar el global `_active_spinner`, `timing.py:20-21, 244-263`).
+    - *Pros*: elimina el global; testeable aisladamente; thread-safe.
+    - *Contras*: cambia la firma de `log()` y todos sus call sites (CLI, engine vía callbacks); emparentado con S2-01 (`server.py` lee `_synthesis_timing` vía globals).
+  - **B) `threading.local()` para el spinner activo**.
+    - *Pros*: menor superficie de cambio que A; preserva la API de `log()`.
+    - *Contras*: sigue siendo estado implícito (ahora por hilo); no resuelve el acoplamiento con `server.py`; parche parcial.
+  - **C) Mantener el global**.
+    - *Pros*: cero cambio.
+    - *Contras*: no testeable aisladamente; frágil en multithread.
+  - **Trampa del parche barato**: envolver el global en una clase singleton — sigue siendo global mutable, solo cambia la forma, no el acoplamiento.
+  - **Qué se necesita del humano**: (1) resolver aislado o junto con S2-01 (mismo tema de globals); (2) si el alcance incluye `_synthesis_timing`.
 
 #### S2-12 — `bootstrap` usa `warnings.filterwarnings("ignore")` global
 - **Categoría**: Observabilidad / Mantenibilidad
@@ -254,9 +302,21 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Confianza**: Media
 - **Causa**: Supresión amplia "por si acaso".
 - **Impacto**: Enmascara futuras deprecaciones o advertencias de runtime útiles.
-- **Corrección(es) propuesta(s)**: Acotar a `DeprecationWarning`/`pkg_resources` específicos y eliminar el filtro global (recomendada).
-- **Decisión requerida**: No
+- **Corrección(es) propuesta(s)**: Ver «Alternativas y trade-offs».
+- **Decisión requerida**: Sí — aprobar la allow-list de warnings a silenciar y confirmar que ningún flujo depende del silencio total.
 - **Prioridad**: P2
+- **Alternativas y trade-offs**:
+  - **A) Acotar a filtros específicos y eliminar el catch-all** (`bootstrap.py:61` `warnings.filterwarnings("ignore")`), dejando solo los `DeprecationWarning`/`pkg_resources` y los loggers ya fijados en `bootstrap.py:68-70`.
+    - *Pros*: observabilidad real sin ruido innecesario; cierra el hallazgo.
+    - *Contras*: riesgo de superficie de warnings en runtime si falta alguno en la allow-list; hay que verificar contra entornos reales (CI/build).
+  - **B) Mantener el catch-all global**.
+    - *Pros*: cero riesgo de warnings molestos.
+    - *Contras*: enmascara deprecaciones futuras; el hallazgo no se cierra.
+  - **C) Catch-all con allow-list explícita documentada** (lista blanca de módulos a silenciar).
+    - *Pros*: controlado y documentado; reversible.
+    - *Contras*: mantenimiento de la lista.
+  - **Trampa del parche barato**: borrar la línea 61 sin verificar qué warnings reaparecen → CI ruidoso o, peor, warnings que ocultan errores reales.
+  - **Qué se necesita del humano**: aprobar la allow-list de warnings a silenciar (debe preservar el contrato de arranque limpio de CLAUDE.md) y confirmar que ningún flujo depende del silencio total.
 
 #### S2-13 — Creación de directorios duplicada `_emit_audio` vs `_save_wav`
 - **Categoría**: Mantenibilidad
