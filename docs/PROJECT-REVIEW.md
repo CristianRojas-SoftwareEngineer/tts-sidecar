@@ -13,7 +13,7 @@ Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolida
 | ID | Título | Severidad | Prioridad | Área/plataforma | Decisión requerida | Estado |
 |----|--------|-----------|-----------|-----------------|--------------------|--------|
 | S3-01 | Funcionalidad central del engine sin tests (gestión de voces, carga de modelo, conditionals) | S3 — Alto | P1 | engine / Testing | No | Resuelto |
-| S3-02 | Límite de seguridad del sandbox del daemon sin tests directos | S3 — Alto | P1 | daemon / Testing-Security | No | Pendiente |
+| S3-02 | Límite de seguridad del sandbox del daemon sin tests directos | S3 — Alto | P1 | daemon / Testing-Security | No | Resuelto |
 | S2-01 | Acoplamiento del servidor al engine vía globals, sin DI | S2 — Medio | P2 | daemon / Arquitectura | Sí | Pendiente |
 | S2-02 | Excepciones silenciadas sin logging en rutas críticas | S2 — Medio | P1 | engine/audio/timing/daemon / Fiabilidad | No | Pendiente |
 | S2-03 | Modelo no liberado en shutdown del daemon | S2 — Medio | P2 | daemon / Fiabilidad | No | Pendiente |
@@ -80,13 +80,15 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 #### S3-02 — Límite de seguridad del sandbox del daemon sin tests directos
 - **Categoría**: Testing / Seguridad
 - **Área/plataforma**: `src/tts_sidecar/voices.py`, `src/tts_sidecar/daemon/server.py`
-- **Evidencia**: `voices.allowed_audio_dirs()` y `daemon_session_dir()` (usadas en `daemon/server.py:129`) solo se ejercen de forma indirecta en `tests/test_daemon.py`; no hay tests que aislen la frontera (ruta fuera de `allowed_dirs` → rechazo; symlink que apunta fuera → rechazo; `daemon_session_dir` aislado por PID).
+- **Evidencia**: `voices.allowed_audio_dirs()` y `voices.daemon_session_dir()` (usadas en `daemon/server.py:129`) solo se ejercen de forma indirecta en `tests/test_daemon.py`; no había tests que aislaran la frontera (ruta fuera de `allowed_dirs` → rechazo; symlink que apunta fuera → rechazo; `daemon_session_dir` namespaceado bajo `<tempdir>/tts-sidecar`, **sin** aislamiento por PID — la afirmación original "aislado por PID" era inexacta: el código solo namespacea bajo el tempdir, no por PID).
 - **Confianza**: Alta
-- **Causa**: Los tests de daemon ejercen el sandbox a través del endpoint, no como unidad; los casos de borde de la frontera no están enumerados.
+- **Causa**: Los tests de daemon ejercen el sandbox a través del endpoint, no como unidad; los casos de borde de la frontera no estaban enumerados.
 - **Impacto**: Una regresión en la frontera de seguridad (que hoy sí contiene escapes vía `realpath`, ver S0-05) quedaría sin detectar; es justo el tipo de defensa que debe tener cobertura explícita.
-- **Corrección(es) propuesta(s)**: Tests unitarios directos de `allowed_audio_dirs` y `daemon_session_dir` con matrices de rutas (dentro/fuera, symlink inward/outward, `..`) (recomendada).
+- **Corrección(es) propuesta(s)**: Tests unitarios directos añadidos en `tests/test_daemon_sandbox.py` (`allowed_audio_dirs`, `daemon_session_dir`, `_validate_audio_path` con matrices dentro/fuera y symlink inward/outward) tras extraer `_validate_audio_path` de `synthesize` (recomendada).
 - **Decisión requerida**: No
 - **Prioridad**: P1
+- **Estado**: Resuelto
+- **Re-scoping (S3-02)**: La frontera de seguridad del sandbox ahora está aislada en tests unitarios (`tests/test_daemon_sandbox.py`): `TestAllowedAudioDirs` cubre la composición exacta de `allowed_audio_dirs()` (tres entradas, con el tempdir general excluido) y que `daemon_session_dir()` es `<tempdir>/tts-sidecar` sin PID; `TestValidateAudioPath` cubre `_validate_audio_path` —extraída de `synthesize` a `daemon/server.py`— con rechazo fuera de `allowed_dirs`, rechazo de symlink que escapa, aceptación de symlink inward, retorno del `realpath` canónico, y rechazo por extensión no `.wav`/archivo inexistente o header WAV inválido. Se corrigió además la afirmación del hallazgo original ("aislado por PID") que no correspondía al código. Sin cambio de comportamiento en runtime: `synthesize` delega en `_validate_audio_path` conservando los mismos chequeos y `HTTPException(400)`.
 
 ### S2 — Medios
 
@@ -495,8 +497,8 @@ Nota: el conteo de tests **no** es una discrepancia. `pytest --collect-only` rec
 
 #### S0-05 — TOCTOU en validación de audio del daemon — verificado ya mitigado
 - **Categoría**: Seguridad
-- **Área/plataforma**: `src/tts_sidecar/daemon/server.py:129-161`
-- **Evidencia**: Un sub-agente reportó una carrera entre la validación de directorio y la del header WAV. La lectura directa confirma que `real_path = os.path.realpath(path)` se calcula **una sola vez** (línea 143) y se reusa para ambas comprobaciones (directorio 144-150 y header 152-160); el comentario WARNING-02 (líneas 130-133) documenta que esto ya cierra la ventana de symlink swap. El `realpath` canónico hace que la ventana de "validar y usar" no exista como se describió.
+- **Área/plataforma**: `src/tts_sidecar/daemon/server.py` (`_validate_audio_path`, extraída de `synthesize` en la remediación de S3-02)
+- **Evidencia**: Un sub-agente reportó una carrera entre la validación de directorio y la del header WAV. La lectura directa confirma que `real_path = os.path.realpath(path)` se calcula **una sola vez** dentro de `_validate_audio_path` y se devuelve al caller (`synthesize`), que lo pasa directo al engine para ambas comprobaciones (directorio y header WAV) sin volver a resolver la ruta; el comentario WARNING-02 documenta que esto ya cierra la ventana de symlink swap. El `realpath` canónico hace que la ventana de "validar y usar" no exista como se describió.
 - **Confianza**: Alta
 - **Impacto**: Ninguno en la forma actual; el hallazgo de severidad alta propuesto era un falso positivo.
 - **Corrección**: Ninguna (ya mitigado). Dejar constancia para evitar reabrirlo.
@@ -530,7 +532,7 @@ Hallazgos cuya evidencia ya está establecida por lectura de código y que se co
 - **S3-01 / S3-02 / S2-16 / S2-17 / S2-18**: la cobertura real se confirma con el reporte de cobertura de pytest en CI (jobs `test-*`). El descubrimiento de tests se confirmó en ejecución: `pytest --collect-only -q` recolecta **350 tests** en 0.76s (exit 0); el conteo estático de funciones `def test_` es 336. Ambas cifras coinciden con `CLAUDE.md` (~350) y `GOAL.md` (336/336).
 - **S2-06 / S2-07 / S2-08 / S2-09 / S0-03**: la estructura y los pines de `.circleci/config.yml` se validan en cada push; cualquier divergencia de pines aparecerá como fallo de instalación en los jobs de build.
 - **S2-02**: la ausencia de trazas ante fallos de subsistemas (audio/PyTorch) se hace evidente en los logs de CI cuando un job de build/smoke-test encuentra un entorno diverso.
-- **S0-05**: la mitigación TOCTOU ya está en el código (`server.py:143`); los tests de sandbox en `tests/test_daemon.py` (`TestDaemonSessionSandbox`) la ejercen indirectamente y la confirmarán al correr.
+- **S0-05**: la mitigación TOCTOU ya está en el código (`_validate_audio_path` en `server.py`, que resuelve `realpath` una sola vez y lo reusa); los tests de sandbox en `tests/test_daemon_sandbox.py` (`TestValidateAudioPath`) y `tests/test_daemon.py` (`TestDaemonSessionSandbox`) la ejercen directa e indirectamente y la confirmarán al correr.
 
 ## Provenance y refinamiento arquitectónico (verificación adicional)
 
