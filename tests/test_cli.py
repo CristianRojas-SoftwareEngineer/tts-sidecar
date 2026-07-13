@@ -1987,3 +1987,66 @@ class TestBootstrap:
         bootstrap.apply()
 
         assert sys.modules["pkg_resources"] is sentinel
+
+    # -- S1-08: resource_filename del mock instalado, sus tres ramas -------
+
+    def _install_mock(self, bootstrap, monkeypatch):
+        """Instala el mock (find_spec('pkg_resources') -> None durante apply)
+        y devuelve el módulo mockeado para invocar resource_filename directamente."""
+        sys.modules.pop("pkg_resources", None)
+        monkeypatch.setattr(bootstrap.importlib.util, "find_spec", lambda name: None)
+        bootstrap.apply()
+        return sys.modules["pkg_resources"]
+
+    def test_resource_filename_falls_back_to_bare_resource_when_spec_is_none(self, monkeypatch):
+        """Paquete no resoluble (find_spec devuelve None): sin __spec__ no hay
+        directorio base, así que se retorna el recurso tal cual se pidió."""
+        bootstrap = self._reset(monkeypatch)
+        mock = self._install_mock(bootstrap, monkeypatch)
+        try:
+            assert mock.resource_filename("paquete.inexistente", "datos/archivo.wav") == "datos/archivo.wav"
+        finally:
+            sys.modules.pop("pkg_resources", None)
+
+    def test_resource_filename_falls_back_when_spec_has_no_search_locations(self, monkeypatch):
+        """Spec válido pero sin submodule_search_locations (módulo simple, no
+        paquete): tampoco hay directorio base resoluble."""
+        import types
+
+        bootstrap = self._reset(monkeypatch)
+        mock = self._install_mock(bootstrap, monkeypatch)
+        try:
+            fake_spec = types.SimpleNamespace(submodule_search_locations=None)
+            monkeypatch.setattr(bootstrap.importlib.util, "find_spec", lambda name: fake_spec)
+            assert mock.resource_filename("algun.modulo", "data.wav") == "data.wav"
+        finally:
+            sys.modules.pop("pkg_resources", None)
+
+    def test_resource_filename_falls_back_when_search_locations_is_empty(self, monkeypatch):
+        """submodule_search_locations existe pero está vacía: mismo fallback
+        que None, ya que la condición es una comprobación de veracidad."""
+        import types
+
+        bootstrap = self._reset(monkeypatch)
+        mock = self._install_mock(bootstrap, monkeypatch)
+        try:
+            fake_spec = types.SimpleNamespace(submodule_search_locations=[])
+            monkeypatch.setattr(bootstrap.importlib.util, "find_spec", lambda name: fake_spec)
+            assert mock.resource_filename("algun.paquete", "data.wav") == "data.wav"
+        finally:
+            sys.modules.pop("pkg_resources", None)
+
+    def test_resource_filename_resolves_path_when_spec_has_search_locations(self, monkeypatch, tmp_path):
+        """Paquete resoluble con directorio base: arma la ruta absoluta
+        uniendo la primera search location con el recurso pedido."""
+        import types
+
+        bootstrap = self._reset(monkeypatch)
+        mock = self._install_mock(bootstrap, monkeypatch)
+        try:
+            fake_spec = types.SimpleNamespace(submodule_search_locations=[str(tmp_path)])
+            monkeypatch.setattr(bootstrap.importlib.util, "find_spec", lambda name: fake_spec)
+            result = mock.resource_filename("tts_sidecar", "voices/default/reference.wav")
+            assert result == str(tmp_path / "voices/default/reference.wav")
+        finally:
+            sys.modules.pop("pkg_resources", None)
