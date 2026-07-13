@@ -50,6 +50,10 @@ INSTALLER_TIMEOUT = 1800
 # Versiones pineadas de las herramientas de build, espejo de las que instala
 # .circleci/config.yml: un build local con estas versiones produce el mismo
 # artefacto que el CI. Actualizar deliberadamente y en ambos lugares a la vez.
+# INNOSETUP_PIN es la fuente única del pin de Inno (lado Python del diseño
+# mixto de S2-07): tests/test_pin_consistency.py falla si el comando
+# `choco install innosetup --version=...` de config.yml diverge de esta
+# constante. PYINSTALLER_PIN alimenta requirements-lock-build.txt (S2-09).
 PYINSTALLER_PIN = "6.21.0"
 INNOSETUP_PIN = "6.3.3"
 

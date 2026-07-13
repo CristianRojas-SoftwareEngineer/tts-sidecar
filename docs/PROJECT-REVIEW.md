@@ -20,7 +20,7 @@ Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolida
 | S2-04 | Worker del daemon no cancelable al desconectar el cliente | S2 — Medio | P2 | daemon / Escalabilidad | Sí | Pendiente |
 | S2-05 | `ipc.py` no reutiliza los modelos de `protocol.py` | S2 — Medio | P2 | daemon / Calidad de código | Sí | Pendiente |
 | S2-06 | Lógica de dependencias duplicada entre build scripts | S2 — Medio | P1 | build / Mantenibilidad | No | Resuelto |
-| S2-07 | Pines de versión duplicados en CI y scripts | S2 — Medio | P1 | CI / Mantenibilidad-DevOps | Sí | Pendiente |
+| S2-07 | Pines de versión duplicados en CI y scripts | S2 — Medio | P1 | CI / Mantenibilidad-DevOps | Sí | Resuelto |
 | S2-08 | Smoke tests duplicados en CI | S2 — Medio | P2 | CI / DevOps | No | Resuelto |
 | S2-09 | Lockfiles omiten herramienta de build (PyInstaller) | S2 — Medio | P1 | build / Dependencias | No | Resuelto |
 | S2-10 | God object `ChatterboxEngine` | S2 — Medio | P2 | engine / Mantenibilidad | Sí | En progreso |
@@ -232,6 +232,14 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
     - *Contras*: no elimina la duplicación, solo la detecta; requiere mantener la lista de pines a vigilar.
   - **Trampa del parche barato**: mover a anchors solo en `config.yml` y olvidar `build_utils.py`/`render_cask.py` → la deriva persiste en los scripts de build.
   - **Qué se necesita del humano**: (1) fuente única = YAML o Python (posiblemente **mixta**: YAML para pines de entorno-CI como Python/pytest, Python para pines de build como Inno/repo, siguiendo el precedente de PyInstaller); (2) si el alcance cubre también los scripts fuera de CI; (3) si basta con la vigilancia de la opción C dado que la duplicación restante ya es acotada tras S2-09.
+- **Remediación (Resuelto)** — decisión humana: **opción mixta YAML+Python**, reforzada con la vigilancia de la opción C donde una fuente única entre lenguajes no es viable.
+  - **Refinamiento honesto sobre la opción A**: los *anchors YAML* son inviables aquí porque **cada pin está embebido dentro de un string más grande** (`--version=3.13.14`, `pip install pytest==9.1.1`, claves de caché `pyenv-v1-{{ arch }}-3.13.14-...`), y un anchor solo sustituye un nodo YAML completo, no una subcadena. El mecanismo YAML-nativo de CircleCI que **sí** interpola dentro de strings son los **pipeline parameters**, que es lo que se usó.
+  - **Lado YAML (pines de entorno-CI)**: se añadió un bloque top-level `parameters:` en `.circleci/config.yml` con `python_version` (default `3.13.14`) y `pytest_version` (default `9.1.1`). Las ~22 apariciones de Python (choco `--version`, `pyenv install`/`global`, claves de caché) y las 3 de pytest se reemplazaron por `<< pipeline.parameters.NAME >>`. Verificado con `circleci config validate` (válido) y `circleci config process`: la salida procesada resuelve a los mismos literales que antes (idénticos byte a byte en los pines funcionales; las claves de caché conservan `{{ arch }}`). Actualizar Python/pytest = editar un solo `default:`.
+  - **Lado Python (pin de build de Inno)**: la fuente única sigue siendo `scripts/build_utils.INNOSETUP_PIN` (ya existía); el `choco install innosetup --version=6.3.3` de `config.yml` no se movió a YAML (es un pin de *build*, no de entorno), pero ahora un test lo **vigila** contra deriva.
+  - **Slug del repo — no-consolidación deliberada (refinamiento honesto)**: el hallazgo citaba líneas desactualizadas; el slug real `CristianRojas-SoftwareEngineer/TTS-Sidecar` está disperso en archivos **heterogéneos sin import compartido** (`install-linux.sh`, `install-macos.sh`, `.circleci/config.yml`, `scripts/create_installer_windows.py`, `.github/ISSUE_TEMPLATE/config.yml`, `scripts/render_cask.py`) y es un identificador **inmutable** (cambia ~nunca). Forzar una fuente única entre shell/YAML/Python/templates acoplaría lenguajes de forma frágil para un beneficio nulo. En su lugar se declara `render_cask.GITHUB_REPO` como fuente canónica y un test verifica que todos los consumidores la referencien.
+  - **Vigilancia (opción C como red de seguridad)**: nuevo `tests/test_pin_consistency.py` (5 tests) que falla si (a) el literal de Python/pytest reaparece fuera del pipeline parameter, (b) el Inno de `config.yml` diverge de `INNOSETUP_PIN`, o (c) algún consumidor deja de referenciar el slug canónico del repo. Convierte la deriva silenciosa en fallo de CI.
+  - **Trampa evitada**: no se movieron los anchors solo a `config.yml` dejando `build_utils.py`/`render_cask.py` fuera; el diseño mixto + el test cubren CI **y** scripts.
+  - **Tests**: suite **456 passed** (+5).
 
 #### S2-08 — Smoke tests duplicados en CI
 - **Categoría**: DevOps

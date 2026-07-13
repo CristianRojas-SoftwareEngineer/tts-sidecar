@@ -3,6 +3,24 @@ version: 2.1
 orbs:
   win: circleci/windows@5.0
 
+# Fuente única de los pines de entorno-CI (S2-07). Estas versiones se
+# interpolan con << pipeline.parameters.NAME >> en cada job en vez de
+# repetirse literalmente (antes: Python x10, pytest x3). Actualizar una
+# versión = editar solo aquí. Los pines de *build* (Inno, repo) NO viven aquí:
+# su fuente es Python (scripts/build_utils.py, scripts/render_cask.py) y se
+# vigilan contra deriva con tests/test_pin_consistency.py.
+parameters:
+  python_version:
+    type: string
+    default: "3.13.14"
+    description: >
+      CPython exacto usado en todos los jobs (choco en Windows, pyenv en macOS,
+      claves de caché de pyenv). Espejo entre plataformas.
+  pytest_version:
+    type: string
+    default: "9.1.1"
+    description: Versión de pytest instalada en los jobs de test.
+
 commands:
   smoke_test_frozen_bundle:
     # Ejecuta el binario congelado onedir para detectar empaquetados rotos
@@ -104,7 +122,7 @@ jobs:
           name: Install pytest into venv (post-cache)
           command: |
             echo "[STEP] Install pytest into venv (post-cache) - INICIO"
-            pip install pytest==9.1.1
+            pip install pytest==<< pipeline.parameters.pytest_version >>
             echo "[STEP] Install pytest into venv (post-cache) - FIN"
       - run:
           # WARNING-04: CLAUDE.md documenta py_compile como chequeo de verificación,
@@ -133,12 +151,12 @@ jobs:
       - run:
           # Pin de Chocolatey (espejo de build-windows-x64): un release nuevo no debe
           # romper el job sin cambios en el repo.
-          name: Set up Python 3.13 via choco (pinned 3.13.14)
+          name: Set up Python 3.13 via choco (pinned << pipeline.parameters.python_version >>)
           command: |
-            Write-Host "[STEP] Set up Python 3.13 via choco (pinned 3.13.14) - INICIO"
-            choco install python313 -y --version=3.13.14
+            Write-Host "[STEP] Set up Python 3.13 via choco (pinned << pipeline.parameters.python_version >>) - INICIO"
+            choco install python313 -y --version=<< pipeline.parameters.python_version >>
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            Write-Host "[STEP] Set up Python 3.13 via choco (pinned 3.13.14) - FIN"
+            Write-Host "[STEP] Set up Python 3.13 via choco (pinned << pipeline.parameters.python_version >>) - FIN"
       - run:
           # Material de la clave de cache del venv: versión exacta de Python del
           # runner (sin pins de herramientas). Al no incluir el pin, la caché de
@@ -191,7 +209,7 @@ jobs:
           name: Install pytest into venv (post-cache)
           command: |
             Write-Host "[STEP] Install pytest into venv (post-cache) - INICIO"
-            .venv\Scripts\python.exe -m pip install pytest==9.1.1
+            .venv\Scripts\python.exe -m pip install pytest==<< pipeline.parameters.pytest_version >>
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Write-Host "[STEP] Install pytest into venv (post-cache) - FIN"
       - run:
@@ -215,9 +233,9 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - pyenv-v1-{{ arch }}-3.13.14-xcode26.4
+            - pyenv-v1-{{ arch }}-<< pipeline.parameters.python_version >>-xcode26.4
       - run:
-          # Pin EXACTO de Python 3.13.14 vía pyenv (espejo del pin de Chocolatey
+          # Pin EXACTO de Python << pipeline.parameters.python_version >> vía pyenv (espejo del pin de Chocolatey
           # en los jobs Windows): no usar el python3 del sistema sin fijar, para
           # testear sobre la misma versión que empaqueta el build, y con patch
           # fijo para que la clave de cache del CPython compilado sea estable.
@@ -231,19 +249,19 @@ jobs:
           # un snapshot vendido con el formula de Homebrew, no se actualiza solo).
           # Excepción consciente de pin (R-14): Homebrew no soporta fijar una
           # versión de pyenv, y la versión de pyenv no altera el artefacto —
-          # el CPython resultante ya está pineado (3.13.14).
-          name: Set up Python 3.13 via pyenv (pinned 3.13.14)
+          # el CPython resultante ya está pineado (<< pipeline.parameters.python_version >>).
+          name: Set up Python 3.13 via pyenv (pinned << pipeline.parameters.python_version >>)
           no_output_timeout: 20m
           command: |
-            echo "[STEP] Set up Python 3.13 via pyenv (pinned 3.13.14) - INICIO"
+            echo "[STEP] Set up Python 3.13 via pyenv (pinned << pipeline.parameters.python_version >>) - INICIO"
             brew update && brew upgrade pyenv
-            pyenv install -s 3.13.14
-            pyenv global 3.13.14
+            pyenv install -s << pipeline.parameters.python_version >>
+            pyenv global << pipeline.parameters.python_version >>
             pyenv rehash
             python --version
-            echo "[STEP] Set up Python 3.13 via pyenv (pinned 3.13.14) - FIN"
+            echo "[STEP] Set up Python 3.13 via pyenv (pinned << pipeline.parameters.python_version >>) - FIN"
       - save_cache:
-          key: pyenv-v1-{{ arch }}-3.13.14-xcode26.4
+          key: pyenv-v1-{{ arch }}-<< pipeline.parameters.python_version >>-xcode26.4
           paths:
             - ~/.pyenv/versions
       - run:
@@ -292,7 +310,7 @@ jobs:
           name: Install pytest into venv (post-cache)
           command: |
             echo "[STEP] Install pytest into venv (post-cache) - INICIO"
-            python -m pip install pytest==9.1.1
+            python -m pip install pytest==<< pipeline.parameters.pytest_version >>
             echo "[STEP] Install pytest into venv (post-cache) - FIN"
       - run:
           name: Run pytest suite over tests/
@@ -387,12 +405,12 @@ jobs:
           # SUGGESTION-06: sin pin, un release nuevo de Chocolatey puede romper
           # el build sin cambios en el repo. Versión fijada al momento de escribir
           # este pin; actualizar deliberadamente cuando se quiera adoptar una nueva.
-          name: Set up Python 3.13 via choco (pinned 3.13.14)
+          name: Set up Python 3.13 via choco (pinned << pipeline.parameters.python_version >>)
           command: |
-            Write-Host "[STEP] Set up Python 3.13 via choco (pinned 3.13.14) - INICIO"
-            choco install python313 -y --version=3.13.14
+            Write-Host "[STEP] Set up Python 3.13 via choco (pinned << pipeline.parameters.python_version >>) - INICIO"
+            choco install python313 -y --version=<< pipeline.parameters.python_version >>
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            Write-Host "[STEP] Set up Python 3.13 via choco (pinned 3.13.14) - FIN"
+            Write-Host "[STEP] Set up Python 3.13 via choco (pinned << pipeline.parameters.python_version >>) - FIN"
       - run:
           # Material de la clave de cache del venv: versión exacta de Python del
           # runner (sin pins de herramientas). Al no incluir el pin, la caché de
@@ -727,9 +745,9 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - pyenv-v1-{{ arch }}-3.13.14-xcode26.4
+            - pyenv-v1-{{ arch }}-<< pipeline.parameters.python_version >>-xcode26.4
       - run:
-          # Pin EXACTO de Python 3.13.14 vía pyenv (espejo del job
+          # Pin EXACTO de Python << pipeline.parameters.python_version >> vía pyenv (espejo del job
           # build-linux-arm64 y del pin de Chocolatey): el runner de macOS no
           # debe usar su python3 del sistema sin fijar, o el build empaquetaría
           # una versión no controlada; patch fijo para que la clave de cache del
@@ -744,19 +762,19 @@ jobs:
           # Homebrew, no se actualiza solo). Excepción consciente de pin (R-14):
           # Homebrew no soporta fijar una versión de pyenv, y la versión de
           # pyenv no altera el artefacto — el CPython resultante ya está
-          # pineado (3.13.14).
-          name: Set up Python 3.13 via pyenv (pinned 3.13.14)
+          # pineado (<< pipeline.parameters.python_version >>).
+          name: Set up Python 3.13 via pyenv (pinned << pipeline.parameters.python_version >>)
           no_output_timeout: 20m
           command: |
-            echo "[STEP] Set up Python 3.13 via pyenv (pinned 3.13.14) - INICIO"
+            echo "[STEP] Set up Python 3.13 via pyenv (pinned << pipeline.parameters.python_version >>) - INICIO"
             brew update && brew upgrade pyenv
-            pyenv install -s 3.13.14
-            pyenv global 3.13.14
+            pyenv install -s << pipeline.parameters.python_version >>
+            pyenv global << pipeline.parameters.python_version >>
             pyenv rehash
             python --version
-            echo "[STEP] Set up Python 3.13 via pyenv (pinned 3.13.14) - FIN"
+            echo "[STEP] Set up Python 3.13 via pyenv (pinned << pipeline.parameters.python_version >>) - FIN"
       - save_cache:
-          key: pyenv-v1-{{ arch }}-3.13.14-xcode26.4
+          key: pyenv-v1-{{ arch }}-<< pipeline.parameters.python_version >>-xcode26.4
           paths:
             - ~/.pyenv/versions
       - run:
