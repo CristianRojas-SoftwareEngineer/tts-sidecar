@@ -4,10 +4,12 @@ Usa HTTP sobre TCP (funciona en todas las plataformas).
 """
 
 import base64
+import binascii
 import json
 from typing import Callable, Optional
 
 import requests
+from pydantic import ValidationError
 
 from ..timing import log
 
@@ -56,8 +58,12 @@ class DaemonIPCClient:
         No basta con un 200: si otro servicio local ocupara el puerto 8765 y
         respondiera 200, un chequeo por status code lo confundiría con nuestro
         daemon (falso «ya corriendo» y síntesis posteriores fallando con exit 5
-        difícil de atribuir). Se valida que el cuerpo sea un `HealthResponse`
-        de nuestro protocolo; cualquier otra cosa se trata como «no es el daemon».
+        difícil de atribuir). Por eso el cuerpo se valida estrictamente contra el
+        modelo canónico `HealthResponse` de `protocol.py`; cualquier cuerpo que no
+        conforme ese esquema se trata como «no es nuestro daemon» → `False`. A
+        diferencia del resto de consumidores IPC, esta sonda no eleva
+        `DaemonIPCError`: discriminar deliberadamente un servicio ajeno del puerto
+        es su contrato, no un fallo silenciado.
         """
         from ..daemon.protocol import HealthResponse
 
@@ -69,8 +75,8 @@ class DaemonIPCClient:
             if response.status_code != 200:
                 return False
             try:
-                HealthResponse(**response.json())
-            except (ValueError, TypeError):
+                HealthResponse.model_validate(response.json())
+            except (ValidationError, ValueError):
                 # Cuerpo ausente, no-JSON o que no valida el esquema: no es nuestro daemon.
                 return False
             return True
@@ -126,31 +132,65 @@ class DaemonIPCClient:
             audio_bytes: Optional[bytes] = None
             for raw in response.iter_lines():
                 if not raw:
+                    # Línea vacía (keep-alive HTTP): no es un frame, se salta.
                     continue
                 try:
-                    ev = json.loads(raw)
-                except ValueError:
-                    # Línea no-JSON (no debería ocurrir): se ignora sin abortar.
-                    continue
+                    payload = json.loads(raw)
+                except ValueError as e:
+                    raise DaemonIPCError(
+                        f"El daemon emitió una línea no-JSON: {e}"
+                    )
 
-                kind = ev.get("event")
+                # Validación estricta contra la única fuente de verdad del
+                # contrato (protocol.py). Un `event` desconocido o un frame con
+                # esquema inválido aborta la síntesis en vez de tolerarse.
+                from ..daemon.protocol import (
+                    ProgressEvent,
+                    ResultEvent,
+                    ErrorEvent,
+                )
+
+                kind = payload.get("event") if isinstance(payload, dict) else None
+                try:
+                    if kind == "progress":
+                        ev = ProgressEvent.model_validate(payload)
+                    elif kind == "result":
+                        ev = ResultEvent.model_validate(payload)
+                    elif kind == "error":
+                        ev = ErrorEvent.model_validate(payload)
+                    else:
+                        raise DaemonIPCError(
+                            f"Evento de stream desconocido del daemon: {kind!r}"
+                        )
+                except ValidationError as e:
+                    raise DaemonIPCError(
+                        f"El daemon devolvió un frame no conforme: {e}"
+                    )
+
                 if kind == "progress":
                     if on_progress is not None:
-                        on_progress(ev)
+                        on_progress(ev.model_dump())
                 elif kind == "result":
-                    audio_bytes = base64.b64decode(ev["audio_b64"])
+                    try:
+                        audio_bytes = base64.b64decode(
+                            ev.audio_b64, validate=True
+                        )
+                    except (ValueError, binascii.Error) as e:
+                        raise DaemonIPCError(
+                            f"El frame 'result' tiene audio_b64 no decodificable: {e}"
+                        )
                     # Timing por sub-etapa (equivalente a los antiguos headers
                     # X-T3-Time / X-S3Gen-Time). Se emite con el MISMO formato que
                     # el modo directo (engine.py usa estas cadenas exactas) y vía
                     # log(), coordinado con el spinner activo, sobre stderr.
-                    t3_time = ev.get("t3_time")
-                    s3gen_time = ev.get("s3gen_time")
+                    t3_time = ev.t3_time
+                    s3gen_time = ev.s3gen_time
                     if t3_time is not None and s3gen_time is not None:
                         log(f"   [Etapa 2a] T3 autoregresivo: {float(t3_time):.1f}s")
                         log(f"   [Etapa 2b] S3Gen vocoder:   {float(s3gen_time):.1f}s")
                 elif kind == "error":
                     raise DaemonIPCError(
-                        f"Error del daemon: {ev.get('detail', 'Error desconocido')}"
+                        f"Error del daemon: {ev.detail}"
                     )
 
             if audio_bytes is None:
@@ -166,19 +206,27 @@ class DaemonIPCClient:
             raise DaemonIPCError(f"Error de comunicación con el daemon: {e}")
 
     def list_voices(self) -> list[str]:
-        """Lista las voces registradas vía daemon."""
+        """Lista las voces registradas vía daemon.
+
+        Valida el cuerpo contra `VoicesResponse` (protocol.py); un cuerpo no
+        conforme eleva `DaemonIPCError` en vez de degradarse silenciosamente a `[]`.
+        """
+        from ..daemon.protocol import VoicesResponse
+
         try:
             response = requests.get(
                 f"{self.base_url}/voices",
                 timeout=self.TIMEOUT
             )
-            if response.status_code == 200:
-                try:
-                    return response.json().get("voices", [])
-                except ValueError:
-                    # Cuerpo de éxito no-JSON: degradar a lista vacía en vez de propagar.
-                    return []
-            return []
+            if response.status_code != 200:
+                return []
+            try:
+                body = VoicesResponse.model_validate(response.json())
+            except (ValidationError, ValueError) as e:
+                raise DaemonIPCError(
+                    f"El daemon devolvió un cuerpo /voices no conforme: {e}"
+                )
+            return body.voices
         except (requests.ConnectionError, requests.Timeout):
             return []
 

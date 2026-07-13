@@ -6,7 +6,7 @@ Auditoría sistémica de **todo el repositorio TTS Sidecar** bajo la lente **cal
 
 Veredicto global: el proyecto está **maduro y disciplinado** (488 tests, semáforo de admisión en el daemon, lock de arranque atómico, sandbox de audio con `realpath`). La deuda es **moderada y localizada**, no estructural. No hay hallazgos S4 (críticos). Los riesgos más relevantes son de **observabilidad** (excepciones silenciadas en rutas críticas), **acoplamiento del daemon al engine** (globals, sin inyección de dependencias) y **brechas de cobertura en la funcionalidad central del engine y en el límite de seguridad del sandbox**.
 
-Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolidados). Dos afirmaciones de alta severidad propuestas por los sub-agentes fueron **descartadas como falso positivo** tras verificación directa; además, la presunta discrepancia de conteo de tests no es defecto (ver «Nota de verificación» y «Provenance»). El conteo en el momento de la auditoría era 350 tests recolectados por pytest (336 funciones `def test_`); las remediaciones posteriores de los hallazgos resueltos (S3-01/02, S2-02, S2-07, S1-17, S2-10, etc.) elevaron la suite a **488 tests recolectados**. `CLAUDE.md` (~488) refleja el total actual.
+Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolidados). Dos afirmaciones de alta severidad propuestas por los sub-agentes fueron **descartadas como falso positivo** tras verificación directa; además, la presunta discrepancia de conteo de tests no es defecto (ver «Nota de verificación» y «Provenance»). El conteo en el momento de la auditoría era 350 tests recolectados por pytest (336 funciones `def test_`); las remediaciones posteriores de los hallazgos resueltos (S3-01/02, S2-02, S2-07, S1-17, S2-10, S2-05, etc.) elevaron la suite a **498 tests recolectados**. `CLAUDE.md` (~498) refleja el total actual.
 
 ### Índice de hallazgos
 
@@ -18,7 +18,7 @@ Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolida
 | S2-02 | Excepciones silenciadas sin logging en rutas críticas | S2 — Medio | P1 | engine/audio/timing/daemon / Fiabilidad | Sí | Resuelto |
 | S2-03 | Modelo no liberado en shutdown del daemon | S2 — Medio | P2 | daemon / Fiabilidad | No | Resuelto |
 | S2-04 | Worker del daemon no cancelable al desconectar el cliente | S2 — Medio | P2 | daemon / Escalabilidad | Sí | Pendiente |
-| S2-05 | `ipc.py` no reutiliza los modelos de `protocol.py` | S2 — Medio | P2 | daemon / Calidad de código | Sí | Pendiente |
+| S2-05 | `ipc.py` no reutiliza los modelos de `protocol.py` | S2 — Medio | P2 | daemon / Calidad de código | Sí | Resuelto |
 | S2-06 | Lógica de dependencias duplicada entre build scripts | S2 — Medio | P1 | build / Mantenibilidad | No | Resuelto |
 | S2-07 | Pines de versión duplicados en CI y scripts | S2 — Medio | P1 | CI / Mantenibilidad-DevOps | Sí | Resuelto |
 | S2-08 | Smoke tests duplicados en CI | S2 — Medio | P2 | CI / DevOps | No | Resuelto |
@@ -178,27 +178,16 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
   - **Qué se necesita del humano**: (1) mecanismo (polling vs. cooperativo); (2) profundidad — ¿cancelar solo el worker o también interrumpir el engine en medio de la síntesis?
 
 #### S2-05 — `ipc.py` no reutiliza los modelos de `protocol.py`
+- **Estado**: Resuelto
 - **Categoría**: Calidad de código
-- **Área/plataforma**: `src/tts_sidecar/daemon/ipc.py:136-154`
-- **Evidencia**: El cliente IPC parsea NDJSON manualmente (`json.loads`, `ev.get("event")`) en lugar de usar `ProgressEvent`/`ResultEvent`/`ErrorEvent` de `protocol.py`.
+- **Área/plataforma**: `src/tts_sidecar/daemon/ipc.py` (consumidores `synthesize`, `list_voices`, `is_running`)
+- **Evidencia**: El cliente IPC parseaba NDJSON manualmente (`json.loads`, `ev.get("event")`) y degradaba silenciosamente cuerpos no conformes a `[]`/`False`, en lugar de usar `ProgressEvent`/`ResultEvent`/`ErrorEvent`/`VoicesResponse` de `protocol.py`.
 - **Confianza**: Alta
 - **Causa**: Lógica de schema duplicada fuera de los modelos Pydantic ya existentes.
-- **Impacto**: Cambios en el contrato exigen tocar dos sitios; riesgo de divergencia.
-- **Corrección(es) propuesta(s)**: Ver «Alternativas y trade-offs».
-- **Decisión requerida**: Sí — decidir si el cliente IPC debe ser estricto o tolerante ante frames sucios.
+- **Impacto**: Cambios en el contrato exigían tocar dos sitios; riesgo de divergencia silenciosa y fallos `KeyError` crudos ante frames incompletos.
+- **Decisión**: Sí — se eligió la **opción A (contrato estricto/determinista)**. El consumidor ahora valida cada respuesta del daemon contra los modelos de `protocol.py` y eleva `DaemonIPCError` ante cualquier frame no conforme (línea no-JSON, `event` desconocido, esquema inválido, `audio_b64` no base64) o cuerpo de `/voices` no conforme. Se **descarta la tolerancia** por diseño: en producción cada línea es válida por construcción, de modo que el camino feliz no cambia y solo los frames defectuosos —hoy silenciados— pasan a fallar de forma explícita. `is_running` conserva su contrato de sonda (`bool`): un cuerpo de `/health` no conforme significa «no es nuestro daemon» → `False` (discriminación deliberada, no fallo silenciado).
+- **Ruta de reversión**: `git revert` del commit de integración (o restaurar en `ipc.py` el parseo manual `json.loads`/`ev.get`, los `except ValueError: continue`/`return []` y el `except (ValueError, TypeError): return False` originales).
 - **Prioridad**: P2
-- **Alternativas y trade-offs**:
-  - **A) `model_validate_json` estricto** por línea con los modelos de `protocol.py`.
-    - *Pros*: una sola fuente de verdad del contrato; validación fuerte de cada frame.
-    - *Contras*: pierde la tolerancia actual — hoy `ipc.py:132-134` hace `except ValueError: continue` ante líneas no-JSON; un frame malformado rompería el stream en vez de ignorarse; riesgo de regresión si el server emite algo no modelado.
-  - **B) Mantener el parseo manual** (status quo).
-    - *Pros*: tolerante a ruido de red/stream.
-    - *Contras*: divergencia de schema; doble mantenimiento del contrato.
-  - **C) Validadores Pydantic preservando la tolerancia**: `model_validate_json` dentro de `try`, y en `ValidationError` hacer `continue` como hoy.
-    - *Pros*: une ambos mundos — validación fuerte cuando el frame es válido, tolerancia cuando no.
-    - *Contras*: un poco más de código; hay que decidir si un `progress` inválido se ignora o aborta el stream.
-  - **Trampa del parche barato**: cambiar a `model_validate_json` sin el `try/except` — rompe la tolerancia que hoy es intencional ("Línea no-JSON (no debería ocurrir): se ignora sin abortar").
-  - **Qué se necesita del humano**: (1) estricto vs. tolerante ante frames sucios; (2) si un `result` inválido debe abortar o caer en `DaemonIPCError`.
 
 #### S2-06 — Lógica de dependencias duplicada entre build scripts
 - **Estado**: Resuelto

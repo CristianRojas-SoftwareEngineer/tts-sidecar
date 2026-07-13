@@ -7,7 +7,9 @@ un flujo NDJSON (una línea JSON por evento) en vez de un único cuerpo binario 
 El orden garantizado del stream es N×`progress` → 1×`result` (con el WAV en base64),
 o bien 1×`error` si la síntesis falla en el hilo worker. El esquema de cada línea
 lo definen `ProgressEvent` / `ResultEvent` / `ErrorEvent` (abajo), fuente única de
-verdad consumida idénticamente por `server.py` (productor) e `ipc.py` (consumidor).
+verdad validada por ambos extremos: `server.py` (productor) emite vía
+`model_dump_json()` e `ipc.py` (consumidor) valida cada línea con `model_validate` y
+aborta con `DaemonIPCError` ante cualquier frame no conforme (sin tolerancia).
 Ver `server.py::synthesize` para el productor y `docs/DAEMON-MODE.md` para el
 protocolo completo.
 """

@@ -551,24 +551,38 @@ class TestDaemonManager:
 
     @patch("requests.get")
     def test_list_voices_on_invalid_json(self, mock_get):
-        """JSON inválido en el cuerpo de éxito degrada a [] igual que synthesize()."""
-        from tts_sidecar.daemon import DaemonIPCClient
+        """Cuerpo de éxito no conforme a VoicesResponse eleva DaemonIPCError."""
+        from tts_sidecar.daemon import DaemonIPCClient, DaemonIPCError
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.side_effect = ValueError("invalid json")
         mock_get.return_value = mock_resp
 
         client = DaemonIPCClient()
-        voices = client.list_voices()
-        assert voices == []
+        with pytest.raises(DaemonIPCError, match="no conforme"):
+            client.list_voices()
+
+    @patch("requests.get")
+    def test_list_voices_on_non_conforming_body(self, mock_get):
+        """Cuerpo 200 sin la clave 'voices' no valida el esquema → DaemonIPCError."""
+        from tts_sidecar.daemon import DaemonIPCClient, DaemonIPCError
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"message": "otro servicio"}
+        mock_get.return_value = mock_resp
+
+        client = DaemonIPCClient()
+        with pytest.raises(DaemonIPCError, match="no conforme"):
+            client.list_voices()
 
     @patch("requests.post")
     def test_synthesize_success(self, mock_post):
         """El cliente reconstruye el WAV desde el frame `result` (base64) y
-        reenvía cada frame `progress` a on_progress."""
+        reenvía cada frame `progress` (model_dump) a on_progress."""
         import base64
         import json
         from tts_sidecar.daemon import DaemonIPCClient
+        from tts_sidecar.daemon.protocol import ProgressEvent
 
         audio = b"RIFF" + b"\x00" * 40
         lines = [
@@ -591,8 +605,12 @@ class TestDaemonManager:
         audio_out = client.synthesize(text="hola", on_progress=progreso.append)
         assert audio_out == audio
         assert progreso == [
-            {"event": "progress", "stage": "conditionals"},
-            {"event": "progress", "stage": "t3", "tokens": 20},
+            ProgressEvent.model_validate(
+                {"event": "progress", "stage": "conditionals"}
+            ).model_dump(),
+            ProgressEvent.model_validate(
+                {"event": "progress", "stage": "t3", "tokens": 20}
+            ).model_dump(),
         ]
 
     @patch("requests.post")
@@ -639,6 +657,74 @@ class TestDaemonManager:
 
         client = DaemonIPCClient()
         with pytest.raises(DaemonIPCError, match="no devolvió audio"):
+            client.synthesize(text="hola")
+
+    @patch("requests.post")
+    def test_synthesize_non_json_line_raises(self, mock_post):
+        """Una línea no-JSON en el stream eleva DaemonIPCError (sin tolerancia)."""
+        from tts_sidecar.daemon import DaemonIPCClient, DaemonIPCError
+
+        lines = [b"esto no es json"]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.iter_lines.return_value = iter(lines)
+        mock_post.return_value = mock_resp
+
+        client = DaemonIPCClient()
+        with pytest.raises(DaemonIPCError, match="línea no-JSON"):
+            client.synthesize(text="hola")
+
+    @patch("requests.post")
+    def test_synthesize_unknown_event_raises(self, mock_post):
+        """Un frame con `event` desconocido rompe el contrato → DaemonIPCError."""
+        import json
+        from tts_sidecar.daemon import DaemonIPCClient, DaemonIPCError
+
+        lines = [json.dumps({"event": "telemetry", "cpu": 99}).encode()]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.iter_lines.return_value = iter(lines)
+        mock_post.return_value = mock_resp
+
+        client = DaemonIPCClient()
+        with pytest.raises(DaemonIPCError, match="desconocido"):
+            client.synthesize(text="hola")
+
+    @patch("requests.post")
+    def test_synthesize_result_without_audio_raises(self, mock_post):
+        """Un frame `result` sin `audio_b64` no valida el esquema → DaemonIPCError."""
+        import json
+        from tts_sidecar.daemon import DaemonIPCClient, DaemonIPCError
+
+        lines = [json.dumps({"event": "result", "t3_time": 1.0, "s3gen_time": 2.0}).encode()]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.iter_lines.return_value = iter(lines)
+        mock_post.return_value = mock_resp
+
+        client = DaemonIPCClient()
+        with pytest.raises(DaemonIPCError, match="no conforme"):
+            client.synthesize(text="hola")
+
+    @patch("requests.post")
+    def test_synthesize_result_invalid_base64_raises(self, mock_post):
+        """Un `audio_b64` no base64 en el frame `result` eleva DaemonIPCError."""
+        import json
+        from tts_sidecar.daemon import DaemonIPCClient, DaemonIPCError
+
+        lines = [json.dumps({
+            "event": "result",
+            "audio_b64": "!!!no es base64!!!",
+            "t3_time": 1.0,
+            "s3gen_time": 2.0,
+        }).encode()]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.iter_lines.return_value = iter(lines)
+        mock_post.return_value = mock_resp
+
+        client = DaemonIPCClient()
+        with pytest.raises(DaemonIPCError, match="no decodificable"):
             client.synthesize(text="hola")
 
     @patch("requests.post")

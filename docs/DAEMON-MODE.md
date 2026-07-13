@@ -112,9 +112,13 @@ Content-Type: application/x-ndjson
 
 El orden garantizado es N×`progress` → 1×`result`, o bien 1×`error`. El esquema de
 cada línea lo define `daemon/protocol.py` (`ProgressEvent` / `ResultEvent` /
-`ErrorEvent`), fuente única consumida por `server.py` (productor) e `ipc.py`
-(consumidor). El cliente reenvía cada `progress` al spinner de `speak` para
-mostrar progreso real (p. ej. «Generando voz · 210 tokens»); ver más abajo.
+`ErrorEvent`), fuente única de verdad **validada por ambos extremos**: `server.py`
+(productor) emite exclusivamente vía `model_dump_json()`, e `ipc.py` (consumidor)
+valida cada línea con `model_validate` contra esos mismos modelos y aborta con
+`DaemonIPCError` ante cualquier frame no conforme (línea no-JSON, `event`
+desconocido, esquema inválido o `audio_b64` no decodificable) — sin tolerancia a
+frames sucios. El cliente reenvía cada `progress` validado al spinner de `speak`
+para mostrar progreso real (p. ej. «Generando voz · 210 tokens»); ver más abajo.
 
 > **Errores de validación**: los rechazos de ruta de audio inválida (sandbox de
 > directorios permitidos) o de modelo no cargado siguen siendo respuestas HTTP de
