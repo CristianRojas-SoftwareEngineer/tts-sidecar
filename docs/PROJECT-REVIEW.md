@@ -54,7 +54,7 @@ Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolida
 | S0-02 | Estrategia de lockfile CPU-only de Linux no documentada | S0 — Informativo | P3 | build / Dependencias | No | Pendiente |
 | S0-03 | `pyenv` sin pin de versión (decisión consciente) | S0 — Informativo | P3 | CI / DevOps | No | Pendiente |
 | S0-04 | Naming inconsistente de arquitectura en artefactos (aarch64/arm64/x86_64) | S0 — Informativo | P3 | build / Mantenibilidad | No | Pendiente |
-| S0-05 | TOCTOU en validación de audio del daemon — verificado ya mitigado | S0 — Informativo | P3 | daemon / Seguridad | No | Pendiente |
+| S0-05 | TOCTOU en validación de audio del daemon — verificado ya mitigado | S0 — Informativo | P3 | daemon / Seguridad | No | Resuelto |
 
 ## Hallazgos por severidad
 
@@ -644,7 +644,9 @@ Nota: el conteo de tests **no** es una discrepancia. `pytest --collect-only` rec
 - **Confianza**: Alta
 - **Impacto**: Ninguno en la forma actual; el hallazgo de severidad alta propuesto era un falso positivo.
 - **Corrección**: Ninguna (ya mitigado). Dejar constancia para evitar reabrirlo.
+- **Decisión requerida**: No
 - **Prioridad**: P3
+- **Estado**: Resuelto
 
 ## Orden de corrección recomendado
 
