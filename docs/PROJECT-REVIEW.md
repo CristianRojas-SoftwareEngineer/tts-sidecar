@@ -26,7 +26,7 @@ Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolida
 | S2-10 | God object `ChatterboxEngine` | S2 — Medio | P2 | engine / Mantenibilidad | Sí | En progreso |
 | S2-11 | Estado global `_active_spinner` en `timing.py` | S2 — Medio | P2 | timing / Mantenibilidad | Sí | Pendiente |
 | S2-12 | `bootstrap` usa `warnings.filterwarnings("ignore")` global | S2 — Medio | P2 | bootstrap / Observabilidad | Sí | Pendiente |
-| S2-13 | Creación de directorios duplicada `_emit_audio` vs `_save_wav` | S2 — Medio | P2 | cli/engine / Mantenibilidad | No | Pendiente |
+| S2-13 | Creación de directorios duplicada `_emit_audio` vs `_save_wav` | S2 — Medio | P2 | cli/engine / Mantenibilidad | Sí | Pendiente |
 | S2-14 | Orden de imports de `cli` acoplado a bootstrap + entry points duplicados | S2 — Medio | P1 | cli/bin / Mantenibilidad | Sí | Pendiente |
 | S2-15 | `voice add`/`remove` exigen modelo en caché innecesariamente | S2 — Medio | P2 | cli / Diseño | Sí | Pendiente |
 | S2-16 | Cobertura: `daemon run` (auto-restart, señales) y `setup`/`uninstall` subtesteados | S2 — Medio | P1 | daemon/cli / Testing | No | Pendiente |
@@ -45,7 +45,7 @@ Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolida
 | S1-11 | Fixtures muertas en `conftest.py` | S1 — Bajo | P2 | tests / Mantenibilidad | No | Pendiente |
 | S1-12 | Patrones frágiles en tests (symlinks Windows, tempdir, `time.sleep`) | S1 — Bajo | P3 | tests / Testing | No | Pendiente |
 | S1-13 | `render_cask.py` usa `.format()` sin validación de campos | S1 — Bajo | P3 | build / Calidad | No | Pendiente |
-| S1-14 | `create_installer_windows.py`: rutas ISCC hardcodeadas | S1 — Bajo | P3 | build / Mantenibilidad | No | Pendiente |
+| S1-14 | `create_installer_windows.py`: rutas ISCC hardcodeadas | S1 — Bajo | P3 | build / Mantenibilidad | No | Resuelto |
 | S1-15 | `clean_build.py` asume ubicación relativa al repo | S1 — Bajo | P3 | build / Mantenibilidad | No | Pendiente |
 | S1-16 | `build_utils.py` importa PIL duplicado en `ensure_ico`/`ensure_icns` | S1 — Bajo | P3 | build / Calidad | No | Pendiente |
 | S1-17 | Validación de nombre de voz no previene symlinks dentro del dir permitido | S1 — Bajo | P3 | voices / Seguridad | Sí | Pendiente |
@@ -320,14 +320,25 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 
 #### S2-13 — Creación de directorios duplicada `_emit_audio` vs `_save_wav`
 - **Categoría**: Mantenibilidad
-- **Área/plataforma**: `src/tts_sidecar/cli.py:98-113` vs `src/tts_sidecar/engine.py:770-774`
-- **Evidencia**: Tanto `_emit_audio` (CLI) como `_save_wav` (engine) crean directorios de salida con `os.makedirs`.
+- **Área/plataforma**: `src/tts_sidecar/cli.py:102-104` (`_emit_audio`) vs `src/tts_sidecar/engine.py:629-631` (`_save_wav`)
+- **Evidencia**: `_emit_audio` (CLI) crea el directorio padre con `os.makedirs(parent, exist_ok=True)` (`cli.py:102-104`) y `_save_wav` (engine) hace `Path(path).parent.mkdir(parents=True, exist_ok=True)` (`engine.py:631`). Parecen duplicados, pero operan en **procesos distintos**: en modo daemon el servidor escribe vía `_save_wav` en su propio filesystem y devuelve los bytes; el cliente los escribe con `_emit_audio` en **su** filesystem. Por eso el comentario N-12 (`cli.py:99-101`) lo justifica explícitamente como simetría necesaria, no como descuido.
 - **Confianza**: Alta
-- **Causa**: Responsabilidad de creación de directorios no centralizada (el comentario N-12 en `cli.py` lo reconoce como compensación).
-- **Impacto**: Acoplamiento innecesario; dos lugares que deben coincidir.
-- **Corrección(es) propuesta(s)**: Centralizar la creación en `_save_wav` y que `_emit_audio` confíe en que el engine ya creó el archivo (recomendada).
-- **Decisión requerida**: No
+- **Causa**: El límite cliente/servidor del daemon hace que "el engine ya creó el archivo" no sea cierto en el filesystem del cliente; la creación del lado cliente es requerida, no redundante.
+- **Impacto**: Borrar el `makedirs` de `_emit_audio` (el "arreglo obvio") rompería `--output` en modo daemon cuando el directorio no existe en la máquina del cliente — justo la trampa del parche barato.
+- **Corrección(es) propuesta(s)**: Ver «Alternativas y trade-offs».
+- **Decisión requerida**: Sí — decidir si la duplicación se mantiene (documentada) o se extrae un helper compartido sin eliminar la creación del lado cliente.
 - **Prioridad**: P2
+- **Alternativas y trade-offs**:
+  - **A) Dejar como está, documentando el porqué**. La creación del lado cliente es correcta por el límite daemon cliente/servidor; el comentario N-12 ya lo explica.
+    - *Pros*: cero riesgo; preserva `--output` remoto; el comportamiento es el correcto.
+    - *Contras*: hay dos llamadas de creación de directorio que "se ven" duplicadas en una lectura superficial; un revisor podría "limpiarlas" y romper el daemon.
+  - **B) Extraer un helper `ensure_parent_dir(path)` compartido** (p. ej. en `paths` o un módulo util) usado por ambos `_save_wav` y `_emit_audio`, **sin** eliminar la llamada del lado cliente.
+    - *Pros*: una sola implementación de la creación de dirs; elimina el código duplicado real sin tocar el contrato de archivos del daemon.
+    - *Contras*: refactor menor que cruza cli/engine; hay que cuidar que el helper no asuma nada sobre el filesystem del otro proceso.
+  - **C) Eliminar el `makedirs` de `_emit_audio` y "centralizar en `_save_wav`"** (la propuesta original del hallazgo).
+    - *Pros*: aparenta eliminar duplicación.
+    - *Contras*: **Trampa del parche barato** — `_save_wav` corre en el servidor, no en el cliente; quitar la creación del lado cliente rompe `--output` en modo daemon cuando el dir no existe localmente. No aplicar.
+  - **Qué se necesita del humano**: aprobar A (mantener + documentar) o B (helper compartido sin eliminar creación del cliente); rechazar C.
 
 #### S2-14 — Orden de imports de `cli` acoplado a bootstrap + entry points duplicados
 - **Categoría**: Mantenibilidad
@@ -515,21 +526,23 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 
 #### S1-13 — `render_cask.py` usa `.format()` sin validación de campos
 - **Categoría**: Calidad de código
-- **Área/plataforma**: `scripts/render_cask.py:89`
-- **Evidencia**: `_CASK_TEMPLATE` usa `{}` posicionales; un error de typo no se detecta hasta runtime.
+- **Área/plataforma**: `scripts/render_cask.py:24-94`
+- **Evidencia**: `_CASK_TEMPLATE` usa campos **nombrados** (`{cask_name}`, `{version}`, `{sha256}`, `{repo}`) resueltos vía `.format(...)` con kwargs (`render_cask.py:89`); un typo en un nombre daría `KeyError` en runtime, no al importar — sin validación en tiempo de parseo. (La evidencia original decía "{} posicionales", lo cual es impreciso: el template ya usa campos nombrados, pero el riesgo de fallo tardío persiste igual.)
 - **Confianza**: Media
-- **Impacto**: Fallo tardío en generación del Homebrew Cask.
-- **Corrección**: Usar f-strings o validación explícita de campos.
+- **Impacto**: Fallo tardío en generación del Homebrew Cask (solo detectable en runtime/CI, no al importar el módulo).
+- **Corrección(es) propuesta(s)**: Usar f-strings o validar explícitamente los campos (p. ej. un test que renderice con la versión real y afirme la presencia de las stanzas `cask`/`version`/`sha256`), de modo que un typo falle en CI y no en la generación del Cask.
 - **Prioridad**: P3
 
 #### S1-14 — `create_installer_windows.py`: rutas ISCC hardcodeadas
 - **Categoría**: Mantenibilidad
-- **Área/plataforma**: `scripts/create_installer_windows.py:26-29`
-- **Evidencia**: Busca ISCC en `Program Files (x86)` y `ProgramData/chocolatey/bin` sin consultar `PATH`.
-- **Confianza**: Media
-- **Impacto**: Frágil si el instalador cambia de ubicación por defecto.
-- **Corrección**: Consultar `PATH` primero en `get_inno_setup_path()`.
+- **Área/plataforma**: `scripts/create_installer_windows.py:24-40`
+- **Evidencia**: La evidencia original afirmaba que `get_inno_setup_path()` solo buscaba en ubicaciones fijas (`Program Files (x86)`, `Program Files`, `ProgramData/chocolatey/bin`) sin consultar `PATH`. La lectura directa del código (`create_installer_windows.py:35-38`) confirma que **sí** itera `os.environ.get("PATH", "").split(os.pathsep)` tras los candidatos fijos: los paths fijos son solo un fallback y el `PATH` ya se consulta. El hallazgo era un falso positivo de la evidencia (deriva documental, no deuda real).
+- **Confianza**: Alta
+- **Impacto**: Ninguno en la forma actual; el `PATH` ya se resuelve antes de abortar.
+- **Corrección(es) propuesta(s)**: Ninguna (ya resuelto en código). Dejar constancia para evitar reabrirlo.
+- **Decisión requerida**: No
 - **Prioridad**: P3
+- **Estado**: Resuelto
 
 #### S1-15 — `clean_build.py` asume ubicación relativa al repo
 - **Categoría**: Mantenibilidad
