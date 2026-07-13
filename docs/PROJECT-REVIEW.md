@@ -4,9 +4,9 @@
 
 Auditoría sistémica de **todo el repositorio TTS Sidecar** bajo la lente **calidad y deuda técnica** (perfil **perfectivo**: sin cambio funcional esperado, métrica de mantenibilidad). La investigación se delegó en 6 sub-agentes de exploración en paralelo, cada uno sobre una lonja concreta del código fuente, con evidencia `file:line` verificada.
 
-Veredicto global: el proyecto está **maduro y disciplinado** (336 tests, semáforo de admisión en el daemon, lock de arranque atómico, sandbox de audio con `realpath`). La deuda es **moderada y localizada**, no estructural. No hay hallazgos S4 (críticos). Los riesgos más relevantes son de **observabilidad** (excepciones silenciadas en rutas críticas), **acoplamiento del daemon al engine** (globals, sin inyección de dependencias) y **brechas de cobertura en la funcionalidad central del engine y en el límite de seguridad del sandbox**.
+Veredicto global: el proyecto está **maduro y disciplinado** (460 tests, semáforo de admisión en el daemon, lock de arranque atómico, sandbox de audio con `realpath`). La deuda es **moderada y localizada**, no estructural. No hay hallazgos S4 (críticos). Los riesgos más relevantes son de **observabilidad** (excepciones silenciadas en rutas críticas), **acoplamiento del daemon al engine** (globals, sin inyección de dependencias) y **brechas de cobertura en la funcionalidad central del engine y en el límite de seguridad del sandbox**.
 
-Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolidados). Dos afirmaciones de alta severidad propuestas por los sub-agentes fueron **descartadas como falso positivo** tras verificación directa; además, la presunta discrepancia de conteo de tests no es defecto (ver «Nota de verificación» y «Provenance»). El conteo real es 350 tests recolectados por pytest (336 funciones `def test_`); `CLAUDE.md` (~350) y `GOAL.md` (336/336) son coherentes.
+Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolidados). Dos afirmaciones de alta severidad propuestas por los sub-agentes fueron **descartadas como falso positivo** tras verificación directa; además, la presunta discrepancia de conteo de tests no es defecto (ver «Nota de verificación» y «Provenance»). El conteo en el momento de la auditoría era 350 tests recolectados por pytest (336 funciones `def test_`); las remediaciones posteriores de los hallazgos resueltos (S3-01/02, S2-02, S2-07, S1-17, etc.) elevaron la suite a **460 tests recolectados**. `CLAUDE.md` (~350) refleja el total de la auditoría.
 
 ### Índice de hallazgos
 
@@ -134,6 +134,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
     - *Trade-off*: balancea costo y robustez, pero requiere el criterio humano para clasificar cada sitio.
   - **Trampa del parche barato**: el reemplazo masivo de la opción A aplicado a todo, incluidos los sitios críticos. Añade ruido y "cierra" el hallazgo sin arreglar ni un solo swallow incorrecto.
   - **Qué se necesita del humano**: (1) la política de logging (nivel por defecto, si se incluye `exc_info`); (2) la lista de sitios donde el error debe **propagarse** en vez de registrarse-y-seguir.
+- **Estado**: Resuelto
 - **Remediación (Resuelto)** — decisión humana: **opción C (híbrido)**. Se adoptó como mecanismo sistémico el patrón ya presente en `daemon/server.py` desde S2-01: un `logger = logging.getLogger(__name__)` por módulo, con **política por defecto `logger.debug(..., exc_info=True)`** (nivel debug para no ensuciar la salida normal; `exc_info` siempre, para que la degradación sea diagnosticable). Clasificación aplicada:
   - **Inocuos → logging debug con traza**: callbacks de progreso (`engine.py` `_emit_progress`, `_token_counting_iter`) y el shim de tqdm del T3 (`_install_token_progress_shim`); config de PyTorch (`_configure_torch_for_platform`: mkldnn/oneDNN, `set_flush_denormal`) y detección de compute backend (cuda/mps) en `engine.py`; enumeración de dispositivos de audio (`audio.py`, ramas pycaw y sounddevice); operaciones best-effort de gestión de procesos del daemon (`daemon.py`: `_get_pid_from_port`, `_find_starting_daemon`, `_is_own_daemon_process`, `_kill_pid`, `_pid_alive_daemon`) y el handler genérico de `serve()` (`run.py`, que ya emitía mensaje a stderr; ahora añade traza a debug).
   - **Triage con tipado (propagar lo inesperado)**: el `except Exception: continue` por-proceso de `_find_starting_daemon` se estrechó a `except psutil.Error` — un proceso desaparecido/zombie/sin permiso es esperado y se salta; cualquier otro error burbujea al handler externo (que ahora sí lo registra).
@@ -142,6 +143,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
   - **Tests**: `test_engine_progress.py::TestSilentExceptionLogging` (callbacks rotos: se tragan y registran debug con traza) y `test_audio.py` (el fallo de enumeración registra debug con traza además de degradar). Suite: **451 passed**.
 
 #### S2-03 — Modelo no liberado en shutdown del daemon
+- **Estado**: Resuelto
 - **Categoría**: Fiabilidad / Fuga de recursos
 - **Área/plataforma**: `src/tts_sidecar/daemon/server.py:246-264`
 - **Evidencia**: `/shutdown` solo fija `_server.should_exit = True`; no libera `_engine` ni invoca `torch.cuda.empty_cache()`.
@@ -199,6 +201,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
   - **Qué se necesita del humano**: (1) estricto vs. tolerante ante frames sucios; (2) si un `result` inválido debe abortar o caer en `DaemonIPCError`.
 
 #### S2-06 — Lógica de dependencias duplicada entre build scripts
+- **Estado**: Resuelto
 - **Categoría**: Mantenibilidad
 - **Área/plataforma**: `scripts/build_windows.py`, `scripts/build_linux.py:92-121,123-137`, `scripts/build_macos.py:36-91`
 - **Evidencia**: `check_dependencies` y `ensure_runtime_dependencies` casi idénticas en los tres scripts (verificación de sounddevice, instalación vía lockfile, manejo de timeout).
@@ -232,6 +235,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
     - *Contras*: no elimina la duplicación, solo la detecta; requiere mantener la lista de pines a vigilar.
   - **Trampa del parche barato**: mover a anchors solo en `config.yml` y olvidar `build_utils.py`/`render_cask.py` → la deriva persiste en los scripts de build.
   - **Qué se necesita del humano**: (1) fuente única = YAML o Python (posiblemente **mixta**: YAML para pines de entorno-CI como Python/pytest, Python para pines de build como Inno/repo, siguiendo el precedente de PyInstaller); (2) si el alcance cubre también los scripts fuera de CI; (3) si basta con la vigilancia de la opción C dado que la duplicación restante ya es acotada tras S2-09.
+- **Estado**: Resuelto
 - **Remediación (Resuelto)** — decisión humana: **opción mixta YAML+Python**, reforzada con la vigilancia de la opción C donde una fuente única entre lenguajes no es viable.
   - **Refinamiento honesto sobre la opción A**: los *anchors YAML* son inviables aquí porque **cada pin está embebido dentro de un string más grande** (`--version=3.13.14`, `pip install pytest==9.1.1`, claves de caché `pyenv-v1-{{ arch }}-3.13.14-...`), y un anchor solo sustituye un nodo YAML completo, no una subcadena. El mecanismo YAML-nativo de CircleCI que **sí** interpola dentro de strings son los **pipeline parameters**, que es lo que se usó.
   - **Lado YAML (pines de entorno-CI)**: se añadió un bloque top-level `parameters:` en `.circleci/config.yml` con `python_version` (default `3.13.14`) y `pytest_version` (default `9.1.1`). Las ~22 apariciones de Python (choco `--version`, `pyenv install`/`global`, claves de caché) y las 3 de pytest se reemplazaron por `<< pipeline.parameters.NAME >>`. Verificado con `circleci config validate` (válido) y `circleci config process`: la salida procesada resuelve a los mismos literales que antes (idénticos byte a byte en los pines funcionales; las claves de caché conservan `{{ arch }}`). Actualizar Python/pytest = editar un solo `default:`.
@@ -242,6 +246,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
   - **Tests**: suite **456 passed** (+5).
 
 #### S2-08 — Smoke tests duplicados en CI
+- **Estado**: Resuelto
 - **Categoría**: DevOps
 - **Área/plataforma**: `.circleci/config.yml:576-584, 689-694`
 - **Evidencia**: Los smoke tests de AppImage x64 y ARM64 son idénticos salvo el path del ejecutable (mismo grep de la voz `default`).
@@ -253,6 +258,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Prioridad**: P2
 
 #### S2-09 — Lockfiles omiten herramientas de build
+- **Estado**: Resuelto
 - **Categoría**: Dependencias
 - **Área/plataforma**: `requirements-lock.txt`, `requirements-lock-linux-cpu.txt` vs `requirements.txt`
 - **Evidencia**: `pyinstaller` (declarado en `requirements.txt` como herramienta de build) **no** aparece en `requirements-lock.txt` ni en `requirements-lock-linux-cpu.txt`; el CI lo instala con `pip` directo. `pillow` **sí** está presente en `requirements-lock.txt` (verified line ~1370, `pillow==12.3.0`); la evidencia original afirmaba erróneamente que tampoco aparecía. La omisión real del lockfile es solo `pyinstaller`.
@@ -404,6 +410,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
   - **Qué se necesita del humano**: (1) el veredicto de producto (¿registrar voces sin modelo es el comportamiento deseado?); (2) confirmar que no hay consumidor que asuma modelo-presente a partir de una voz registrada.
 
 #### S2-16 — Cobertura: `daemon run` (auto-restart, señales) y `setup`/`uninstall` subtesteados
+- **Estado**: Resuelto
 - **Categoría**: Testing
 - **Área/plataforma**: `src/tts_sidecar/daemon/run.py` (`serve()`, `signal_handler()`, `main()`); `tests/test_cli.py` (`cmd_setup` con `--uninstall`/`--remove-path`/`--force-update`)
 - **Evidencia**: `test_daemon.py` cubre el semáforo y el bind en uso, pero `--auto-restart`/`--max-retries`, handlers de señal y `atexit` tienen cobertura limitada; `cmd_setup` con sus flags tiene pocos tests.
@@ -415,6 +422,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Prioridad**: P1
 
 #### S2-17 — Cobertura: reproducción de audio por plataforma (macOS/Windows) sin tests
+- **Estado**: Resuelto
 - **Categoría**: Testing
 - **Área/plataforma**: `src/tts_sidecar/audio.py` (`MacOSAudioPlayer`, `WindowsAudioPlayer`, `AudioPlayer`)
 - **Evidencia**: `test_audio.py` solo prueba `SoundDevicePlayer` mockeado; las implementaciones macOS/Windows no están testeadas.
@@ -426,6 +434,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Prioridad**: P2
 
 #### S2-18 — Cobertura: `purge_incomplete_downloads` sin test
+- **Estado**: Resuelto
 - **Categoría**: Testing
 - **Área/plataforma**: `src/tts_sidecar/model_cache.py` (`purge_incomplete_downloads`)
 - **Evidencia**: `test_engine_cache.py` (27 tests) no cubre la limpieza de descargas de HuggingFace abortadas.
@@ -478,6 +487,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Prioridad**: P3
 
 #### S1-03 — `import subprocess` bajo guarda de plataforma
+- **Estado**: Resuelto
 - **Categoría**: Calidad de código
 - **Área/plataforma**: `src/tts_sidecar/cli.py:552-556`
 - **Evidencia**: `subprocess` se importa dentro de la rama `darwin` para el chequeo AVX2.
@@ -508,6 +518,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Prioridad**: P3
 
 #### S1-05 — `list_voices` es O(n²)
+- **Estado**: Resuelto
 - **Categoría**: Calidad de código
 - **Área/plataforma**: `src/tts_sidecar/voices.py:119-129`
 - **Evidencia**: Usa `seen = []` + `if entry not in seen` para deduplicar.
@@ -517,6 +528,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Prioridad**: P3
 
 #### S1-06 — `__init__.py` declara `__all__ = []`
+- **Estado**: Resuelto
 - **Categoría**: Calidad de código
 - **Área/plataforma**: `src/tts_sidecar/__init__.py:27`
 - **Evidencia**: `__all__ = []` vacío contradice la API pública implícita (`ChatterboxEngine`, `AudioPlayer` vía imports perezosos).
@@ -526,6 +538,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Prioridad**: P3
 
 #### S1-07 — Valores mágicos sin nombrar
+- **Estado**: Resuelto
 - **Categoría**: Calidad de código
 - **Área/plataforma**: `audio.py:144` (`32768.0`); `daemon/ipc.py:38` (`REQUEST_TIMEOUT = 300.0`); `scripts/pyinstaller_wrapper.py:37` (`0x8` COINIT); `model_cache.py:33-35` (SHAs de revisión)
 - **Evidencia**: Constantes hardcodeadas sin nombre semántico ni comentario de origen.
@@ -535,6 +548,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Prioridad**: P3
 
 #### S1-08 — `_install_pkg_resources_mock` (edge cases) sin test
+- **Estado**: Resuelto
 - **Categoría**: Testing
 - **Área/plataforma**: `src/tts_sidecar/bootstrap.py`
 - **Evidencia**: La resolución de recursos para paquetes sin `__spec__`/search locations no tiene test explícito.
@@ -544,6 +558,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Prioridad**: P2
 
 #### S1-09 — Decorador `timed()` sin test
+- **Estado**: Resuelto
 - **Categoría**: Testing
 - **Área/plataforma**: `src/tts_sidecar/timing.py` (`timed`)
 - **Evidencia**: `test_timing.py` cubre `StageTimer` y `Spinner`, pero no el decorador `timed`.
@@ -553,6 +568,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Prioridad**: P2
 
 #### S1-10 — `protocol.py`: edge cases sin test
+- **Estado**: Resuelto
 - **Categoría**: Testing
 - **Área/plataforma**: `src/tts_sidecar/daemon/protocol.py`
 - **Evidencia**: `test_protocol.py` (22 tests) cubre validación básica, pero no límites de longitud (`MAX_AUDIO_PATH_LENGTH`), manejo de unicode ni validación cruzada.
@@ -562,6 +578,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Prioridad**: P2
 
 #### S1-11 — Fixtures muertas en `conftest.py`
+- **Estado**: Resuelto
 - **Categoría**: Mantenibilidad
 - **Área/plataforma**: `tests/conftest.py:14-34`
 - **Evidencia**: `mock_engine` y `mock_daemon_client` no se usan en ningún test; los tests crean sus propios mocks.
@@ -571,6 +588,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Prioridad**: P2
 
 #### S1-12 — Patrones frágiles en tests
+- **Estado**: Resuelto
 - **Categoría**: Testing
 - **Área/plataforma**: `tests/test_cli.py` (symlinks Windows, `_symlinks_supported()` skips), `tests/test_daemon.py` (archivos en `tempfile.gettempdir()`, `time.sleep` + timeouts de 10s)
 - **Evidencia**: Tests de symlinks se saltan en Windows sin Developer Mode; tests de daemon crean archivos en el temp global y usan `time.sleep` con timeouts largos.
@@ -580,6 +598,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Prioridad**: P3
 
 #### S1-13 — `render_cask.py` usa `.format()` sin validación de campos
+- **Estado**: Resuelto
 - **Categoría**: Calidad de código
 - **Área/plataforma**: `scripts/render_cask.py:24-94`
 - **Evidencia**: `_CASK_TEMPLATE` usa campos **nombrados** (`{cask_name}`, `{version}`, `{sha256}`, `{repo}`) resueltos vía `.format(...)` con kwargs (`render_cask.py:89`); un typo en un nombre daría `KeyError` en runtime, no al importar — sin validación en tiempo de parseo. (La evidencia original decía "{} posicionales", lo cual es impreciso: el template ya usa campos nombrados, pero el riesgo de fallo tardío persiste igual.)
@@ -600,6 +619,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Estado**: Resuelto
 
 #### S1-15 — `clean_build.py` asume ubicación relativa al repo
+- **Estado**: Resuelto
 - **Categoría**: Mantenibilidad
 - **Área/plataforma**: `scripts/clean_build.py:18-21`
 - **Evidencia**: `PROJECT_ROOT = Path(__file__).parent.parent` asume que el script vive en `scripts/`.
@@ -609,6 +629,7 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Prioridad**: P3
 
 #### S1-16 — `build_utils.py` importa PIL duplicado en `ensure_ico`/`ensure_icns`
+- **Estado**: Resuelto
 - **Categoría**: Calidad de código
 - **Área/plataforma**: `scripts/build_utils.py:322-323, 347-348`
 - **Evidencia**: La lógica de lectura de logo, creación de directorio y logging de warning está duplicada entre ambas funciones.
@@ -638,10 +659,12 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
     - *Contras*: un symlink *legítimo* (p. ej. voce enlazada por el usuario) se rechazaría; posible molestia para usuarios avanzados.
   - **Trampa del parche barato**: "documentar" sin más — etiquetar el riesgo y cerrar el hallazgo sin endurecer nada; en seguridad, documentar un riesgo conocido no lo mitiga.
   - **Qué se necesita del humano**: (1) ¿aceptar el riesgo residual (A) o mitigarlo (B/C)?; (2) si mitigar, ¿`O_NOFOLLOW` (B, no portable) o rechazo de symlinks (C, más estricto)?
+- **Estado**: Resuelto
 - **Decisión tomada**: **Opción C — rechazo de symlinks** (mitigación real y portable a Windows, la plataforma primaria; se descartó B por ser `O_NOFOLLOW` POSIX-only, y A por caer en la trampa de «documentar sin más»).
 - **Remediación aplicada**: `src/tts_sidecar/voices.py` incorpora un guard `_is_symlink` (envuelve `os.path.islink`, que no sigue el enlace y es portable a Windows) integrado en la **frontera de validez** `_is_valid_voice_dir`: una voz cuyo directorio o cualquiera de sus dos `.wav` (`reference.wav`/`speech.wav`) sea un symlink se trata como **inválida**, de modo que `list_voices` (listado) y `_resolve_voice_dir`/`voice_paths` (lectura) coinciden en no resolverla ni leerla — se cierra la ventana de cargar un `.wav` arbitrario del atacante a través de un symlink dentro del registro. El path de escritura también se cubre: `register_voice_files` rechaza un destino symlink antes de tocar el filesystem, para que `shutil.copy2` nunca escriba *a través* del enlace. La defensa en profundidad de escape (`voice_dir` con `realpath`, líneas 93-98) se conserva intacta. Tests: `tests/test_voices.py::TestSymlinkRejection` (dir symlinked no se resuelve ni se lista; `.wav` symlinked no se resuelve) y `TestRegisterVoiceFiles::test_register_rejects_symlink_target`, con un fixture `symlink` que hace `pytest.skip` si la plataforma no permite crear symlinks (Windows sin privilegio). Suite: 460 passed (+4). **Estado: Resuelto.**
 
 #### S1-18 — Deriva documental menor (árbol de CLAUDE.md y ruta de voces en DESIGN.md)
+- **Estado**: Resuelto
 - **Categoría**: Documentación
 - **Área/plataforma**: `CLAUDE.md`, `DESIGN.md`
 - **Evidencia**: El árbol de arquitectura de `CLAUDE.md` (sección «Estructura de directorios») no lista `model_cache.py` (módulo real en `src/tts_sidecar/model_cache.py`, usado por `engine.py`/`cli.py`) ni el directorio `tests/installer/` (smoke-tests bats/Pester). `DESIGN.md:131` afirma que las voces de fábrica están «`voices/` en la raíz del repo», pero `paths.py:82` resuelve `src/tts_sidecar/voices/` desde `835b767` («refactor: mover voces de fábrica al paquete»).
@@ -668,6 +691,7 @@ Nota: el conteo de tests **no** es una discrepancia. `pytest --collect-only` rec
 - **Estado**: Resuelto
 
 #### S0-02 — Estrategia de lockfile CPU-only de Linux no documentada
+- **Estado**: Resuelto
 - **Categoría**: Dependencias
 - **Área/plataforma**: `requirements-lock-linux-cpu.txt`
 - **Evidencia**: Generado con `--index-strategy unsafe-best-match` contra `https://download.pytorch.org/whl/cpu`; la razón no está documentada en el repo.
