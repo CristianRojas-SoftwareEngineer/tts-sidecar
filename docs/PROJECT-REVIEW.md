@@ -48,7 +48,7 @@ Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolida
 | S1-14 | `create_installer_windows.py`: rutas ISCC hardcodeadas | S1 — Bajo | P3 | build / Mantenibilidad | No | Pendiente |
 | S1-15 | `clean_build.py` asume ubicación relativa al repo | S1 — Bajo | P3 | build / Mantenibilidad | No | Pendiente |
 | S1-16 | `build_utils.py` importa PIL duplicado en `ensure_ico`/`ensure_icns` | S1 — Bajo | P3 | build / Calidad | No | Pendiente |
-| S1-17 | Validación de nombre de voz no previene symlinks dentro del dir permitido | S1 — Bajo | P3 | voices / Seguridad | No | Pendiente |
+| S1-17 | Validación de nombre de voz no previene symlinks dentro del dir permitido | S1 — Bajo | P3 | voices / Seguridad | Sí | Pendiente |
 | S1-18 | Deriva documental menor (árbol de CLAUDE.md y ruta de voces en DESIGN.md) | S1 — Bajo | P3 | docs / Documentación | No | Pendiente |
 | S0-01 | `bundle_size_mb()` no referenciada externamente | S0 — Informativo | P3 | build / Calidad | No | Pendiente |
 | S0-02 | Estrategia de lockfile CPU-only de Linux no documentada | S0 — Informativo | P3 | build / Dependencias | No | Pendiente |
@@ -555,8 +555,21 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 - **Evidencia**: `_validate_voice_name` rechaza `..`/`.` pero no symlinks; la defensa en profundidad con `realpath` en `voice_dir` (líneas 93-98) ya contiene el escape de directorio, por lo que un symlink dentro del dir permitido solo podría cargar un `.wav` controlado por el atacante (sin ejecución de código).
 - **Confianza**: Media
 - **Impacto**: Explotabilidad baja; posible carga de audio arbitrario dentro del sandbox.
-- **Corrección**: Documentar el límite; considerar `os.open(..., O_NOFOLLOW)` al leer los archivos de voz.
+- **Corrección(es) propuesta(s)**: Ver «Alternativas y trade-offs».
+- **Decisión requerida**: Sí — decidir si aceptar el riesgo residual o endurecer la lectura con `O_NOFOLLOW`.
 - **Prioridad**: P3
+- **Alternativas y trade-offs**:
+  - **A) Aceptar el límite y documentarlo** (status quo endurecido con documentación). La defensa en profundidad con `realpath` en `voice_dir` ya contiene el escape de directorio, así que un symlink dentro del dir permitido solo podría cargar un `.wav` controlado por el atacante, sin ejecución de código.
+    - *Pros*: cero cambio de código; explotabilidad ya baja.
+    - *Contras*: deja abierta la carga de audio arbitrario dentro del sandbox; es aceptar riesgo, no mitigarlo.
+  - **B) Endurecer con `os.open(..., O_NOFOLLOW)`** al leer los archivos de voz, rechazando symlinks en la apertura.
+    - *Pros*: cierra la ventana de symlink a nivel de syscall; defensa en la raíz de la lectura.
+    - *Contras*: `O_NOFOLLOW` es POSIX (no portable a Windows sin equivalente); hay que manejar el `OSError` y dar un error accionable; toca el path de lectura de voz.
+  - **C) Rechazar symlinks en `_validate_voice_name`/`voice_dir`** (validar que la ruta no sea symlink antes de aceptarla).
+    - *Pros*: defensa explícita y temprana, antes de leer.
+    - *Contras*: un symlink *legítimo* (p. ej. voce enlazada por el usuario) se rechazaría; posible molestia para usuarios avanzados.
+  - **Trampa del parche barato**: "documentar" sin más — etiquetar el riesgo y cerrar el hallazgo sin endurecer nada; en seguridad, documentar un riesgo conocido no lo mitiga.
+  - **Qué se necesita del humano**: (1) ¿aceptar el riesgo residual (A) o mitigarlo (B/C)?; (2) si mitigar, ¿`O_NOFOLLOW` (B, no portable) o rechazo de symlinks (C, más estricto)?
 
 #### S1-18 — Deriva documental menor (árbol de CLAUDE.md y ruta de voces en DESIGN.md)
 - **Categoría**: Documentación
