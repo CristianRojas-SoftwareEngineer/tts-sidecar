@@ -370,12 +370,12 @@ def cmd_voice_add(args):
 
     Registro ligero: valida y copia los audios sin instanciar el motor de
     inferencia; la precomputación de conditionals se difiere al primer
-    `speak --voice <nombre>`. El gate de modelo se mantiene por coherencia con
-    `speak`/`daemon start`: las descargas son responsabilidad exclusiva de setup.
+    `speak --voice <nombre>`. El registro es libre de modelo (S2-15, opción A):
+    no exige `setup` previo, porque validar y copiar audio no necesita el
+    checkpoint; la descarga sigue siendo responsabilidad exclusiva de `setup`
+    para la síntesis.
     """
     try:
-        _require_model_cached()
-
         from . import voices
         ref_path, speech_path = voices.register_voice_files(
             name=args.name,

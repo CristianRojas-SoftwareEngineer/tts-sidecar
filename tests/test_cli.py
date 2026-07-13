@@ -114,7 +114,7 @@ class TestCmdVoiceList:
 
 
 class TestCmdVoiceAdd:
-    @patch("tts_sidecar.model_cache.is_model_cached", return_value=True)
+    @patch("tts_sidecar.model_cache.is_model_cached", return_value=False)
     @patch("tts_sidecar.voices.register_voice_files")
     def test_cmd_voice_add_success_without_engine(self, mock_register, _cached, capsys):
         """R-01: voice add registra sin instanciar ChatterboxEngine."""
@@ -131,15 +131,19 @@ class TestCmdVoiceAdd:
         mock_register.assert_called_once()
 
     @patch("tts_sidecar.model_cache.is_model_cached", return_value=False)
-    def test_cmd_voice_add_without_model_refers_to_setup(self, _cached, capsys):
-        """R-01: sin modelo cacheado, voice add aborta remitiendo a setup."""
+    @patch("tts_sidecar.voices.register_voice_files")
+    def test_cmd_voice_add_succeeds_without_model(self, mock_register, _cached, capsys):
+        """S2-15: sin modelo cacheado, voice add registra la voz (registro libre de modelo)."""
         from tts_sidecar.cli import cmd_voice_add
 
-        with pytest.raises(SystemExit):
-            cmd_voice_add(MockArgs(name="newvoice", reference="ref.wav", speech="speech.wav"))
+        mock_register.return_value = ("/path/to/ref.wav", "/path/to/speech.wav")
 
-        err = capsys.readouterr().err
-        assert "setup" in err
+        cmd_voice_add(MockArgs(name="newvoice", reference="ref.wav", speech="speech.wav"))
+
+        captured = capsys.readouterr()
+        assert "Voz 'newvoice' registrada" in captured.out
+        assert "setup" not in captured.err
+        mock_register.assert_called_once()
 
 
 class TestCmdVoiceRemove:

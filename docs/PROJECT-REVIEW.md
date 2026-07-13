@@ -28,7 +28,7 @@ Conteo por severidad: **0 S4, 2 S3, 18 S2, 18 S1, 5 S0** (43 hallazgos consolida
 | S2-12 | `bootstrap` usa `warnings.filterwarnings("ignore")` global | S2 — Medio | P2 | bootstrap / Observabilidad | Sí | Pendiente |
 | S2-13 | Creación de directorios duplicada `_emit_audio` vs `AudioWriter.write` | S2 — Medio | P2 | cli/audio_writer / Mantenibilidad | Sí | Resuelto |
 | S2-14 | Orden de imports de `cli` acoplado a bootstrap + entry points duplicados | S2 — Medio | P1 | cli/bin / Mantenibilidad | Sí | Resuelto |
-| S2-15 | `voice add`/`remove` exigen modelo en caché innecesariamente | S2 — Medio | P2 | cli / Diseño | Sí | Pendiente |
+| S2-15 | `voice add`/`remove` exigen modelo en caché innecesariamente | S2 — Medio | P2 | cli / Diseño | Sí | Resuelto |
 | S2-16 | Cobertura: `daemon run` (auto-restart, señales) y `setup`/`uninstall` subtesteados | S2 — Medio | P1 | daemon/cli / Testing | No | Resuelto |
 | S2-17 | Cobertura: reproducción de audio por plataforma (macOS/Windows) sin tests | S2 — Medio | P2 | audio / Testing | No | Resuelto |
 | S2-18 | Cobertura: `purge_incomplete_downloads` sin test | S2 — Medio | P2 | model_cache / Testing | No | Resuelto |
@@ -393,17 +393,17 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
 
 #### S2-15 — `voice add`/`remove` exigen modelo en caché innecesariamente
 - **Categoría**: Diseño
-- **Área/plataforma**: `src/tts_sidecar/cli.py:185-194`
-- **Evidencia**: `_require_model_cached` se invoca en `cmd_voice_add`/`cmd_voice_remove`; la validación y copia de archivos de audio no necesitan el modelo.
+- **Área/plataforma**: `src/tts_sidecar/cli.py:377`
+- **Evidencia**: `_require_model_cached` se invocaba en `cmd_voice_add` (no en `cmd_voice_remove`, que ya no lo invocaba); la validación y copia de archivos de audio no necesitan el modelo.
 - **Confianza**: Alta
 - **Causa**: Reutilización de un guard demasiado estricto.
-- **Impacto**: Obliga a `setup` previo para registrar voces aunque solo se valide audio.
+- **Impacto**: Obligaba a `setup` previo para registrar voces aunque solo se validara audio.
 - **Corrección(es) propuesta(s)**: Ver «Alternativas y trade-offs».
-- **Decisión requerida**: Sí — decidir si relajar el requisito de modelo para `voice add`/`remove` (decisión de producto/UX, no técnica).
+- **Decisión tomada**: **Opción A** — relajar el guard en `cmd_voice_add` (registro libre de modelo); `cmd_voice_remove` ya no invocaba el guard, así que queda intacto. El registro/copia funciona sin `setup` previo.
 - **Alternativas y trade-offs**:
-  - **A) Relajar el guard** (`cmd_voice_add`/`cmd_voice_remove` ya no invocan `_require_model_cached`; el registro/copia funciona sin `setup` previo).
+  - **A) Relajar el guard** (`cmd_voice_add` ya no invoca `_require_model_cached`; el registro/copia funciona sin `setup` previo).
     - *Pros*: UX mejor: se pueden registrar voces tras solo validar audio; elimina la dependencia innecesaria del modelo.
-    - *Contras*: requiere verificar que ningún flujo aguas abajo asume "si la voz existe, el modelo está cacheado"; el `precompute` de conditionals ya se difiere al primer `speak`, así que el riesgo es bajo pero debe confirmarse.
+    - *Contras*: requiere verificar que ningún flujo aguas abajo asuma "si la voz existe, el modelo está cacheado"; el `precompute` de conditionals ya se difiere al primer `speak`, así que el riesgo es bajo pero debe confirmarse.
   - **B) Mantener el guard** y documentar por qué (p.ej. para garantizar que el modelo está disponible antes de tocar voces).
     - *Pros*: comportamiento actual preservado; sin sorpresas.
     - *Contras*: obliga a `setup` aunque solo se quiera validar/copiar audio — la molestia que motiva el hallazgo.
@@ -412,6 +412,9 @@ _Ninguno._ No se encontró riesgo inaceptable ni fallo arquitectónico que impid
     - *Contras*: asimetría que complica el modelo mental del CLI; posible confusión del usuario.
   - **Trampa del parche barato**: quitar el guard sin rastrear los flujos dependientes — "funciona en el smoke test" pero rompe un caso de borde real.
   - **Qué se necesita del humano**: (1) el veredicto de producto (¿registrar voces sin modelo es el comportamiento deseado?); (2) confirmar que no hay consumidor que asuma modelo-presente a partir de una voz registrada.
+- **Estado**: Resuelto
+- **Corrección**: Se eliminó `_require_model_cached()` del inicio del bloque `try` de `cmd_voice_add` (`src/tts_sidecar/cli.py:377`); `voices.register_voice_files` es libre de modelo (solo valida cabecera WAV y copia archivos, sin torch/chatterbox), y la precomputación de conditionals ya se difiere al primer `speak --voice <nombre>`. El test `tests/test_cli.py::test_cmd_voice_add_succeeds_without_model` ejerce el registro sin modelo; `test_cmd_voice_add_success_without_engine` se reforzó con `is_model_cached=False`.
+- **Reversión**: reanexar `_require_model_cached()` como primera instrucción del bloque `try` de `cmd_voice_add`.
 
 #### S2-16 — Cobertura: `daemon run` (auto-restart, señales) y `setup`/`uninstall` subtesteados
 - **Estado**: Resuelto
