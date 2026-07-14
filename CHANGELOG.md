@@ -83,6 +83,19 @@ y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Arreglado
 
+- **Normalización de la criticidad de Inno Setup** (auditoría
+  production-readiness, S2-10): `create_installer_windows.py` declaraba Inno
+  Setup con `required=False` y luego lo hacía fatal con un `sys.exit(1)` manual
+  redundante, desacoplando la criticidad real del mecanismo declarativo. Ahora
+  se resuelve con `required=True` en `ensure_build_dependency` y se elimina el
+  `sys.exit` manual: el aborto por dependencia faltante queda gobernado en un
+  único punto (igual que PyInstaller y sounddevice). Se añaden los tests de
+  rama de fallo `tests/test_create_installer_windows.py::
+  test_main_inno_missing_is_fatal` (Inno ausente → aborta) y
+  `tests/test_build_linux.py::test_appimage_tooling_missing_degrades_without_abort`
+  (tooling del AppImage ausente → degrada sin abortar), y se corrige el drift de
+  `docs/BUILD.md`, que aún clasificaba a Inno Setup como empaquetador que degrada.
+
 - **Cancelación cooperativa de la síntesis al desconectar el cliente**:
   en el modo daemon, `/synthesize` ahora detecta la desconexión del cliente y
   aborta la síntesis en curso en vez de malgastar GPU/CPU hasta completarla. El

@@ -27,11 +27,16 @@ pregunta, emite la instrucción manual y resuelve según criticidad:
 
 - **Requeridas** (PyInstaller, sounddevice en Linux y macOS): sin ellas el
   build no tiene sentido; el script aborta si no se resuelven.
-- **Empaquetadores** (appimagetool, Inno Setup): sin ellos el bundle
-  onedir/.app sigue siendo usable; el stage degrada con warning. create-dmg
-  es distinto: se provisiona pineado dentro del propio build
-  (`provision_create_dmg`) y su fallo de descarga aborta (dependencia dura:
-  el stage DMG es obligatorio para publicar).
+- **Empaquetadores duros** (Inno Setup, create-dmg): son dependencias duras
+  del artefacto de publicación (instalador Windows y .dmg de macOS); su fallo
+  de descarga/resolución aborta el build con SystemExit(1). Inno Setup se
+  declara con `required=True` en `ensure_build_dependency`
+  (`create_installer_windows.py`); create-dmg se provisiona pineado dentro del
+  propio build (`provision_create_dmg`) y su fallo aborta.
+- **Empaquetador que degrada** (appimagetool): es el único caso de degradación;
+  sin él el bundle onedir sigue siendo usable y el stage AppImage degrada con
+  warning (el tooling no descargable no aborta, pero un checksum que no
+  coincide sí lo hace).
 
 Las versiones pineadas viven como constantes en `scripts/build_utils.py`
 (`PYINSTALLER_PIN=6.21.0`, `INNOSETUP_PIN=6.3.3`), espejo de las que instala

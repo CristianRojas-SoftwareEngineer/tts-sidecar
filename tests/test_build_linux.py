@@ -124,6 +124,45 @@ def test_appimage_failure_is_fatal(tmp_path, monkeypatch):
     assert "capture_output" not in captured
 
 
+def test_appimage_tooling_missing_degrades_without_abort(tmp_path, monkeypatch):
+    """provision_appimage_tooling que devuelve None (tooling no descargable)
+    debe degradar el stage AppImage con warning y NO abortar el build: el
+    onedir de PyInstaller sigue siendo usable. Espejo hermético de
+    test_appimage_failure_is_fatal, que cubre el caso opuesto (tooling presente
+    pero appimagetool con rc != 0 -> fatal), y cierra la rama de degradación que
+    la auditoría enumeró para S2-10."""
+    import build_linux
+
+    dist = tmp_path / "dist"
+    build = tmp_path / "build"
+    dist.mkdir()
+    build.mkdir()
+    onedir = dist / "tts-sidecar"
+    onedir.mkdir()
+    (onedir / "tts-sidecar").write_text("bin", encoding="utf-8")
+
+    monkeypatch.setattr(build_linux, "DIST_DIR", dist)
+    monkeypatch.setattr(build_linux, "BUILD_DIR", build)
+    monkeypatch.setattr(build_linux, "run_pyinstaller", lambda args, timeout: 0)
+    monkeypatch.setattr(build_linux, "bundle_size_mb", lambda o: 0.0)
+    monkeypatch.setattr(build_linux, "copy_license_files", lambda d: None)
+    monkeypatch.setattr(build_linux, "ensure_png_icon", lambda p: p)
+    monkeypatch.setattr(build_linux, "get_version", lambda: "9.9.9")
+    monkeypatch.setattr(build_linux, "check_pyinstaller", lambda *a, **k: None)
+    monkeypatch.setattr(build_linux, "check_sounddevice", lambda *a, **k: None)
+    monkeypatch.setattr(build_linux, "ensure_runtime_dependencies", lambda *a, **k: None)
+    # El tooling del AppImage no se pudo provisionar: el stage degrada, sin abortar.
+    monkeypatch.setattr(build_linux, "provision_appimage_tooling", lambda arch: None)
+
+    logs = []
+    monkeypatch.setattr(build_linux, "log", lambda msg, *a, **k: logs.append(msg))
+
+    # No debe elevar SystemExit: la ausencia del tooling degrada, no aborta.
+    build_linux.build_linux("x86_64")
+    # Y debe haber registrado el warning de degradación del stage AppImage.
+    assert any("AppImage" in m and "WARNING" in m for m in logs)
+
+
 class TestHostGlibcFloor:
     """La verificación de glibc del host aborta el build si el host supera el
     piso documentado (GLIBC_FLOOR), y continúa si está dentro del piso o no se

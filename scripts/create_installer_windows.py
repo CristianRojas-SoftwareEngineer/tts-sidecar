@@ -240,24 +240,33 @@ def main():
     print(f"Source: {source_dir}")
     print(f"Output: {output_dir}")
 
-    # Inno Setup es la herramienta que genera el instalador: su ausencia o su
-    # fallo abortan el build (sys.exit(1) fatal, tanto en CI como localmente),
-    # porque un build sin instalador no debe reportar éxito. Se ofrece instalarlo
-    # vía Chocolatey pineado si choco existe.
-    resolved = ensure_build_dependency(
+    # Inno Setup es dependencia dura del instalador Windows (artefacto
+    # obligatorio de publicación): su criticidad se declara en
+    # ensure_build_dependency con required=True, de modo que el aborto por
+    # ausencia queda gobernado en un único punto (sin duplicar un sys.exit manual
+    # del llamador, como ya hacen PyInstaller y sounddevice). Se imprime la URL
+    # de descarga antes del chequeo para que el usuario la vea si el build
+    # aborta; se ofrece instalarlo vía Chocolatey pineado si choco existe
+    # (ensure_build_dependency lo hace en TTY, o imprime la instrucción manual en
+    # CI) y luego aborta con SystemExit(1) al no resolverse.
+    if get_inno_setup_path() is None:
+        print(
+            "Inno Setup 6 not found. Install from: https://jrsoftware.org/isdl.php",
+            file=sys.stderr,
+        )
+        print(
+            f"Or via Chocolatey: choco install innosetup -y --version={INNOSETUP_PIN}",
+            file=sys.stderr,
+        )
+    ensure_build_dependency(
         "Inno Setup (iscc.exe)",
         lambda: get_inno_setup_path() is not None,
         install_cmd=(
             ["choco", "install", "innosetup", "-y", f"--version={INNOSETUP_PIN}"]
             if shutil.which("choco") else None
         ),
-        required=False,
+        required=True,
     )
-    if not resolved:
-        print("ERROR: Inno Setup (iscc.exe) not found.", file=sys.stderr)
-        print("Install Inno Setup 6 from: https://jrsoftware.org/isdl.php", file=sys.stderr)
-        print(f"Or via Chocolatey: choco install innosetup -y --version={INNOSETUP_PIN}", file=sys.stderr)
-        sys.exit(1)
     iscc = get_inno_setup_path()
     print(f"ISCC: {iscc}")
 

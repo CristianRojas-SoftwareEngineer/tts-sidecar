@@ -192,3 +192,34 @@ def test_main_installer_timeout_is_fatal(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as exc:
         ciw.main()
     assert exc.value.code == 1
+
+
+def test_main_inno_missing_is_fatal(tmp_path, monkeypatch):
+    """Inno Setup ausente (get_inno_setup_path -> None) con required=True debe
+    abortar main() con SystemExit(1). El aborto lo gobierna
+    ensure_build_dependency (required=True en create_installer_windows.py), no
+    un sys.exit manual del llamador: este test deja sin mockear
+    ensure_build_dependency para ejercitar la política real y bloquear cualquier
+    regresión que duplique un sys.exit manual o degrade Inno a opcional. Espejo
+    de test_main_installer_timeout_is_fatal para la ausencia del empaquetador."""
+    import create_installer_windows as ciw
+    import build_utils
+
+    onedir = tmp_path / "onedir"
+    onedir.mkdir()
+    (onedir / "tts-sidecar.exe").write_bytes(b"MZ")
+    output_dir = tmp_path / "out"
+
+    monkeypatch.setattr(
+        sys, "argv",
+        ["create_installer_windows.py", str(onedir), "--output", str(output_dir)],
+    )
+    monkeypatch.setattr(ciw, "get_inno_setup_path", lambda: None)
+    # Sin TTY (CI): ensure_build_dependency no pregunta, aplica la criticidad
+    # required=True y aborta. No se mockea ensure_build_dependency.
+    monkeypatch.setattr(build_utils.sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr(ciw, "ensure_ico", lambda _dir: None)
+
+    with pytest.raises(SystemExit) as exc:
+        ciw.main()
+    assert exc.value.code == 1
