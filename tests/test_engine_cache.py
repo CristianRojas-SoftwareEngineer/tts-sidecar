@@ -129,7 +129,7 @@ class TestCorruptConditionals:
             lambda audio_data, sample_rate, path=None: b"RIFF",
         )
 
-        assert eng.speak("hola", speech_audio=str(speech)) == b"RIFF"
+        assert eng.speak("hola", speech_audio=str(speech)).audio_bytes == b"RIFF"
         assert recomputos, "speak debe recomputar los conditionals cuando el .pt es corrupto"
 
 

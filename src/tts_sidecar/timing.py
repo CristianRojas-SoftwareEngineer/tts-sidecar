@@ -31,6 +31,22 @@ class SynthesisMetrics:
     s3gen: float = 0.0
 
 
+@dataclass
+class SynthesisResult:
+    """Resultado de una síntesis: audio + métricas, en un único objeto.
+
+    Reemplaza el retorno `bytes` desnudo de `engine.speak()` /
+    `SynthesisOrchestrator.synthesize()` / `DaemonIPCClient.synthesize()`: antes
+    las métricas (`SynthesisMetrics`) solo existían como texto de log a stderr y
+    el llamador no tenía forma programática de leerlas. Con este objeto, ambas
+    rutas de síntesis (directa y vía daemon) devuelven la misma forma por
+    construcción, sin estado mutable ni orden temporal frágil entre leer el
+    audio y leer las métricas.
+    """
+    audio_bytes: bytes
+    metrics: SynthesisMetrics
+
+
 # Spinner activo por contexto de ejecución (a lo sumo uno). log() lo consulta
 # para no entremezclar sus líneas con el redibujado del spinner; ver Spinner.
 # Es un ContextVar, no un global mutable de módulo: el estado del spinner queda

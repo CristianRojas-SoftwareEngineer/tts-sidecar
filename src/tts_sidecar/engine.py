@@ -44,7 +44,7 @@ from .model_cache import (
     hub_cache_path,
     is_model_cached,  # re-export para compatibilidad interna
 )
-from .timing import StageTimer, SynthesisMetrics, log
+from .timing import StageTimer, SynthesisMetrics, SynthesisResult, log
 from .model_loader import ModelLoader
 from .conditionals import ConditionalsPreparer
 from .compute_backend import ComputeBackendResolver
@@ -449,7 +449,7 @@ class ChatterboxEngine:
         output_path: Optional[str] = None,
         verbose: bool = True,
         progress_callback: Optional[Callable[[dict], None]] = None,
-    ) -> bytes:
+    ) -> SynthesisResult:
         """
         Genera y opcionalmente guarda audio a partir de texto.
 
@@ -469,7 +469,7 @@ class ChatterboxEngine:
                 excepción del callback no aborta la síntesis.
 
         Returns:
-            Datos de audio como bytes WAV
+            `SynthesisResult` (audio_bytes + métricas t3/s3gen).
         """
         if not voice_audio and not speech_audio:
             raise ValueError(

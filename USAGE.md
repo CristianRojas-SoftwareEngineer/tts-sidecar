@@ -192,6 +192,32 @@ estables (los cambios solo pueden ser aditivos mientras `schema_version` sea
 diagnóstico/progreso va a stderr. La clave `schema_version` (string) se omite de
 las tablas por brevedad: está presente en todos.
 
+**`speak --json`** — requiere `--output` (el archivo es el canal de datos;
+`--json` solo emite metadatos/métricas a stdout). Sin `--output`, error en
+stderr y exit 4. El payload es idéntico campo a campo en modo directo y vía
+daemon.
+
+| Clave | Tipo | Significado |
+|-------|------|-------------|
+| `output` | string | Ruta absoluta del archivo WAV escrito |
+| `voice` | string | Nombre de la voz efectivamente usada (`"default"` si no se dio `--voice`) |
+| `t3_time` | number | Segundos del T3 autoregresivo |
+| `s3gen_time` | number | Segundos del vocoder S3Gen |
+| `daemon` | boolean | `true` si la síntesis se despachó vía daemon, `false` en modo directo |
+
+**`daemon start` / `stop` / `restart --json`** — payload de resultado de la
+acción (no de estado; para eso está `daemon status --json`). Los mensajes
+informativos van a stderr; el exit code sigue reflejando `ok`.
+
+| Clave | Tipo | Significado |
+|-------|------|-------------|
+| `action` | string | `"start"`, `"stop"` o `"restart"` |
+| `ok` | boolean | Si la acción tuvo éxito (coherente con el exit code: `false` ⇒ exit 5) |
+| `pid` | number | Solo en `start`/`restart` con éxito, si el gestor expone el PID del daemon lanzado |
+
+`daemon serve` (servidor en primer plano) no tiene `--json`: su contrato es el
+stream NDJSON de `/synthesize`, no un payload de una sola línea.
+
 **`version --json`**
 
 | Clave | Tipo | Significado |

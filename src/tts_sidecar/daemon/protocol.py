@@ -14,7 +14,7 @@ Ver `server.py::synthesize` para el productor y `docs/DAEMON-MODE.md` para el
 protocolo completo.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal, Optional
 
 # Tope de texto por petición: acota el trabajo del T3 y evita el DoS local
@@ -26,6 +26,30 @@ MAX_TEXT_LENGTH = 5000
 # PATH_MAX), evita payloads desproporcionados antes de que lleguen a la
 # validación de directorio permitido de /synthesize.
 MAX_AUDIO_PATH_LENGTH = 4096
+
+
+class ProtocolModel(BaseModel):
+    """Clase base de los modelos del protocolo daemon↔cliente (NDJSON + REST).
+
+    Centraliza la política de compatibilidad hacia adelante y hacia atrás en
+    un solo punto, en vez de dejarla como el default implícito de Pydantic en
+    cada modelo:
+      - `schema_version`: fijo en "1" mientras los cambios sean aditivos
+        (campo nuevo con default). Un cliente/daemon viejo que no lo conozca
+        simplemente lo ignora al parsear; un cambio incompatible de un campo
+        existente sí ameritaría incrementarlo.
+      - `extra="ignore"`: un campo desconocido en el payload (p. ej. un daemon
+        más nuevo enviando un campo que este proceso aún no conoce) se
+        descarta en vez de fallar la validación. Sin esto, el skew de
+        versiones entre un daemon residente y un CLI recién actualizado (o
+        viceversa) rompería la comunicación en vez de degradar con gracia.
+    `SynthesizeRequest` (el único modelo de petición cliente→daemon, no de
+    stream) NO hereda de esta base: su validación es deliberadamente estricta
+    (ver su propio docstring).
+    """
+    model_config = ConfigDict(extra="ignore")
+
+    schema_version: str = "1"
 
 
 class SynthesizeRequest(BaseModel):
@@ -51,7 +75,7 @@ class SynthesizeRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class ProgressEvent(BaseModel):
+class ProgressEvent(ProtocolModel):
     """Evento de avance de la síntesis (una línea `progress` del stream)."""
     event: Literal["progress"] = "progress"
     stage: Optional[str] = None
@@ -62,7 +86,7 @@ class ProgressEvent(BaseModel):
     """Segundos transcurridos desde el inicio de la síntesis (opcional)."""
 
 
-class ResultEvent(BaseModel):
+class ResultEvent(ProtocolModel):
     """Frame final del stream: el WAV completo y los tiempos por sub-etapa."""
     event: Literal["result"] = "result"
     audio_b64: str
@@ -71,14 +95,14 @@ class ResultEvent(BaseModel):
     s3gen_time: float = 0.0
 
 
-class ErrorEvent(BaseModel):
+class ErrorEvent(ProtocolModel):
     """Frame de error del stream: la síntesis falló en el hilo worker."""
     event: Literal["error"] = "error"
     detail: str
     """Mensaje seguro para el cliente (sin rutas del sistema)."""
 
 
-class HealthResponse(BaseModel):
+class HealthResponse(ProtocolModel):
     """Respuesta del health check."""
     status: str
     """Estado del daemon: 'healthy', 'initializing' o 'error'."""
@@ -86,8 +110,12 @@ class HealthResponse(BaseModel):
     """True cuando el modelo está completamente cargado en memoria."""
     uptime_seconds: float
     """Segundos transcurridos desde el inicio del daemon."""
+    version: str = ""
+    """Versión del paquete tts-sidecar que sirve este daemon (__version__).
+    Cadena vacía por defecto: un daemon que aún no la puebla (skew hacia
+    atrás) no rompe la validación de is_running()."""
 
 
-class VoicesResponse(BaseModel):
+class VoicesResponse(ProtocolModel):
     """Lista de voces registradas."""
     voices: list[str]

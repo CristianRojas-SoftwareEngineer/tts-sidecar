@@ -77,9 +77,9 @@ class TestOrchestratorSynthesize:
         speech = tmp_path / "speech.wav"
         speech.write_bytes(b"RIFF")
 
-        out = eng._orchestrator.synthesize("hola", None, str(speech), None, None)
-        assert isinstance(out, bytes)
-        with wave.open(__import__("io").BytesIO(out), 'rb') as wf:
+        result = eng._orchestrator.synthesize("hola", None, str(speech), None, None)
+        assert isinstance(result.audio_bytes, bytes)
+        with wave.open(__import__("io").BytesIO(result.audio_bytes), 'rb') as wf:
             assert wf.getnchannels() == 1
             assert wf.getframerate() == 24000
 
@@ -103,8 +103,8 @@ class TestOrchestratorSynthesize:
         def boom(ev):
             raise RuntimeError("callback roto")
 
-        out = eng._orchestrator.synthesize("hola", None, str(speech), None, boom)
-        assert isinstance(out, bytes)
+        result = eng._orchestrator.synthesize("hola", None, str(speech), None, boom)
+        assert isinstance(result.audio_bytes, bytes)
         assert eng._active_progress_cb is None
 
 

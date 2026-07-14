@@ -31,6 +31,7 @@ from . import bootstrap
 from .paths import ensure_parent_dir
 
 import argparse
+import json
 import os
 import platform
 from pathlib import Path
@@ -52,6 +53,21 @@ EXIT_INTERRUPTED = 130        # interrupción por el usuario (128 + SIGINT)
 # los consumidores lo usan para detectar cambios de forma; añadir claves nuevas no
 # incrementa la versión, solo lo haría un cambio incompatible de las existentes.
 SCHEMA_VERSION = "1"
+
+
+def emit_json(payload: dict) -> None:
+    """Único punto de `cli.py` que serializa un payload --json a stdout.
+
+    Inyecta `schema_version` (sin sobrescribirla si el caller ya la trae) y
+    garantiza exactamente un objeto JSON por invocación. Migrar todos los
+    emisores existentes a este helper (en vez de cada uno construyendo su
+    propio `print(json.dumps({...}))`) es lo que impide que un comando nuevo
+    olvide `schema_version` o emita más de un objeto: la garantía queda en un
+    solo lugar, no repetida por convención en cada comando.
+    """
+    payload.setdefault("schema_version", SCHEMA_VERSION)
+    print(json.dumps(payload))
+
 
 # Umbral mínimo de espacio libre en disco para descargar el modelo en 'setup'.
 # El language pack + Voice Encoder ocupan varios cientos de MB; 2 GB deja margen
@@ -181,7 +197,9 @@ def _warn_compute_backend_ignored(args):
 
 
 def _synthesize_via_daemon(args, voice_audio, speech_audio):
-    """Sintetiza vía daemon y emite el audio (reproducción o archivo).
+    """Sintetiza vía daemon, emite el audio (reproducción o archivo) y retorna
+    el `SynthesisResult` (audio + métricas), para que el llamador pueda emitir
+    `speak --json` con la misma forma que el modo directo.
 
     Asume el daemon disponible: cualquier fallo de comunicación o síntesis
     propaga la excepción al llamador (sin fallback silencioso a modo directo).
@@ -197,7 +215,7 @@ def _synthesize_via_daemon(args, voice_audio, speech_audio):
     # actualiza la etiqueta del spinner en vivo (etapa y tokens del T3). En
     # no-TTY el spinner es un no-op y la salida es idéntica a antes.
     with Spinner("Sintetizando vía daemon…") as sp:
-        audio_bytes = client.synthesize(
+        result = client.synthesize(
             text=args.text,
             voice_audio=voice_audio,
             speech_audio=speech_audio,
@@ -206,7 +224,8 @@ def _synthesize_via_daemon(args, voice_audio, speech_audio):
     elapsed = time.time() - synth_start
     log(f"[Servidor] Síntesis completada ({elapsed:.1f}s)")
 
-    _emit_audio(audio_bytes, args.output)
+    _emit_audio(result.audio_bytes, args.output)
+    return result
 
 
 def _require_model_cached(model: str = "es-mx-latam"):
@@ -221,6 +240,22 @@ def _require_model_cached(model: str = "es-mx-latam"):
         sys.exit(EXIT_MODEL_MISSING)
 
 
+def _emit_speak_json(args, voice_name: str, result, daemon: bool) -> None:
+    """Payload --json de `speak`: metadatos + métricas, idéntico en ambas rutas.
+
+    `result` es el `SynthesisResult` de la síntesis (misma forma en modo
+    directo y vía daemon); `--output` ya es obligatorio en modo --json (Tarea
+    4), así que `args.output` siempre está presente aquí.
+    """
+    emit_json({
+        "output": str(Path(args.output).resolve()),
+        "voice": voice_name,
+        "t3_time": result.metrics.t3,
+        "s3gen_time": result.metrics.s3gen,
+        "daemon": daemon,
+    })
+
+
 @timed_command
 def cmd_speak(args):
     """Sintetiza texto; reproduce el audio, o lo guarda a un archivo si se da --output."""
@@ -232,6 +267,17 @@ def cmd_speak(args):
         # de argparse colisionaría con EXIT_MODEL_MISSING del contrato congelado.
         if getattr(args, "daemon", False) and getattr(args, "no_daemon", False):
             print("Error: --daemon y --no-daemon son mutuamente excluyentes.", file=sys.stderr)
+            sys.exit(EXIT_INVALID_INPUT)
+
+        # --json solo tiene sentido acoplado a --output: el archivo es el canal
+        # de datos y stdout el canal de control (un payload de metadatos, no el
+        # audio en base64). Se valida antes de cualquier trabajo.
+        if getattr(args, "json", False) and not args.output:
+            print(
+                "Error: speak --json requiere --output (el archivo es el canal "
+                "de datos; --json solo emite metadatos/métricas a stdout).",
+                file=sys.stderr,
+            )
             sys.exit(EXIT_INVALID_INPUT)
 
         if not args.text or not args.text.strip():
@@ -269,6 +315,9 @@ def cmd_speak(args):
 
         # Resuelve las rutas de audio de la voz SIN cargar el modelo.
         voice_audio, speech_audio = _resolve_voice_paths(args)
+        # Nombre de voz efectivo para el payload --json: el de --voice, o
+        # "default" cuando cmd_speak recurre a la voz de fábrica.
+        voice_name = getattr(args, "voice", None) or "default"
 
         # Validación central de existencia/extensión de
         # audio en el cliente, antes de cargar el modelo (directo) o del round-trip
@@ -302,14 +351,18 @@ def cmd_speak(args):
                 print("  2. Usa --no-daemon para sintetizar en modo directo con esta ruta", file=sys.stderr)
                 print("  3. Copia el audio dentro del directorio de voces del usuario", file=sys.stderr)
                 sys.exit(EXIT_INVALID_INPUT)
-            _synthesize_via_daemon(args, voice_audio, speech_audio)
+            result = _synthesize_via_daemon(args, voice_audio, speech_audio)
+            if getattr(args, "json", False):
+                _emit_speak_json(args, voice_name, result, daemon=True)
             return
         if not getattr(args, 'no_daemon', False):
             from .daemon import is_daemon_running
             if is_daemon_running():
                 if _paths_allowed_by_daemon(voice_audio, speech_audio):
                     _warn_compute_backend_ignored(args)
-                    _synthesize_via_daemon(args, voice_audio, speech_audio)
+                    result = _synthesize_via_daemon(args, voice_audio, speech_audio)
+                    if getattr(args, "json", False):
+                        _emit_speak_json(args, voice_name, result, daemon=True)
                     return
                 print(
                     "[Servidor] La ruta de audio está fuera de los directorios permitidos "
@@ -330,7 +383,7 @@ def cmd_speak(args):
             _sp.update("Sintetizando voz…")
             # Mismo formateador de progreso que el modo daemon: los eventos del
             # motor (etapa y tokens del T3) actualizan la etiqueta del spinner.
-            audio_bytes = engine.speak(
+            result = engine.speak(
                 text=args.text,
                 output_path=args.output,
                 voice_audio=voice_audio,
@@ -342,7 +395,10 @@ def cmd_speak(args):
             # engine.speak ya escribió el archivo vía output_path
             log(f"[Archivo] Audio guardado: {args.output}")
         else:
-            _emit_audio(audio_bytes, None)
+            _emit_audio(result.audio_bytes, None)
+
+        if getattr(args, "json", False):
+            _emit_speak_json(args, voice_name, result, daemon=False)
 
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -385,13 +441,11 @@ def cmd_voice_add(args):
         )
 
         if getattr(args, "json", False):
-            import json
-            print(json.dumps({
-                "schema_version": SCHEMA_VERSION,
+            emit_json({
                 "name": args.name,
                 "reference": str(ref_path),
                 "speech": str(speech_path),
-            }))
+            })
             return
 
         print(f"Voz '{args.name}' registrada:")
@@ -415,12 +469,7 @@ def cmd_voice_remove(args):
     try:
         if voices.remove_voice(args.name):
             if getattr(args, "json", False):
-                import json
-                print(json.dumps({
-                    "schema_version": SCHEMA_VERSION,
-                    "name": args.name,
-                    "removed": True,
-                }))
+                emit_json({"name": args.name, "removed": True})
                 return
             print(f"Voz '{args.name}' eliminada.")
         elif voices._resolve_voice_dir(args.name) is not None:
@@ -466,8 +515,7 @@ def cmd_voice_list(args):
         voice_list = voices.list_voices()
 
         if getattr(args, "json", False):
-            import json
-            print(json.dumps({"schema_version": SCHEMA_VERSION, "voices": voice_list}))
+            emit_json({"voices": voice_list})
             return
 
         if voice_list:
@@ -504,8 +552,7 @@ def cmd_devices(args):
         sys.exit(EXIT_ERROR)
 
     if getattr(args, "json", False):
-        import json
-        print(json.dumps({"schema_version": SCHEMA_VERSION, "devices": devices}))
+        emit_json({"devices": devices})
         return
 
     print("Dispositivos de salida de audio:")
@@ -518,8 +565,7 @@ def cmd_version(args):
     from . import __version__
 
     if getattr(args, "json", False):
-        import json
-        print(json.dumps({"schema_version": SCHEMA_VERSION, "name": "tts-sidecar", "version": __version__}))
+        emit_json({"name": "tts-sidecar", "version": __version__})
     else:
         print(f"tts-sidecar {__version__}")
 
@@ -669,15 +715,13 @@ def cmd_doctor(args):
     checks_passed = sum(1 for status, _, _ in checks if status == "PASS")
 
     if getattr(args, "json", False):
-        import json
-        print(json.dumps({
-            "schema_version": SCHEMA_VERSION,
+        emit_json({
             "python": sys.version,
             "platform": f"{platform.system()} {platform.release()}",
             "checks": [{"status": s, "name": n, "detail": d} for s, n, d in checks],
             "passed": checks_passed,
             "failed": checks_failed,
-        }))
+        })
         if checks_failed > 0:
             sys.exit(EXIT_ERROR)
         return
@@ -895,10 +939,6 @@ def _uninstall_linux(args):
     curso.
     """
     import shutil
-    # Pre-import del contrato compartido: los imports usados tras borrar el ancla
-    # se resuelven antes (en Linux el squashfs sobrevive al unlink, pero se
-    # mantiene el patrón unificado con macOS).
-    import json
 
     json_mode = getattr(args, "json", False)
     removed_paths = []
@@ -937,11 +977,10 @@ def _uninstall_linux(args):
     print("\n[PASS] Desinstalación completa.", file=sys.stderr)
 
     if json_mode:
-        print(json.dumps({
-            "schema_version": SCHEMA_VERSION,
+        emit_json({
             "uninstall": True,
             "removed": [str(p) for p in removed_paths],
-        }))
+        })
 
 
 def _uninstall_macos(args):
@@ -970,8 +1009,6 @@ def _uninstall_macos(args):
     se resolvería contra archivos ya inexistentes.
     """
     import shutil
-    # Pre-imports del contrato: se resuelven antes de borrar el bundle (paso 5).
-    import json
 
     json_mode = getattr(args, "json", False)
 
@@ -1033,11 +1070,10 @@ def _uninstall_macos(args):
     print("\n[PASS] Desinstalación completa.", file=sys.stderr)
 
     if json_mode:
-        print(json.dumps({
-            "schema_version": SCHEMA_VERSION,
+        emit_json({
             "uninstall": True,
             "removed": [str(p) for p in removed_paths],
-        }))
+        })
 
 
 def _uninstall_windows(args):
@@ -1066,9 +1102,6 @@ def _uninstall_windows(args):
     el directorio de instalación va en el campo aditivo `delegated`, nunca en
     `removed` (aún existe cuando se emite el payload; afirmarlo sería falso).
     """
-    # Pre-import del contrato: json se usa para el payload final.
-    import json
-
     json_mode = getattr(args, "json", False)
 
     # 1. Leer y validar QuietUninstallString primero, sin efectos. winreg es
@@ -1114,12 +1147,11 @@ def _uninstall_windows(args):
     )
 
     if json_mode:
-        print(json.dumps({
-            "schema_version": SCHEMA_VERSION,
+        emit_json({
             "uninstall": True,
             "removed": [str(p) for p in removed_paths],
             "delegated": [str(install_dir)],
-        }))
+        })
 
 
 def _describe_provision_failure(e: Exception) -> str:
@@ -1206,12 +1238,7 @@ def cmd_setup(args):
     if getattr(args, "remove_path", False):
         removed = _remove_linux_path()
         if getattr(args, "json", False):
-            import json
-            print(json.dumps({
-                "schema_version": SCHEMA_VERSION,
-                "remove_path": True,
-                "removed": removed,
-            }))
+            emit_json({"remove_path": True, "removed": removed})
         return
 
     print("=== TTS Sidecar Setup ===\n", file=sys.stderr)
@@ -1273,14 +1300,12 @@ def cmd_setup(args):
         def _emit_setup_json(already_cached: bool, downloaded: bool):
             """Payload --json de setup (los [PASS]/[FAIL] de progreso van a stderr)."""
             if getattr(args, "json", False):
-                import json
-                print(json.dumps({
-                    "schema_version": SCHEMA_VERSION,
+                emit_json({
                     "model": "es-mx-latam",
                     "already_cached": already_cached,
                     "downloaded": downloaded,
                     "cache_dir": model_dir,
-                }))
+                })
 
         def _purge_incomplete():
             """Limpia los '*.incomplete' huérfanos tras una provisión completa.
@@ -1412,12 +1437,10 @@ def cmd_cleanup(args):
 
     def _emit_cleanup_json(removed_paths):
         if json_mode:
-            import json
-            print(json.dumps({
-                "schema_version": SCHEMA_VERSION,
+            emit_json({
                 "removed": [str(p) for p in removed_paths],
                 "dry_run": getattr(args, "dry_run", False),
-            }))
+            })
 
     do_model = getattr(args, "model", False) or getattr(args, "all", False)
     do_voices = getattr(args, "voices", False) or getattr(args, "all", False)
@@ -1510,37 +1533,60 @@ def cmd_daemon(args):
         # Exige que el modelo esté en caché antes de lanzar el servidor.
         # Las descargas son responsabilidad exclusiva de 'setup'.
         _require_model_cached("es-mx-latam")
+        json_mode = getattr(args, "json", False)
         success = manager.start(
             background=True,
             auto_restart=args.autorestart,
             max_retries=args.max_retries or 0,
         )
-        if success:
+        if json_mode:
+            payload = {"action": "start", "ok": success}
+            if success:
+                pid = manager._read_pid()
+                if pid is not None:
+                    payload["pid"] = pid
+            emit_json(payload)
+        elif success:
             print("Daemon iniciado correctamente")
         else:
             print("No se pudo iniciar el daemon", file=sys.stderr)
+        if not success:
             sys.exit(EXIT_DAEMON_UNREACHABLE)
 
     elif args.action == "stop":
-        if manager.stop():
+        json_mode = getattr(args, "json", False)
+        success = manager.stop()
+        if json_mode:
+            emit_json({"action": "stop", "ok": success})
+        elif success:
             print("Daemon detenido")
         else:
             print("No se pudo detener el daemon", file=sys.stderr)
+        if not success:
             sys.exit(EXIT_DAEMON_UNREACHABLE)
 
     elif args.action == "restart":
-        if manager.restart():
+        json_mode = getattr(args, "json", False)
+        success = manager.restart()
+        if json_mode:
+            payload = {"action": "restart", "ok": success}
+            if success:
+                pid = manager._read_pid()
+                if pid is not None:
+                    payload["pid"] = pid
+            emit_json(payload)
+        elif success:
             print("Daemon reiniciado")
         else:
             print("No se pudo reiniciar el daemon", file=sys.stderr)
+        if not success:
             sys.exit(EXIT_DAEMON_UNREACHABLE)
 
     elif args.action == "status":
         status = manager.status()
 
         if getattr(args, "json", False):
-            import json
-            print(json.dumps({"schema_version": SCHEMA_VERSION, **status}))
+            emit_json(dict(status))
             return
 
         if status.get("running"):
@@ -1552,13 +1598,29 @@ def cmd_daemon(args):
             print("Daemon no está en ejecución")
 
 
-def main():
-    """Punto de entrada principal de la CLI."""
-    # Capa única de bootstrap: primera acción del proceso en la vía pip
-    # (`tts_sidecar.cli:main`) y en la congelada (`bin/tts-sidecar` → main).
-    # Idempotente, así que una invocación previa de otro entry point es no-op.
-    bootstrap.apply()
+def top_level_subparsers(parser: argparse.ArgumentParser) -> argparse.Action:
+    """Devuelve la acción `_SubParsersAction` de nivel superior de `parser`.
 
+    argparse no expone esto como atributo público estable; se busca entre
+    `parser._actions` en vez de depender de la variable local `subparsers` de
+    `build_parser()` (que ya no está en su scope una vez construido el parser).
+    Usado por `main()` (ayuda de un grupo sin sub-acción) y por el test
+    estructural del contrato --json (recorrido de todos los subcomandos).
+    """
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return action
+    raise RuntimeError("El parser no tiene subparsers de nivel superior")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Construye el parser completo del CLI (subcomandos, flags, despacho).
+
+    Extraído de `main()` para que el contrato --json sea introspeccionable: el
+    test estructural (tests/test_cli.py::TestJSONContractStructure) recorre
+    este mismo parser para descubrir qué subcomandos declaran --json, en vez de
+    mantener una lista aparte que puede desincronizarse del código real.
+    """
     parser = argparse.ArgumentParser(
         prog="tts-sidecar",
         description="TTS Sidecar - TTS 100% local con clonación de voz"
@@ -1587,6 +1649,11 @@ def main():
     speak_parser.add_argument("--no-daemon", action="store_true",
                               help="Forzar modo directo, sin sondear el daemon. "
                                    "Mutuamente excluyente con --daemon (exit 4 si se combinan)")
+    speak_parser.add_argument("--json", action="store_true",
+                              help="Emitir a stdout un payload JSON de metadatos y métricas "
+                                   "(voz, tiempos t3/s3gen, vía daemon o no). Requiere --output: "
+                                   "el archivo es el canal de datos, --json solo el de control "
+                                   "(exit 4 si se usa sin --output)")
     speak_parser.set_defaults(func=cmd_speak)
 
     # grupo de comandos voice (list / add / remove)
@@ -1670,12 +1737,15 @@ def main():
     daemon_start = daemon_subparsers.add_parser("start", help="Inicia el daemon")
     daemon_start.add_argument("--autorestart", action="store_true", help="Auto-reinicio en caso de crash")
     daemon_start.add_argument("--max-retries", type=int, help="Máximo de intentos de reinicio")
+    daemon_start.add_argument("--json", action="store_true", help="Emitir JSON legible por máquina")
     daemon_start.set_defaults(func=cmd_daemon)
 
     daemon_stop = daemon_subparsers.add_parser("stop", help="Detiene el daemon")
+    daemon_stop.add_argument("--json", action="store_true", help="Emitir JSON legible por máquina")
     daemon_stop.set_defaults(func=cmd_daemon)
 
     daemon_restart = daemon_subparsers.add_parser("restart", help="Reinicia el daemon")
+    daemon_restart.add_argument("--json", action="store_true", help="Emitir JSON legible por máquina")
     daemon_restart.set_defaults(func=cmd_daemon)
 
     daemon_status = daemon_subparsers.add_parser("status", help="Muestra el estado del daemon")
@@ -1692,6 +1762,17 @@ def main():
     version_parser.add_argument("--json", action="store_true", help="Emitir JSON legible por máquina")
     version_parser.set_defaults(func=cmd_version)
 
+    return parser
+
+
+def main():
+    """Punto de entrada principal de la CLI."""
+    # Capa única de bootstrap: primera acción del proceso en la vía pip
+    # (`tts_sidecar.cli:main`) y en la congelada (`bin/tts-sidecar` → main).
+    # Idempotente, así que una invocación previa de otro entry point es no-op.
+    bootstrap.apply()
+
+    parser = build_parser()
     args = parser.parse_args()
 
     if not args.command:
@@ -1700,7 +1781,7 @@ def main():
 
     # Los grupos de comandos (voice, daemon) sin sub-acción no tienen func: mostrar ayuda.
     if not hasattr(args, "func"):
-        subparsers.choices[args.command].print_help()
+        top_level_subparsers(parser).choices[args.command].print_help()
         sys.exit(EXIT_OK)
 
     try:

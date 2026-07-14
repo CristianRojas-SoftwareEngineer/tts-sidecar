@@ -238,3 +238,45 @@ class TestUnicodeInStreamEvents:
         ev = ErrorEvent(detail="No se pudo cargar la voz «default»")
         payload = json.loads(ev.model_dump_json())
         assert payload["detail"] == "No se pudo cargar la voz «default»"
+
+
+class TestProtocolVersioning:
+    """Los 5 modelos del protocolo heredan de ProtocolModel: schema_version
+    fijo, y extra="ignore" para tolerar el skew de versiones daemon↔cliente."""
+
+    MODELS_WITH_REQUIRED = {
+        ProgressEvent: {},
+        ResultEvent: {"audio_b64": "QUJD"},
+        ErrorEvent: {"detail": "x"},
+        HealthResponse: {"status": "healthy", "model_loaded": True, "uptime_seconds": 1.0},
+        VoicesResponse: {"voices": []},
+    }
+
+    def test_all_models_declare_schema_version_1(self):
+        import json
+
+        for model_cls, kwargs in self.MODELS_WITH_REQUIRED.items():
+            payload = json.loads(model_cls(**kwargs).model_dump_json())
+            assert payload["schema_version"] == "1", model_cls.__name__
+
+    def test_unknown_extra_fields_are_ignored_forward_skew(self):
+        """Un daemon más nuevo que envía un campo desconocido no rompe un
+        cliente viejo: extra="ignore" lo descarta en vez de fallar."""
+        for model_cls, kwargs in self.MODELS_WITH_REQUIRED.items():
+            instance = model_cls(**kwargs, campo_del_futuro="algo", otro_campo=123)
+            assert not hasattr(instance, "campo_del_futuro")
+
+    def test_missing_schema_version_and_version_default_backward_skew(self):
+        """Un daemon viejo que no puebla schema_version/version no rompe un
+        cliente nuevo: los defaults completan sin exigir el campo."""
+        health = HealthResponse.model_validate({
+            "status": "healthy", "model_loaded": True, "uptime_seconds": 1.0,
+        })
+        assert health.schema_version == "1"
+        assert health.version == ""
+
+    def test_health_response_carries_version(self):
+        resp = HealthResponse(
+            status="healthy", model_loaded=True, uptime_seconds=1.0, version="0.6.0",
+        )
+        assert resp.version == "0.6.0"

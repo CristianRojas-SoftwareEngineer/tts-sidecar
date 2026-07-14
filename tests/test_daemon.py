@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from tts_sidecar.timing import SynthesisMetrics
+from tts_sidecar.timing import SynthesisMetrics, SynthesisResult
 
 
 class TestServerConcurrency:
@@ -27,7 +27,9 @@ class TestServerConcurrency:
             def speak(self, **kwargs):
                 started.set()
                 assert release.wait(timeout=10), "la síntesis nunca fue liberada"
-                return b"RIFF" + b"\x00" * 40
+                return SynthesisResult(
+                    audio_bytes=b"RIFF" + b"\x00" * 40, metrics=SynthesisMetrics()
+                )
 
         wav = tmp_path / "voz.wav"
         wav.write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
@@ -77,7 +79,9 @@ class TestServerAdmissionControl:
             def speak(self, **kwargs):
                 started.set()
                 assert release.wait(timeout=10), "la síntesis nunca fue liberada"
-                return b"RIFF" + b"\x00" * 40
+                return SynthesisResult(
+                    audio_bytes=b"RIFF" + b"\x00" * 40, metrics=SynthesisMetrics()
+                )
 
         wav = tmp_path / "voz.wav"
         wav.write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
@@ -126,10 +130,10 @@ class TestServerAdmissionControl:
         monkeypatch.setattr(server, "_admission_semaphore", threading.BoundedSemaphore(1))
 
         class FakeEngine:
-            _synthesis_metrics = SynthesisMetrics()
-
             def speak(self, **kwargs):
-                return b"RIFF" + b"\x00" * 40
+                return SynthesisResult(
+                    audio_bytes=b"RIFF" + b"\x00" * 40, metrics=SynthesisMetrics()
+                )
 
         old_engine = server.app.state.daemon.engine
         server.app.state.daemon.engine = FakeEngine()
@@ -161,7 +165,9 @@ class TestServerAdmissionControl:
             def speak(self, **kwargs):
                 started.set()
                 assert release.wait(timeout=10), "la síntesis nunca fue liberada"
-                return b"RIFF" + b"\x00" * 40
+                return SynthesisResult(
+                    audio_bytes=b"RIFF" + b"\x00" * 40, metrics=SynthesisMetrics()
+                )
 
         wav = tmp_path / "voz.wav"
         wav.write_bytes(b"RIFF\x00\x00\x00\x00WAVE")
@@ -236,8 +242,9 @@ class TestSynthesizeAllowedPaths:
         monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(allowed_root)])
 
         fake_engine = MagicMock()
-        fake_engine.speak.return_value = b"RIFF" + b"\x00" * 40
-        fake_engine._synthesis_metrics = SynthesisMetrics()
+        fake_engine.speak.return_value = SynthesisResult(
+            audio_bytes=b"RIFF" + b"\x00" * 40, metrics=SynthesisMetrics()
+        )
 
         old_engine = server.app.state.daemon.engine
         server.app.state.daemon.engine = fake_engine
@@ -291,8 +298,9 @@ class TestSynthesizeHeaderValidationAndCanonicalPath:
         monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(allowed_root)])
 
         fake_engine = MagicMock()
-        fake_engine.speak.return_value = b"RIFF" + b"\x00" * 40
-        fake_engine._synthesis_metrics = SynthesisMetrics()
+        fake_engine.speak.return_value = SynthesisResult(
+            audio_bytes=b"RIFF" + b"\x00" * 40, metrics=SynthesisMetrics()
+        )
 
         old_engine = server.app.state.daemon.engine
         server.app.state.daemon.engine = fake_engine
@@ -348,8 +356,9 @@ class TestDaemonSessionSandbox:
             f.write(b"RIFF\x00\x00\x00\x00WAVE")
 
         fake_engine = MagicMock()
-        fake_engine.speak.return_value = b"RIFF" + b"\x00" * 40
-        fake_engine._synthesis_metrics = SynthesisMetrics()
+        fake_engine.speak.return_value = SynthesisResult(
+            audio_bytes=b"RIFF" + b"\x00" * 40, metrics=SynthesisMetrics()
+        )
 
         old_engine = server.app.state.daemon.engine
         server.app.state.daemon.engine = fake_engine
@@ -602,8 +611,10 @@ class TestDaemonManager:
 
         progreso = []
         client = DaemonIPCClient()
-        audio_out = client.synthesize(text="hola", on_progress=progreso.append)
-        assert audio_out == audio
+        result = client.synthesize(text="hola", on_progress=progreso.append)
+        assert result.audio_bytes == audio
+        assert result.metrics.t3 == 9.7
+        assert result.metrics.s3gen == 7.0
         assert progreso == [
             ProgressEvent.model_validate(
                 {"event": "progress", "stage": "conditionals"}
@@ -777,12 +788,12 @@ class TestSynthesizeStreaming:
         audio = b"RIFF" + b"\x00" * 40
 
         class FakeEngine:
-            _synthesis_metrics = SynthesisMetrics(t3=1.5, s3gen=2.5)
-
             def speak(self, progress_callback=None, **kwargs):
                 progress_callback({"event": "progress", "stage": "conditionals"})
                 progress_callback({"event": "progress", "stage": "t3", "tokens": 10})
-                return audio
+                return SynthesisResult(
+                    audio_bytes=audio, metrics=SynthesisMetrics(t3=1.5, s3gen=2.5)
+                )
 
         old_engine = server.app.state.daemon.engine
         server.app.state.daemon.engine = FakeEngine()
@@ -811,8 +822,6 @@ class TestSynthesizeStreaming:
         wav = self._allowed_wav(tmp_path, monkeypatch)
 
         class FakeEngine:
-            _synthesis_metrics = SynthesisMetrics()
-
             def speak(self, progress_callback=None, **kwargs):
                 raise RuntimeError("boom interno con /ruta/secreta")
 
@@ -850,6 +859,8 @@ class TestDaemonStateInjection:
                 body = client.get("/health").json()
                 assert body["model_loaded"] is True
                 assert body["status"] == "healthy"
+                from tts_sidecar import __version__
+                assert body["version"] == __version__
         finally:
             server.app.dependency_overrides.clear()
 
@@ -1114,8 +1125,6 @@ class TestSynthesisCancellation:
         monkeypatch.setattr(voices, "allowed_audio_dirs", lambda: [str(tmp_path)])
 
         class FakeEngine:
-            _synthesis_metrics = SynthesisMetrics()
-
             def speak(self, progress_callback=None, **kwargs):
                 progress_callback({"event": "progress", "stage": "conditionals"})
                 progress_callback({"event": "progress", "stage": "t3", "tokens": 5})
@@ -1157,11 +1166,11 @@ class TestSynthesisCancellation:
         audio = b"RIFF" + b"\x00" * 40
 
         class FakeEngine:
-            _synthesis_metrics = SynthesisMetrics(t3=1.0, s3gen=2.0)
-
             def speak(self, progress_callback=None, **kwargs):
                 progress_callback({"event": "progress", "stage": "conditionals"})
-                return audio
+                return SynthesisResult(
+                    audio_bytes=audio, metrics=SynthesisMetrics(t3=1.0, s3gen=2.0)
+                )
 
         old_engine = server.app.state.daemon.engine
         server.app.state.daemon.engine = FakeEngine()
@@ -1206,7 +1215,6 @@ class TestSynthesisCancellation:
         TOTAL = 50
 
         class FakeEngine:
-            _synthesis_metrics = SynthesisMetrics()
             counter = 0
 
             def speak(self, progress_callback=None, **kwargs):
@@ -1278,10 +1286,10 @@ class TestDaemonMemoryClear:
         mock_clear = MagicMock()
 
         class FakeEngine:
-            _synthesis_metrics = SynthesisMetrics()
-
             def speak(self, **kwargs):
-                return b"RIFF" + b"\x00" * 40
+                return SynthesisResult(
+                    audio_bytes=b"RIFF" + b"\x00" * 40, metrics=SynthesisMetrics()
+                )
 
         old_engine = server.app.state.daemon.engine
         server.app.state.daemon.engine = FakeEngine()

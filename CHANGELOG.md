@@ -7,6 +7,41 @@ y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Añadido
+
+- **`speak --json`** (auditoría production-readiness, S2-01): acoplado a
+  `--output` (el archivo es el canal de datos; `--json` solo emite metadatos a
+  stdout), emite `{"schema_version","output","voice","t3_time","s3gen_time","daemon"}`
+  a stdout, idéntico campo a campo en modo directo y vía daemon. `--json` sin
+  `--output` falla con exit 4 antes de cualquier trabajo.
+- **`daemon start/stop/restart --json`** (S2-02): payload de resultado de la
+  acción `{"schema_version","action","ok","pid"?}` a stdout; los mensajes
+  informativos pasan a stderr en modo `--json`. `daemon serve` queda
+  deliberadamente sin `--json` (su contrato es el stream NDJSON del server).
+- **Versionado del protocolo NDJSON del daemon** (S2-05): los 5 modelos de
+  `daemon/protocol.py` (`ProgressEvent`, `ResultEvent`, `ErrorEvent`,
+  `HealthResponse`, `VoicesResponse`) heredan de una clase base común
+  (`ProtocolModel`) con `schema_version` y `extra="ignore"` explícitos;
+  `HealthResponse`/`/health` gana el campo `version` (la del paquete), que
+  permite diagnosticar el skew entre un daemon residente y un CLI actualizado.
+  Política de compatibilidad documentada en `docs/DAEMON-MODE.md`.
+- **Test estructural del contrato `--json`** (S2-06): `build_parser()` se
+  extrajo de `main()` para ser introspeccionable; un test nuevo descubre desde
+  el parser real qué subcomandos declaran `--json` y lo compara contra la
+  cobertura declarada en los tests, rompiendo ante un comando nuevo sin cubrir
+  o un flag retirado.
+
+### Cambiado
+
+- Todos los cambios de contrato anteriores son **aditivos**: `schema_version`
+  del CLI y del protocolo NDJSON permanecen en `"1"`. Internamente,
+  `engine.speak()`, `SynthesisOrchestrator.synthesize()` y
+  `DaemonIPCClient.synthesize()` ahora retornan un objeto de resultado
+  `SynthesisResult` (audio + métricas `t3`/`s3gen`) en vez de `bytes` desnudos,
+  unificando la fuente de métricas de ambas rutas de síntesis; y los emisores
+  `--json` existentes del CLI se migraron a un helper único `emit_json()`
+  (mismos payloads, sin cambios de clave).
+
 ### Arreglado
 
 - **Cancelación cooperativa de la síntesis al desconectar el cliente**:

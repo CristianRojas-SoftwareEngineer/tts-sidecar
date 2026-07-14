@@ -11,7 +11,7 @@ from typing import Callable, Optional
 import requests
 from pydantic import ValidationError
 
-from ..timing import log
+from ..timing import SynthesisMetrics, SynthesisResult, log
 
 # Puerto fijo del daemon (loopback 127.0.0.1). Fuente única importada por
 # daemon.py y run.py: no existe flag --port. Correr dos daemons o convivir con
@@ -89,7 +89,7 @@ class DaemonIPCClient:
         voice_audio: Optional[str] = None,
         speech_audio: Optional[str] = None,
         on_progress: Optional[Callable[[dict], None]] = None,
-    ) -> bytes:
+    ) -> SynthesisResult:
         """
         Sintetiza texto vía daemon, consumiendo el stream NDJSON.
 
@@ -102,7 +102,9 @@ class DaemonIPCClient:
             on_progress: Callback opcional invocado con el dict de cada evento
                 `progress` del stream (mismo contrato que engine.speak).
 
-        Devuelve los bytes del audio WAV (decodificados del frame `result`).
+        Devuelve un `SynthesisResult` (audio decodificado del frame `result` +
+        métricas t3/s3gen), la misma forma que devuelve `engine.speak()` en modo
+        directo.
 
         Raises:
             DaemonIPCError: Si la comunicación falla o el daemon emite `error`.
@@ -130,6 +132,7 @@ class DaemonIPCClient:
                 raise DaemonIPCError(f"Error del daemon: {error}")
 
             audio_bytes: Optional[bytes] = None
+            metrics = SynthesisMetrics()
             for raw in response.iter_lines():
                 if not raw:
                     # Línea vacía (keep-alive HTTP): no es un frame, se salta.
@@ -188,6 +191,7 @@ class DaemonIPCClient:
                     if t3_time is not None and s3gen_time is not None:
                         log(f"   [Etapa 2a] T3 autoregresivo: {float(t3_time):.1f}s")
                         log(f"   [Etapa 2b] S3Gen vocoder:   {float(s3gen_time):.1f}s")
+                        metrics = SynthesisMetrics(t3=float(t3_time), s3gen=float(s3gen_time))
                 elif kind == "error":
                     raise DaemonIPCError(
                         f"Error del daemon: {ev.detail}"
@@ -196,7 +200,7 @@ class DaemonIPCClient:
             if audio_bytes is None:
                 # El stream terminó sin frame `result` ni `error`: contrato roto.
                 raise DaemonIPCError("El daemon no devolvió audio")
-            return audio_bytes
+            return SynthesisResult(audio_bytes=audio_bytes, metrics=metrics)
 
         except requests.ConnectionError as e:
             raise DaemonIPCError(f"No se puede conectar al daemon: {e}")

@@ -119,7 +119,7 @@ class TestSpeakProgressCallback:
         def boom(ev):
             raise RuntimeError("callback roto")
 
-        assert eng.speak("hola", speech_audio=str(speech), progress_callback=boom) == b"RIFF"
+        assert eng.speak("hola", speech_audio=str(speech), progress_callback=boom).audio_bytes == b"RIFF"
 
 
 class TestTokenCountingIter:

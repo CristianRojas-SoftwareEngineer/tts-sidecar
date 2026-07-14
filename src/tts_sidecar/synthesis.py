@@ -11,7 +11,7 @@ colaboradores `conditionals_prep` y `audio_writer`.
 import logging
 import os
 
-from .timing import StageTimer, log
+from .timing import StageTimer, SynthesisMetrics, SynthesisResult, log
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +37,8 @@ class SynthesisOrchestrator:
         speech_audio,
         output_path,
         progress_callback,
-    ) -> bytes:
-        """Ejecuta la síntesis completa y retorna los bytes WAV.
+    ) -> SynthesisResult:
+        """Ejecuta la síntesis completa y retorna el audio + las métricas.
 
         Fija `engine._active_progress_cb` por la duración de esta síntesis y lo
         limpia en `finally` (lo leen el shim de tokens y los wrappers timed_t3/
@@ -52,7 +52,7 @@ class SynthesisOrchestrator:
         finally:
             engine._active_progress_cb = None
 
-    def _synthesize_impl(self, text, voice_audio, speech_audio, output_path) -> bytes:
+    def _synthesize_impl(self, text, voice_audio, speech_audio, output_path) -> SynthesisResult:
         engine = self.engine
 
         # Stage 1: Carga de conditionals
@@ -104,7 +104,12 @@ class SynthesisOrchestrator:
             with StageTimer("4-Speak", "Etapa 4/4: Guardando en archivo"):
                 self.audio_writer.write(wav, sample_rate, output_path)
 
-        return wav_bytes
+        # Métricas tipadas publicadas por el engine (SynthesisMetrics), pobladas
+        # por los wrappers timed_t3/timed_s3gen en engine._apply_synthesis_optimizations.
+        # Un engine de prueba minimal (sin esa instrumentación) no las tiene: se
+        # degrada a métricas vacías en vez de fallar.
+        metrics = getattr(engine, "_synthesis_metrics", None) or SynthesisMetrics()
+        return SynthesisResult(audio_bytes=wav_bytes, metrics=metrics)
 
     def _compute_conditionals(self, voice_audio, speech_audio) -> None:
         """Computa los conditionals on-the-fly y los asigna a `engine._tts.conds`.

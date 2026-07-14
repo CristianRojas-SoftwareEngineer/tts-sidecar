@@ -25,6 +25,12 @@ def _make_wav(name):
     return path
 
 
+def _synth_result(audio_bytes=b"RIFF", t3=0.0, s3gen=0.0):
+    """Fixture de `SynthesisResult`, el retorno real de engine.speak()/client.synthesize()."""
+    from tts_sidecar.timing import SynthesisMetrics, SynthesisResult
+    return SynthesisResult(audio_bytes=audio_bytes, metrics=SynthesisMetrics(t3=t3, s3gen=s3gen))
+
+
 class MockArgs:
     def __init__(self, **kwargs):
         self.text = kwargs.get("text", "test text")
@@ -271,7 +277,7 @@ class TestCmdSpeakDaemonDispatch:
         from tts_sidecar.cli import cmd_speak
 
         client = MagicMock()
-        client.synthesize.return_value = b"RIFF"
+        client.synthesize.return_value = _synth_result()
         mock_client_cls.return_value = client
 
         cmd_speak(self._args(output=str(tmp_path / "out.wav")))
@@ -286,7 +292,7 @@ class TestCmdSpeakDaemonDispatch:
         from tts_sidecar.cli import cmd_speak
 
         engine = MagicMock()
-        engine.speak.return_value = b"RIFF"
+        engine.speak.return_value = _synth_result()
         mock_engine_cls.get_instance.return_value = engine
 
         cmd_speak(self._args(output=str(tmp_path / "out.wav")))
@@ -318,7 +324,7 @@ class TestCmdSpeakDaemonDispatch:
         from tts_sidecar.cli import cmd_speak
 
         engine = MagicMock()
-        engine.speak.return_value = b"RIFF"
+        engine.speak.return_value = _synth_result()
         mock_engine_cls.get_instance.return_value = engine
 
         cmd_speak(self._args(no_daemon=True, output=str(tmp_path / "out.wav")))
@@ -346,7 +352,7 @@ class TestCmdSpeakLiveProgress:
         from tts_sidecar.cli import cmd_speak
 
         client = MagicMock()
-        client.synthesize.return_value = b"RIFF"
+        client.synthesize.return_value = _synth_result()
         mock_client_cls.return_value = client
 
         cmd_speak(self._args(daemon=True, output=str(tmp_path / "out.wav")))
@@ -367,7 +373,7 @@ class TestCmdSpeakLiveProgress:
         from tts_sidecar.cli import cmd_speak
 
         engine = MagicMock()
-        engine.speak.return_value = b"RIFF"
+        engine.speak.return_value = _synth_result()
         mock_engine_cls.get_instance.return_value = engine
 
         cmd_speak(self._args(no_daemon=True, output=str(tmp_path / "out.wav")))
@@ -397,7 +403,7 @@ class TestCmdSpeakVoiceAudioDaemonSandbox:
         from tts_sidecar.cli import cmd_speak
 
         engine = MagicMock()
-        engine.speak.return_value = b"RIFF"
+        engine.speak.return_value = _synth_result()
         mock_engine_cls.get_instance.return_value = engine
 
         cmd_speak(self._args(output=str(tmp_path / "out.wav")))
@@ -504,7 +510,7 @@ class TestCmdSpeak:
         from tts_sidecar.cli import cmd_speak
 
         engine = MagicMock()
-        engine.speak.return_value = b"RIFF"
+        engine.speak.return_value = _synth_result()
         mock_engine_cls.get_instance.return_value = engine
 
         cmd_speak(MockArgs(text="hola", output="out.wav", no_daemon=True))
@@ -522,7 +528,7 @@ class TestCmdSpeak:
         from tts_sidecar.cli import cmd_speak
 
         engine = MagicMock()
-        engine.speak.return_value = b"RIFF"
+        engine.speak.return_value = _synth_result()
         mock_engine_cls.get_instance.return_value = engine
         player = MagicMock()
         mock_player_cls.return_value = player
@@ -1583,6 +1589,90 @@ class TestSetupUninstall:
         popen.assert_not_called()
 
 
+class TestSpeakJSON:
+    """speak --json emite metadatos + métricas a stdout, acoplado a --output,
+    idéntico campo a campo en ruta directa y vía daemon."""
+
+    def _args(self, **kw):
+        kw.setdefault("voice_audio", _make_wav("v.wav"))
+        kw.setdefault("speech_audio", _make_wav("s.wav"))
+        return MockArgs(**kw)
+
+    @patch("tts_sidecar.voices.voice_paths")
+    @patch("tts_sidecar.model_cache.is_model_cached", return_value=True)
+    @patch("tts_sidecar.engine.ChatterboxEngine")
+    def test_direct_json_payload(self, mock_engine_cls, _cached, mock_voice_paths, tmp_path, capsys):
+        import json
+        from tts_sidecar.cli import cmd_speak, SCHEMA_VERSION
+
+        mock_voice_paths.return_value = (_make_wav("v.wav"), _make_wav("s.wav"))
+        engine = MagicMock()
+        engine.speak.return_value = _synth_result(t3=1.5, s3gen=2.5)
+        mock_engine_cls.get_instance.return_value = engine
+
+        out_path = tmp_path / "out.wav"
+        cmd_speak(self._args(
+            no_daemon=True, output=str(out_path), json=True, voice="mi_voz",
+            voice_audio=None, speech_audio=None,
+        ))
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload == {
+            "schema_version": SCHEMA_VERSION,
+            "output": str(out_path.resolve()),
+            "voice": "mi_voz",
+            "t3_time": 1.5,
+            "s3gen_time": 2.5,
+            "daemon": False,
+        }
+
+    @patch("tts_sidecar.cli._paths_allowed_by_daemon", return_value=True)
+    @patch("tts_sidecar.model_cache.is_model_cached", return_value=True)
+    @patch("tts_sidecar.daemon.DaemonIPCClient")
+    def test_daemon_json_payload(self, mock_client_cls, _cached, _allowed, tmp_path, capsys):
+        import json
+        from tts_sidecar.cli import cmd_speak, SCHEMA_VERSION
+
+        client = MagicMock()
+        client.synthesize.return_value = _synth_result(t3=3.0, s3gen=4.0)
+        mock_client_cls.return_value = client
+
+        out_path = tmp_path / "out.wav"
+        cmd_speak(self._args(daemon=True, output=str(out_path), json=True))
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload == {
+            "schema_version": SCHEMA_VERSION,
+            "output": str(out_path.resolve()),
+            "voice": "default",
+            "t3_time": 3.0,
+            "s3gen_time": 4.0,
+            "daemon": True,
+        }
+
+    def test_json_without_output_exits_4(self, capsys):
+        from tts_sidecar.cli import cmd_speak, EXIT_INVALID_INPUT
+
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_speak(self._args(json=True, output=None))
+
+        assert exc_info.value.code == EXIT_INVALID_INPUT
+        assert "--output" in capsys.readouterr().err
+
+    @patch("tts_sidecar.model_cache.is_model_cached", return_value=True)
+    @patch("tts_sidecar.engine.ChatterboxEngine")
+    def test_without_json_stdout_stays_empty(self, mock_engine_cls, _cached, tmp_path, capsys):
+        from tts_sidecar.cli import cmd_speak
+
+        engine = MagicMock()
+        engine.speak.return_value = _synth_result()
+        mock_engine_cls.get_instance.return_value = engine
+
+        cmd_speak(self._args(no_daemon=True, output=str(tmp_path / "out.wav"), json=False))
+
+        assert capsys.readouterr().out == ""
+
+
 class TestWriteCommandsJSON:
     """Los cuatro comandos de escritura aceptan --json y emiten un único
     objeto JSON en stdout, con los listados informativos en stderr."""
@@ -1726,6 +1816,102 @@ class TestWriteCommandsJSON:
         assert propio1.exists() and propio2.exists() and voices.exists()
 
 
+class TestDaemonVerbsJSON:
+    """daemon start/stop/restart --json emiten un payload de acción
+    ({"action","ok"}, con "pid" cuando el manager lo expone)."""
+
+    def _args(self, action, **kw):
+        import argparse
+        return argparse.Namespace(action=action, json=kw.get("json", True),
+                                   autorestart=kw.get("autorestart", False),
+                                   max_retries=kw.get("max_retries", None))
+
+    @patch("tts_sidecar.model_cache.is_model_cached", return_value=True)
+    @patch("tts_sidecar.daemon.DaemonManager")
+    def test_start_json_payload_success(self, mock_manager_cls, _cached, capsys):
+        import json
+        from tts_sidecar.cli import cmd_daemon, SCHEMA_VERSION
+
+        manager = MagicMock()
+        manager.start.return_value = True
+        manager._read_pid.return_value = 4242
+        mock_manager_cls.return_value = manager
+
+        cmd_daemon(self._args("start"))
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload == {
+            "schema_version": SCHEMA_VERSION, "action": "start", "ok": True, "pid": 4242,
+        }
+
+    @patch("tts_sidecar.model_cache.is_model_cached", return_value=True)
+    @patch("tts_sidecar.daemon.DaemonManager")
+    def test_start_json_payload_failure_exits_5(self, mock_manager_cls, _cached, capsys):
+        import json
+        from tts_sidecar.cli import cmd_daemon, SCHEMA_VERSION, EXIT_DAEMON_UNREACHABLE
+
+        manager = MagicMock()
+        manager.start.return_value = False
+        mock_manager_cls.return_value = manager
+
+        with pytest.raises(SystemExit) as exc:
+            cmd_daemon(self._args("start"))
+
+        assert exc.value.code == EXIT_DAEMON_UNREACHABLE
+        payload = json.loads(capsys.readouterr().out)
+        assert payload == {"schema_version": SCHEMA_VERSION, "action": "start", "ok": False}
+
+    @patch("tts_sidecar.daemon.DaemonManager")
+    def test_stop_json_payload_success(self, mock_manager_cls, capsys):
+        import json
+        from tts_sidecar.cli import cmd_daemon, SCHEMA_VERSION
+
+        manager = MagicMock()
+        manager.stop.return_value = True
+        mock_manager_cls.return_value = manager
+
+        cmd_daemon(self._args("stop"))
+
+        captured = capsys.readouterr()
+        assert json.loads(captured.out) == {
+            "schema_version": SCHEMA_VERSION, "action": "stop", "ok": True,
+        }
+        assert captured.err == ""
+
+    @patch("tts_sidecar.daemon.DaemonManager")
+    def test_stop_json_payload_failure_exits_5(self, mock_manager_cls, capsys):
+        import json
+        from tts_sidecar.cli import cmd_daemon, SCHEMA_VERSION, EXIT_DAEMON_UNREACHABLE
+
+        manager = MagicMock()
+        manager.stop.return_value = False
+        mock_manager_cls.return_value = manager
+
+        with pytest.raises(SystemExit) as exc:
+            cmd_daemon(self._args("stop"))
+
+        assert exc.value.code == EXIT_DAEMON_UNREACHABLE
+        payload = json.loads(capsys.readouterr().out)
+        assert payload == {"schema_version": SCHEMA_VERSION, "action": "stop", "ok": False}
+
+    @patch("tts_sidecar.daemon.DaemonManager")
+    def test_restart_json_payload_success(self, mock_manager_cls, capsys):
+        import json
+        from tts_sidecar.cli import cmd_daemon, SCHEMA_VERSION
+
+        manager = MagicMock()
+        manager.restart.return_value = True
+        manager._read_pid.return_value = 777
+        mock_manager_cls.return_value = manager
+
+        cmd_daemon(self._args("restart"))
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload == {
+            "schema_version": SCHEMA_VERSION, "action": "restart", "ok": True, "pid": 777,
+        }
+
+
 class TestCmdSpeakEmptyText:
     def test_empty_text_is_rejected(self, capsys):
         from tts_sidecar.cli import cmd_speak
@@ -1794,6 +1980,106 @@ class TestSchemaVersionJSON:
         assert payload["running"] is False
 
 
+# Comandos --json cubiertos por tests dedicados (TestSpeakJSON, TestDaemonVerbsJSON,
+# TestWriteCommandsJSON, TestSchemaVersionJSON). Es la única lista mantenida a mano
+# de este contrato: TestJSONContractStructure la compara contra lo que el propio
+# parser declara, así que un comando --json nuevo sin añadir aquí (o viceversa)
+# hace fallar el test, en vez de quedar fuera de la cobertura en silencio.
+_JSON_COVERED_COMMANDS = {
+    "speak", "devices", "doctor", "setup", "cleanup", "version",
+    "voice list", "voice add", "voice remove",
+    "daemon start", "daemon stop", "daemon restart", "daemon status",
+}
+
+# 'daemon serve' es la única exclusión deliberada: su contrato es el stream
+# NDJSON de /synthesize (protocol.py), no un payload --json de una sola línea.
+_JSON_DELIBERATELY_EXCLUDED = {"daemon serve"}
+
+
+class TestJSONContractStructure:
+    """Descubre desde build_parser() (la fuente de verdad real del CLI) qué
+    subcomandos declaran --json, y lo compara contra _JSON_COVERED_COMMANDS.
+    Protección bidireccional: un comando --json nuevo sin cobertura, o un flag
+    --json retirado de un comando ya cubierto, rompen este test."""
+
+    @staticmethod
+    def _has_json_flag(subparser) -> bool:
+        import argparse
+        return any(
+            action.dest == "json" and isinstance(action, argparse._StoreTrueAction)
+            for action in subparser._actions
+        )
+
+    @classmethod
+    def _discover_json_commands(cls, parser) -> set:
+        import argparse
+        from tts_sidecar.cli import top_level_subparsers
+
+        discovered = set()
+        top = top_level_subparsers(parser)
+        for name, sub in top.choices.items():
+            nested = next(
+                (a for a in sub._actions if isinstance(a, argparse._SubParsersAction)),
+                None,
+            )
+            if nested is not None:
+                for subname, subsub in nested.choices.items():
+                    if cls._has_json_flag(subsub):
+                        discovered.add(f"{name} {subname}")
+            elif cls._has_json_flag(sub):
+                discovered.add(name)
+        return discovered
+
+    def test_discovered_commands_match_declared_coverage(self):
+        from tts_sidecar.cli import build_parser
+
+        discovered = self._discover_json_commands(build_parser())
+        assert discovered == _JSON_COVERED_COMMANDS, (
+            "El parser real declara --json en un conjunto de comandos distinto "
+            "al de _JSON_COVERED_COMMANDS. Si añadiste/quitaste un --json, "
+            "actualiza esa constante (y sus tests dedicados) en test_cli.py.\n"
+            f"En el parser pero no cubiertos: {discovered - _JSON_COVERED_COMMANDS}\n"
+            f"Cubiertos pero ausentes del parser: {_JSON_COVERED_COMMANDS - discovered}"
+        )
+
+    def test_daemon_serve_has_no_json_flag(self):
+        """Exclusión deliberada: 'daemon serve' no es un comando --json de una
+        sola línea (su contrato es el stream NDJSON), así que no debe aparecer
+        ni en el parser con --json ni en la cobertura declarada."""
+        from tts_sidecar.cli import build_parser, top_level_subparsers
+        import argparse
+
+        top = top_level_subparsers(build_parser())
+        daemon_sub = top.choices["daemon"]
+        nested = next(
+            a for a in daemon_sub._actions if isinstance(a, argparse._SubParsersAction)
+        )
+        serve_parser = nested.choices["serve"]
+        assert not self._has_json_flag(serve_parser)
+        assert "daemon serve" not in _JSON_COVERED_COMMANDS
+        assert "daemon serve" in _JSON_DELIBERATELY_EXCLUDED
+
+    @pytest.mark.parametrize("command", sorted(_JSON_COVERED_COMMANDS))
+    def test_covered_commands_exist_in_parser(self, command):
+        """Cada entrada declarada en _JSON_COVERED_COMMANDS corresponde a un
+        subcomando real del parser (no un nombre obsoleto tras un rename)."""
+        from tts_sidecar.cli import build_parser, top_level_subparsers
+        import argparse
+
+        top = top_level_subparsers(build_parser())
+        parts = command.split(" ")
+        if len(parts) == 1:
+            assert parts[0] in top.choices
+        else:
+            group, action = parts
+            assert group in top.choices
+            nested = next(
+                a for a in top.choices[group]._actions
+                if isinstance(a, argparse._SubParsersAction)
+            )
+            assert action in nested.choices
+
+
 class TestSpeakLongText:
     """Un texto muy largo emite una advertencia (no bloqueante) a stderr."""
 
@@ -1850,7 +2136,7 @@ class TestComputeBackendIgnoredViaDaemon:
     ):
         from tts_sidecar.cli import cmd_speak
 
-        mock_client_cls.return_value.synthesize.return_value = b"RIFF...."
+        mock_client_cls.return_value.synthesize.return_value = _synth_result(b"RIFF....")
         cmd_speak(MockArgs(daemon=True, compute_backend="cuda", output=str(tmp_path / "out.wav")))
         assert "--compute-backend" in capsys.readouterr().err
 
@@ -1862,7 +2148,7 @@ class TestComputeBackendIgnoredViaDaemon:
     ):
         from tts_sidecar.cli import cmd_speak
 
-        mock_client_cls.return_value.synthesize.return_value = b"RIFF...."
+        mock_client_cls.return_value.synthesize.return_value = _synth_result(b"RIFF....")
         cmd_speak(MockArgs(daemon=True, compute_backend="auto", output=str(tmp_path / "out.wav")))
         assert "--compute-backend" not in capsys.readouterr().err
 

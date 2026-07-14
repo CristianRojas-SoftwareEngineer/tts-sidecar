@@ -125,6 +125,36 @@ para mostrar progreso real (p. ej. «Generando voz · 210 tokens»); ver más ab
 > error inmediatas (`400`/`503` con cuerpo JSON `{"detail": ...}`), **no** frames
 > del stream: se validan antes de arrancar la síntesis.
 
+### Versionado del protocolo
+
+Los 5 modelos de `daemon/protocol.py` (`ProgressEvent`, `ResultEvent`,
+`ErrorEvent`, `HealthResponse`, `VoicesResponse`) heredan de una clase base
+común, `ProtocolModel`, que fija dos garantías en un solo lugar:
+
+- **`schema_version`** (string, `"1"` actualmente): presente en cada línea del
+  stream y en `/health`. Igual que el `schema_version` del CLI (`cli.SCHEMA_VERSION`),
+  es un campo aditivo — añadir claves nuevas con default no lo incrementa; solo
+  lo haría un cambio incompatible de una clave existente.
+- **`extra="ignore"`**: un campo desconocido en el payload se descarta al
+  parsear en vez de romper la validación. Esto es lo que hace tolerable el
+  **rolling skew**: un daemon que sigue corriendo con la versión anterior
+  mientras el CLI ya se actualizó (o viceversa) no revienta la comunicación —
+  el extremo más nuevo simplemente ignora los campos que el más viejo no
+  conoce, y los campos nuevos siempre traen un default para el extremo viejo
+  que aún no los envía.
+
+`HealthResponse` expone además **`version`** (string, vacío por defecto): la
+versión del paquete `tts-sidecar` que sirve ese daemon (`__version__`), poblada
+por el endpoint `/health`. Sirve para diagnosticar el skew real entre el CLI y
+un daemon residente: si `tts-sidecar version` y el `version` de
+`tts-sidecar daemon status --json` (o `/health` directamente) difieren tras una
+actualización, `tts-sidecar daemon restart` relanza el daemon con el binario
+nuevo.
+
+Estas garantías son deliberadamente aditivas: mientras los cambios al protocolo
+sean solo campos nuevos con default, `schema_version` permanece en `"1"`; un
+cambio incompatible de un campo existente sí ameritaría incrementarlo.
+
 ## Comandos del Daemon
 
 ```bash

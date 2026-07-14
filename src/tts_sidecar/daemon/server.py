@@ -15,8 +15,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse
 
-from .. import voices
-from ..timing import SynthesisMetrics
+from .. import voices, __version__
 from ..exceptions import SynthesisCancelled
 from .protocol import (
     SynthesizeRequest,
@@ -90,6 +89,7 @@ async def health_check(state: DaemonState = Depends(get_daemon_state)):
         status="healthy" if state.engine else "initializing",
         model_loaded=state.engine is not None,
         uptime_seconds=time.time() - state.start_time if state.start_time else 0,
+        version=__version__,
     )
 
 
@@ -219,22 +219,21 @@ def synthesize(
                             raise SynthesisCancelled()
                         q.put(("progress", ev))
 
-                    audio_bytes = engine.speak(
+                    result = engine.speak(
                         text=req.text,
                         voice_audio=real_paths.get("voice_audio"),
                         speech_audio=real_paths.get("speech_audio"),
                         verbose=True,
                         progress_callback=push,
                     )
-                    # Métricas tipadas publicadas por el engine (SynthesisMetrics),
-                    # no un dict suelto leído por convención de claves.
-                    metrics = getattr(engine, "_synthesis_metrics", None) or SynthesisMetrics()
+                    # engine.speak devuelve un SynthesisResult (audio + métricas
+                    # tipadas), no un dict suelto leído por convención de claves.
                     q.put((
                         "result",
                         {
-                            "audio_b64": base64.b64encode(audio_bytes).decode("ascii"),
-                            "t3_time": float(metrics.t3),
-                            "s3gen_time": float(metrics.s3gen),
+                            "audio_b64": base64.b64encode(result.audio_bytes).decode("ascii"),
+                            "t3_time": float(result.metrics.t3),
+                            "s3gen_time": float(result.metrics.s3gen),
                         },
                     ))
             except SynthesisCancelled:
