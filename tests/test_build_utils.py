@@ -8,6 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 import build_utils
+import pyinstaller_wrapper
 from build_utils import (
     get_version, bundle_size_mb, ensure_build_dependency, fetch_pinned_asset,
     run_pyinstaller, INSTALLER_TIMEOUT, common_pyinstaller_args,
@@ -253,6 +254,74 @@ class TestRunPyinstaller:
 
         assert rc == 1
         assert matados == [4242]
+
+
+class TestPyinstallerWrapper:
+    """scripts/pyinstaller_wrapper.py: el bootstrap que evita el cuelgue COM
+    del build Windows (fija sys.coinit_flags = 0x8 antes de importar comtypes y
+    sale con os._exit para saltar el CoUninitialize() de atexit) y su main()."""
+
+    def test_bootstrap_sets_coinit_flags_before_import_and_exits(self):
+        bootstrap = pyinstaller_wrapper._BOOTSTRAP
+        # COINIT_MULTITHREADED = 0x8; en el bootstrap se interpola como entero ("8").
+        assert f"sys.coinit_flags = {pyinstaller_wrapper.COINIT_MULTITHREADED}" in bootstrap
+        assert "os._exit" in bootstrap
+        # La fijación de coinit_flags debe aparecer ANTES del import de PyInstaller
+        # (que arrastra pycaw -> comtypes), pues coinit_flags no se hereda a
+        # subprocesos y debe estar seteado en el propio proceso de análisis.
+        idx_coinit = bootstrap.index(f"sys.coinit_flags = {pyinstaller_wrapper.COINIT_MULTITHREADED}")
+        idx_import = bootstrap.index("from PyInstaller.__main__ import run")
+        assert idx_coinit < idx_import
+
+    def test_main_propagates_returncode_and_cleans_up(self, monkeypatch):
+        written_paths = []
+        unlinked = []
+        captured = {}
+
+        class FakeNamedTemporaryFile:
+            def __init__(self, *a, **k):
+                self.name = "fake_bootstrap.py"
+                written_paths.append(self.name)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def write(self, text):
+                pass
+
+        class FakeProc:
+            def __init__(self, cmd, **kwargs):
+                captured["cmd"] = cmd
+                self.returncode = 7
+
+            def wait(self, timeout=None):
+                return self.returncode
+
+        def fake_os_exit(code):
+            captured["exit_code"] = code
+
+        def fake_unlink(path):
+            unlinked.append(path)
+
+        monkeypatch.setattr(sys, "argv", ["pyinstaller_wrapper.py", "--onedir", "--name", "tts-sidecar"])
+        monkeypatch.setattr(pyinstaller_wrapper.tempfile, "NamedTemporaryFile", FakeNamedTemporaryFile)
+        monkeypatch.setattr(pyinstaller_wrapper.subprocess, "Popen", FakeProc)
+        monkeypatch.setattr(pyinstaller_wrapper.os, "_exit", fake_os_exit)
+        monkeypatch.setattr(pyinstaller_wrapper.os, "unlink", fake_unlink)
+
+        pyinstaller_wrapper.main()
+
+        # Propaga el returncode real del bootstrap vía os._exit.
+        assert captured["exit_code"] == 7
+        # Pasa sys.argv[1:] (los args de PyInstaller) al bootstrap temporal.
+        assert captured["cmd"][0] == sys.executable
+        assert captured["cmd"][1] == "fake_bootstrap.py"
+        assert captured["cmd"][2:] == ["--onedir", "--name", "tts-sidecar"]
+        # Elimina el archivo temporal tras la ejecución.
+        assert unlinked == written_paths == ["fake_bootstrap.py"]
 
 
 def test_installer_timeout_defined():

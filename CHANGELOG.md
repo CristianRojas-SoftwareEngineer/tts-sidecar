@@ -21,6 +21,18 @@ y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
   la opción A híbrida: cancelación cooperativa en la fase T3, sin instrumentar
   S3Gen.
 
+- **Test dedicado de `scripts/pyinstaller_wrapper.py`** (auditoría
+  production-readiness, S2-13): el componente crítico que evita el cuelgue COM
+  del build Windows (`sys.coinit_flags = 0x8` antes del `import` de comtypes +
+  `os._exit` para saltar el `CoUninitialize()` de `atexit`) ahora tiene
+  `tests/test_build_utils.py::TestPyinstallerWrapper`. Cubre `main()` (propagación
+  del `returncode` vía `os._exit` y limpieza del archivo temporal bootstrap) y el
+  `_BOOTSTRAP` (la fijación de `coinit_flags` antes del `import` de PyInstaller).
+  Es puramente aditivo y usa mocks, sin ejecutar PyInstaller ni tocar red/disco.
+  Complementa `tests/test_build_utils.py::TestRunPyinstaller`, que ya ejercía la
+  rama de timeout de `run_pyinstaller` (mata el árbol de procesos y retorna 1),
+  dejando S3-01 cubierto de extremo a extremo.
+
 ## [0.6.0] — 2026-07-11
 
 Cierra la última brecha accionable de paridad de experiencia entre los 3 SO
