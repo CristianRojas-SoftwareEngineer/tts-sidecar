@@ -1,8 +1,0 @@
-{
-  "name": "tts-sidecar-narrator",
-  "description": "Narra por voz la actividad de la sesión de Claude Code usando TTS-Sidecar. Genera un mensaje conversacional corto por turno (cadena LLM gratuita con degradación local) y lo sintetiza vía el CLI tts-sidecar. Multiplataforma, no intrusivo, costo cero.",
-  "version": "0.1.0",
-  "author": {
-    "name": "Cristian Rojas"
-  }
-}
