@@ -5,9 +5,17 @@ Todos los cambios notables de TTS Sidecar se documentan en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
-## [Unreleased]
+## [0.7.0] — 2026-07-14
+
+Limpieza post-auditoría: eliminación de `docs/PRODUCTION-READINESS-AUDIT.md` (archivo de auditoría cerrada) y remoción de identificadores de hallazgos (`S<N>-<XY>`) filtrados en el código fuente y documentación. Los cambios son puramente documentales; no afectan el contrato del CLI ni el comportamiento funcional.
 
 ### Añadido
+
+### Cambiado
+
+- Los cambios de contrato anteriores son **aditivos**: `schema_version` del CLI y del protocolo NDJSON permanecen en `"1"`.
+
+### Corregido
 
 - **`speak --json`** acoplado a
   `--output` (el archivo es el canal de datos; `--json` solo emite metadatos a
@@ -529,5 +537,12 @@ estado con el que nace el producto.
   `THIRD-PARTY-LICENSES.md` (inventario de licencias generado del lockfile).
   Código propio bajo GPL-3.0-or-later; modelo MIT.
 
+[0.7.0]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/releases/tag/v0.4.0
+[0.3.0]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/releases/tag/v0.3.0
+[0.2.1]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/releases/tag/v0.2.1
+[0.2.0]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/releases/tag/v0.2.0
 [0.1.1]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/releases/tag/v0.1.0
