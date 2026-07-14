@@ -5,6 +5,23 @@ Todos los cambios notables de TTS Sidecar se documentan en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
+## [0.7.2] — 2026-07-14
+
+Corrección del smoke test de release en Windows. No hay cambios de contrato ni
+de comportamiento del CLI: los artefactos son funcionalmente idénticos a 0.7.0.
+Se salta 0.7.1 (etiqueta de un intento previo, nunca publicada).
+
+### Corregido
+
+- **Smoke test de voces de fábrica en Windows (CI)**: el chequeo usaba
+  `$voiceList -notmatch 'default'`, pero `-notmatch` sobre un **array** en
+  PowerShell *filtra* los elementos que no coinciden en vez de devolver un
+  booleano; la línea de encabezado `«Voces registradas:»` disparaba un falso
+  negativo que abortaba `build-windows-x64` aunque la voz `default` sí estuviera
+  empaquetada. Se reemplaza por `-notcontains '  - default'` (prueba de
+  membresía exacta), espejo del `grep -qx '  - default'` que ya usaban los smoke
+  de Linux y macOS. El empaquetado de la voz de fábrica nunca estuvo roto.
+
 ## [0.7.0] — 2026-07-14
 
 Limpieza post-auditoría: eliminación de `docs/PRODUCTION-READINESS-AUDIT.md` (archivo de auditoría cerrada) y remoción de identificadores de hallazgos (`S<N>-<XY>`) filtrados en el código fuente y documentación. Los cambios son puramente documentales; no afectan el contrato del CLI ni el comportamiento funcional.
@@ -537,6 +554,7 @@ estado con el que nace el producto.
   `THIRD-PARTY-LICENSES.md` (inventario de licencias generado del lockfile).
   Código propio bajo GPL-3.0-or-later; modelo MIT.
 
+[0.7.2]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.7.0...v0.7.2
 [0.7.0]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.4.0...v0.5.0

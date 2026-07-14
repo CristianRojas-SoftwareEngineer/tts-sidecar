@@ -579,7 +579,13 @@ jobs:
             # modelo; falla el job si el bundle no trae la voz por defecto.
             $voiceList = dist/tts-sidecar/tts-sidecar.exe voice list
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            if ($voiceList -notmatch 'default') { throw "La voz de fábrica 'default' no está empaquetada en el bundle" }
+            # -notcontains (no -notmatch): sobre un array, -notmatch FILTRA los
+            # elementos que no coinciden en vez de dar un booleano, así que la
+            # línea de encabezado ("Voces registradas:") disparaba un falso
+            # negativo aunque 'default' estuviera listada. -notcontains hace la
+            # prueba de membresía exacta, espejo del `grep -qx '  - default'`
+            # que usan los smoke de Linux y macOS.
+            if ($voiceList -notcontains '  - default') { throw "La voz de fábrica 'default' no está empaquetada en el bundle" }
             Write-Host "[STEP] Smoke test dist/tts-sidecar/tts-sidecar.exe - FIN"
       - run:
           # Etapa Installer como step separado: invoca directamente al generador,
