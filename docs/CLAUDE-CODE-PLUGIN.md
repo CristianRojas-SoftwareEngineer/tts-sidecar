@@ -5,6 +5,9 @@
 > del plugin es su repositorio independiente.
 >
 > **Repositorio**: <https://github.com/CristianRojas-SoftwareEngineer/tts-sidecar-narrator>
+>
+> **Contrato de integración** (superficies del CLI que el plugin consume, desde
+> la perspectiva de este motor): [NARRATION-INTEGRATION.md](NARRATION-INTEGRATION.md).
 
 ## Qué es
 

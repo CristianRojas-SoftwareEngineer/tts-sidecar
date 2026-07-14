@@ -4,7 +4,7 @@ TTS Sidecar — síntesis de voz con clonación de voz.
 """
 
 __version__ = "0.7.2"
-__author__ = "TTS Sidecar Team"
+__author__ = "Cristián Rojas Arredondo"
 __license__ = "GPL-3.0-or-later"
 
 # Imports perezosos: permite ejecutar --help sin que las dependencias pesadas estén instaladas

@@ -311,6 +311,8 @@ conservan intactas:
 - `docs/PARITY.md` - Estado de paridad de experiencia entre los 3 SO y brechas pendientes
 - `docs/RELEASING.md` - Publicación de una versión (release + PyPI)
 - `docs/ARCHITECTURE.md` - Arquitectura del sistema
+- `docs/CLAUDE-CODE-PLUGIN.md` - Puntero al plugin de narración `tts-sidecar-narrator` (repo propio)
+- `docs/NARRATION-INTEGRATION.md` - Contrato de integración con el plugin de narración (superficies del CLI a mantener estables)
 - `scripts/build_windows.py` - Build PyInstaller para Windows
 - `scripts/pyinstaller_wrapper.py` - Wrapper COM que evita el cuelgue de PyInstaller en Windows (COINIT_MULTITHREADED + os._exit)
 - `scripts/check_coverage.py` - Gate de cobertura por módulo (job `coverage` de CI; `MODULE_FLOORS` es la fuente única de los pisos)
