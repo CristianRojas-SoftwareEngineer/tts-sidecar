@@ -137,7 +137,7 @@ def get_host_glibc_version() -> "tuple[int, int] | None":
 
 
 def check_host_glibc_floor() -> None:
-    """Aborta el build si la glibc del host supera el piso documentado (S2-07).
+    """Aborta el build si la glibc del host supera el piso documentado.
 
     El AppImage se enlaza contra la glibc del runner de build; si ese runner
     migrara a una imagen con glibc mayor a GLIBC_FLOOR, el binario resultante

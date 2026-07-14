@@ -341,7 +341,7 @@ Así, un bug específico de plataforma —Windows
 POSIX)— se detecta en el gate en lugar de llegar al usuario.
 
 Un séptimo job, `coverage`, se suma como `requires` de los 4 builds y de `publish-pypi` sin
-formar parte de la triple puerta por-SO: mide y gatea la cobertura (S2-09), una preocupación
+formar parte de la triple puerta por-SO: mide y gatea la cobertura, una preocupación
 **por módulo de contrato**, no por plataforma — correrlo en Linux una sola vez basta, tal
 como `test-linux` fija la arquitectura de referencia arch-independiente para la suite
 mockeada (ver «Por qué el runner de `test-linux` es x86_64» más abajo). Duplicarlo en los

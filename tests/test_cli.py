@@ -943,7 +943,7 @@ class TestCheckAvx2:
 
 
 class TestCheckOnedrive:
-    """Chequeo informativo (WARN) de data_root() bajo OneDrive en Windows (S2-08).
+    """Chequeo informativo (WARN) de data_root() bajo OneDrive en Windows.
     Fuera de Windows es SKIP; en Windows es PASS salvo que data_root() caiga bajo
     la sincronización de OneDrive (WARN). Nunca FAIL: no altera el exit code."""
 
@@ -2288,7 +2288,7 @@ class TestDoctorRAM:
 
 class TestDoctorOnedrive:
     """doctor incluye el chequeo OneDrive user-data-dir (WARN advisory en
-    Windows, S2-08). No altera el exit code (failed == 0)."""
+    Windows). No altera el exit code (failed == 0)."""
 
     def _patch_onedrive(self, monkeypatch, data_root_path):
         monkeypatch.setattr(sys, "platform", "win32")

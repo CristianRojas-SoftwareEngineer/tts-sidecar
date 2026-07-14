@@ -3,7 +3,7 @@ version: 2.1
 orbs:
   win: circleci/windows@5.0
 
-# Fuente única de los pines de entorno-CI (S2-07). Estas versiones se
+# Fuente única de los pines de entorno-CI. Estas versiones se
 # interpolan con << pipeline.parameters.NAME >> en cada job en vez de
 # repetirse literalmente (antes: Python x10, pytest x3). Actualizar una
 # versión = editar solo aquí. Los pines de *build* (Inno, repo) NO viven aquí:
@@ -24,7 +24,7 @@ parameters:
     type: string
     default: "7.1.0"
     description: >
-      Versión de pytest-cov instalada SOLO en el job `coverage` (S2-09); los
+      Versión de pytest-cov instalada SOLO en el job `coverage`; los
       tres jobs de test (Linux/Windows/macOS) siguen corriendo pytest plano,
       sin plugins.
   pyenv_version:
@@ -33,7 +33,7 @@ parameters:
     description: >
       Versión fija de pyenv (tag git) instalada en los jobs macOS. Se clona
       desde el tag en ~/.pyenv en vez de vía Homebrew, para un pin
-      determinista e independiente de la imagen de CI (S0-03).
+      determinista e independiente de la imagen de CI.
 
 commands:
   smoke_test_frozen_bundle:
@@ -43,7 +43,7 @@ commands:
     # quedaron empaquetadas en el bundle: `voice list` no carga el modelo;
     # el grep -qx aborta el step si 'default' no viaja en el bundle.
     # Parametrizado por executable_path para reusarse entre build-linux-x64
-    # y build-linux-arm64, que solo difieren en esa ruta (S2-08).
+    # y build-linux-arm64, que solo difieren en esa ruta.
     description: >
       Smoke test del binario congelado onedir (version + voces de fábrica).
     parameters:
@@ -125,7 +125,7 @@ jobs:
           # venv la comparten test y build de esta plataforma. Reinstalarla cuesta
           # segundos (sin dependencias pesadas).
           # Política de pins: pytest va pineado a versión exacta. El único
-          # plugin de pytest del proyecto (pytest-cov, S2-09) va pineado vía
+          # plugin de pytest del proyecto (pytest-cov) va pineado vía
           # el pipeline parameter `pytest_cov_version` y se instala SOLO en el
           # job `coverage` (mide y gatea la suite por módulo); este job de
           # test sigue corriendo pytest plano, sin plugins. Un guard de
@@ -212,7 +212,7 @@ jobs:
           # el venv ya poblado: así queda fuera del material cacheado y la caché de
           # venv la comparten test y build de esta plataforma.
           # Política de pins: pytest va pineado a versión exacta. El único
-          # plugin de pytest del proyecto (pytest-cov, S2-09) va pineado vía
+          # plugin de pytest del proyecto (pytest-cov) va pineado vía
           # el pipeline parameter `pytest_cov_version` y se instala SOLO en el
           # job `coverage` (mide y gatea la suite por módulo); este job de
           # test sigue corriendo pytest plano, sin plugins. Un guard de
@@ -260,7 +260,7 @@ jobs:
           # SDK del runner. pyenv se instala desde un TAG GIT FIJO
           # (<< pipeline.parameters.pyenv_version >>) clonado en ~/.pyenv, en
           # vez de vía Homebrew: pin determinista e independiente de la imagen
-          # (S0-03). La caché ~/.pyenv/versions se conserva entre runs (solo se
+          # . La caché ~/.pyenv/versions se conserva entre runs (solo se
           # re-clona la herramienta pyenv, no los CPython instalados). El
           # CPython resultante ya está pineado (<< pipeline.parameters.python_version >>),
           # así que el artefacto es reproducible con independencia de la versión de pyenv.
@@ -313,7 +313,7 @@ jobs:
           # el venv ya poblado: así queda fuera del material cacheado y la caché de
           # venv la comparten test y build de esta plataforma.
           # Política de pins: pytest va pineado a versión exacta. El único
-          # plugin de pytest del proyecto (pytest-cov, S2-09) va pineado vía
+          # plugin de pytest del proyecto (pytest-cov) va pineado vía
           # el pipeline parameter `pytest_cov_version` y se instala SOLO en el
           # job `coverage` (mide y gatea la suite por módulo); este job de
           # test sigue corriendo pytest plano, sin plugins. Un guard de
@@ -334,7 +334,7 @@ jobs:
             echo "[STEP] Run pytest suite over tests/ - FIN"
 
   coverage:
-    # Job independiente (S2-09): medir en un solo job de test sería asimétrico
+    # Job independiente: medir en un solo job de test sería asimétrico
     # (¿por qué Linux y no Windows/macOS?) y medir en los tres, redundante sin
     # señal adicional (misma suite mockeada, coverage.py es agnóstico de SO).
     # Docker Linux, mismo pin que test-linux; reusa su caché de venv (misma
@@ -392,7 +392,7 @@ jobs:
             pytest tests/ --cov --cov-report=xml --cov-report=json --cov-report=term-missing
             echo "[STEP] Run pytest suite over tests/ with coverage - FIN"
       - run:
-          # Gate por módulo (S2-09): coverage.py solo ofrece un fail_under
+          # Gate por módulo: coverage.py solo ofrece un fail_under
           # global; scripts/check_coverage.py diferencia los módulos de
           # contrato (ver MODULE_FLOORS) del resto, que se reporta sin gatear.
           name: Check per-module coverage floors (scripts/check_coverage.py)
@@ -842,7 +842,7 @@ jobs:
           # CPython compilado depende del SDK del runner. pyenv se instala
           # desde un TAG GIT FIJO (<< pipeline.parameters.pyenv_version >>)
           # clonado en ~/.pyenv, en vez de vía Homebrew: pin determinista e
-          # independiente de la imagen (S0-03). La caché ~/.pyenv/versions se
+          # independiente de la imagen. La caché ~/.pyenv/versions se
           # conserva entre runs. El CPython resultante ya está pineado
           # (<< pipeline.parameters.python_version >>), así que el artefacto
           # es reproducible con independencia de la versión de pyenv.

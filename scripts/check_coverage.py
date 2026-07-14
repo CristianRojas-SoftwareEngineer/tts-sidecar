@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Gate de cobertura diferenciado por módulo (S2-09).
+"""Gate de cobertura diferenciado por módulo.
 
 `coverage.py` solo ofrece un `fail_under` global, que promediaría los módulos
 de contrato (CLI, daemon, resolución de voces/rutas/modelo) con código
 defensivo por-SO estructuralmente inalcanzable desde un solo runner —la
-«métrica vanidosa» que la auditoría de producción rechaza—. Este script lee
+«métrica vanidosa» que se rechaza en este diseño—. Este script lee
 `coverage.json` (generado por `pytest --cov-report=json`, ver
 `[tool.coverage.*]` en pyproject.toml) y exige un piso por módulo de contrato,
 tomado de `MODULE_FLOORS` (fuente única). Los módulos fuera de esa tabla se
@@ -18,7 +18,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 
 # Fuente única de los pisos de cobertura por módulo de contrato. Valores
-# fijados por ratchet-desde-lo-medido (S2-09 Tarea 6): floor() del
+# fijados por ratchet-desde-lo-medido: floor() del
 # percent_covered observado al correr `pytest tests/ --cov-report=json`, para
 # que el gate arranque en verde con la suite actual y prevenga regresiones.
 MODULE_FLOORS = {

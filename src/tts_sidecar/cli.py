@@ -660,7 +660,7 @@ def _check_avx2() -> tuple[str, str, str]:
 
 
 def _check_onedrive() -> tuple[str, str, str]:
-    """Chequeo informativo (WARN) de data_root() bajo OneDrive en Windows (S2-08).
+    """Chequeo informativo (WARN) de data_root() bajo OneDrive en Windows.
 
     En perfiles corporativos, LOCALAPPDATA puede caer bajo una jerarquía de
     OneDrive, exponiendo las voces de usuario a file locks y placeholders

@@ -101,7 +101,7 @@ APPIMAGE_TOOLING = {
     },
 }
 
-# Tooling pineado del empaquetado .dmg de macOS (S2-15): create-dmg es un
+# Tooling pineado del empaquetado .dmg de macOS: create-dmg es un
 # script de shell puro distribuido como release en GitHub, así que se fija por
 # URL de tarball del tag + SHA-256 (fetch_pinned_asset lo verifica), igual que
 # appimagetool — eliminando la instalación sin pin vía `brew install`.
@@ -112,7 +112,7 @@ CREATE_DMG_TOOLING = {
     "sha256": "c50d2bc97c3d6292642bac55f530d247eaf4bf65ee605f26b4caf339383e381c",
 }
 
-# Piso mínimo de glibc del AppImage, declarado como fuente única (S2-07).
+# Piso mínimo de glibc del AppImage, declarado como fuente única.
 # El AppImage se enlaza contra la glibc del runner de build (base Ubuntu 22.04,
 # glibc 2.35); si el runner migrara a una imagen con glibc mayor, el binario
 # resultante exigiría esa glibc en runtime y fallaría en los usuarios objetivo

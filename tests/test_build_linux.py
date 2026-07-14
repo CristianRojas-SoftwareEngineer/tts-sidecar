@@ -129,8 +129,7 @@ def test_appimage_tooling_missing_degrades_without_abort(tmp_path, monkeypatch):
     debe degradar el stage AppImage con warning y NO abortar el build: el
     onedir de PyInstaller sigue siendo usable. Espejo hermético de
     test_appimage_failure_is_fatal, que cubre el caso opuesto (tooling presente
-    pero appimagetool con rc != 0 -> fatal), y cierra la rama de degradación que
-    la auditoría enumeró para S2-10."""
+    pero appimagetool con rc != 0 -> fatal), y cierra la rama de degradación."""
     import build_linux
 
     dist = tmp_path / "dist"
@@ -166,7 +165,7 @@ def test_appimage_tooling_missing_degrades_without_abort(tmp_path, monkeypatch):
 class TestHostGlibcFloor:
     """La verificación de glibc del host aborta el build si el host supera el
     piso documentado (GLIBC_FLOOR), y continúa si está dentro del piso o no se
-    puede medir (S2-07)."""
+    puede medir."""
 
     def test_host_above_floor_aborts(self, monkeypatch):
         import build_linux

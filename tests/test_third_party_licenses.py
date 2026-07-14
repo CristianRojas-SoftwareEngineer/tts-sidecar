@@ -1,7 +1,7 @@
 """Tests del verificador lockfile↔inventario (scripts/check_third_party_licenses.py).
 
 El test de sincronía real convierte la desincronización silenciosa de
-THIRD-PARTY-LICENSES.md (S1-02) en un fallo de suite: corre en cada pytest
+THIRD-PARTY-LICENSES.md en un fallo de suite: corre en cada pytest
 local y en los 3 jobs de test de CI. Los tests unitarios cubren ambos parsers
 con fixtures sintéticas (sin tocar los archivos reales).
 """

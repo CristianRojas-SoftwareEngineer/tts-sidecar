@@ -4,7 +4,7 @@
 `THIRD-PARTY-LICENSES.md` es un documento con peso legal (GPLv3 exige
 atribuciones correctas de lo redistribuido) que se regenera a mano con
 `pip-licenses`: nada garantizaba que reflejara el lockfile, y cada alta o baja
-de dependencias podía desincronizarlo en silencio (S1-02). Este script deriva
+de dependencias podía desincronizarlo en silencio. Este script deriva
 el conjunto de paquetes del lock universal, lo compara con la tabla de
 dependencias del inventario (nombres normalizados PEP 503) y reporta faltantes
 y sobrantes. Generar sigue siendo humano (ver §Regeneración del inventario);

@@ -16,7 +16,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.egg-info/
-# Artefactos de coverage (S2-09): generados por `pytest --cov`, no se versionan.
+# Artefactos de coverage: generados por `pytest --cov`, no se versionan.
 .coverage
 coverage.json
 coverage.xml

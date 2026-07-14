@@ -99,7 +99,7 @@ class TestGlibcFloorConsistency:
     """El piso glibc declarado en build_utils.GLIBC_FLOOR debe coincidir con el
     que valida install-linux.sh. Sin esto, el instalador y el AppImage divergen
     en el piso real y el binario falla en runtime en sistemas validados como
-    compatibles (S2-07)."""
+    compatibles."""
 
     def test_glibc_floor_matches_install_script(self):
         floor = build_utils.GLIBC_FLOOR

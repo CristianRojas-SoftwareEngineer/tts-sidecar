@@ -9,28 +9,28 @@ y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Añadido
 
-- **`speak --json`** (auditoría production-readiness, S2-01): acoplado a
+- **`speak --json`** acoplado a
   `--output` (el archivo es el canal de datos; `--json` solo emite metadatos a
   stdout), emite `{"schema_version","output","voice","t3_time","s3gen_time","daemon"}`
   a stdout, idéntico campo a campo en modo directo y vía daemon. `--json` sin
   `--output` falla con exit 4 antes de cualquier trabajo.
-- **`daemon start/stop/restart --json`** (S2-02): payload de resultado de la
+- **`daemon start/stop/restart --json`** payload de resultado de la
   acción `{"schema_version","action","ok","pid"?}` a stdout; los mensajes
   informativos pasan a stderr en modo `--json`. `daemon serve` queda
   deliberadamente sin `--json` (su contrato es el stream NDJSON del server).
-- **Versionado del protocolo NDJSON del daemon** (S2-05): los 5 modelos de
+- **Versionado del protocolo NDJSON del daemon**: los 5 modelos de
   `daemon/protocol.py` (`ProgressEvent`, `ResultEvent`, `ErrorEvent`,
   `HealthResponse`, `VoicesResponse`) heredan de una clase base común
   (`ProtocolModel`) con `schema_version` y `extra="ignore"` explícitos;
   `HealthResponse`/`/health` gana el campo `version` (la del paquete), que
   permite diagnosticar el skew entre un daemon residente y un CLI actualizado.
   Política de compatibilidad documentada en `docs/DAEMON-MODE.md`.
-- **Test estructural del contrato `--json`** (S2-06): `build_parser()` se
+- **Test estructural del contrato `--json`**: `build_parser()` se
   extrajo de `main()` para ser introspeccionable; un test nuevo descubre desde
   el parser real qué subcomandos declaran `--json` y lo compara contra la
   cobertura declarada en los tests, rompiendo ante un comando nuevo sin cubrir
   o un flag retirado.
-- **Oferta de código fuente GPLv3 §6 en los 4 artefactos** (S2-14):
+- **Oferta de código fuente GPLv3 §6 en los 4 artefactos**:
   `SOURCE-OFFER.md` (generado por `scripts/render_source_offer.py` desde la
   versión single-source, con la URL del tarball del tag y el enlace al
   release) viaja ahora dentro de los 3 bundles nativos (vía `LICENSE_FILES`)
@@ -38,7 +38,7 @@ y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
   acompaña al binario por cualquier vía de redistribución. Un test de
   consistencia byte-exacto falla si el archivo commiteado diverge del
   generador o de la versión.
-- **Cobertura de tests medida y gateada por módulo** (S2-09): `pytest-cov`
+- **Cobertura de tests medida y gateada por módulo**: `pytest-cov`
   pineado vía `pipeline.parameters.pytest_cov_version` (mismo mecanismo que el
   pin de `pytest`), configuración única en `[tool.coverage.*]` de
   `pyproject.toml`. Nuevo job `coverage` independiente en CI (Linux, no
@@ -49,7 +49,7 @@ y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
   `paths.py`); el resto se reporta sin gatear. Publica `coverage.xml` como
   artefacto. Coverage queda opt-in: `pytest tests/ -v` sigue verde sin
   `pytest-cov` instalado.
-- **Verificación automatizada del inventario de licencias** (S1-02):
+- **Verificación automatizada del inventario de licencias**:
   `scripts/check_third_party_licenses.py` compara el conjunto de paquetes de
   `requirements-lock.txt` contra la tabla de `THIRD-PARTY-LICENSES.md`
   (nombres normalizados PEP 503) y un test de la suite falla con diff legible
@@ -70,7 +70,7 @@ y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
   unificando la fuente de métricas de ambas rutas de síntesis; y los emisores
   `--json` existentes del CLI se migraron a un helper único `emit_json()`
   (mismos payloads, sin cambios de clave).
-- **create-dmg pineado por contenido** (S2-15): el build de macOS ya no
+- **create-dmg pineado por contenido**: el build de macOS ya no
   instala create-dmg vía `brew install` sin versión; `build_macos.py` descarga
   el tarball del release v1.3.0 pineado por URL + SHA-256 (`fetch_pinned_asset`,
   misma política que appimagetool) y ejecuta el script extraído. El step de
@@ -83,8 +83,7 @@ y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Arreglado
 
-- **Normalización de la criticidad de Inno Setup** (auditoría
-  production-readiness, S2-10): `create_installer_windows.py` declaraba Inno
+- **Normalización de la criticidad de Inno Setup**: `create_installer_windows.py` declaraba Inno
   Setup con `required=False` y luego lo hacía fatal con un `sys.exit(1)` manual
   redundante, desacoplando la criticidad real del mecanismo declarativo. Ahora
   se resuelve con `required=True` en `ensure_build_dependency` y se elimina el
@@ -108,8 +107,7 @@ y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
   la opción A híbrida: cancelación cooperativa en la fase T3, sin instrumentar
   S3Gen.
 
-- **Test dedicado de `scripts/pyinstaller_wrapper.py`** (auditoría
-  production-readiness, S2-13): el componente crítico que evita el cuelgue COM
+- **Test dedicado de `scripts/pyinstaller_wrapper.py`**: el componente crítico que evita el cuelgue COM
   del build Windows (`sys.coinit_flags = 0x8` antes del `import` de comtypes +
   `os._exit` para saltar el `CoUninitialize()` de `atexit`) ahora tiene
   `tests/test_build_utils.py::TestPyinstallerWrapper`. Cubre `main()` (propagación
@@ -118,7 +116,7 @@ y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
   Es puramente aditivo y usa mocks, sin ejecutar PyInstaller ni tocar red/disco.
   Complementa `tests/test_build_utils.py::TestRunPyinstaller`, que ya ejercía la
   rama de timeout de `run_pyinstaller` (mata el árbol de procesos y retorna 1),
-  dejando S3-01 cubierto de extremo a extremo.
+  dejando el timeout cubierto de extremo a extremo.
 
 ## [0.6.0] — 2026-07-11
 
@@ -338,7 +336,7 @@ de roadmap en `docs/GOAL.md`.
 
 Ciclo perfectivo que corrige los 12 hallazgos Menores 
 identificados durante la revisión final del release `0.1.0`, más el ciclo
-correctivo de la auditoría de production-readiness: cierra la única grieta
+correctivo: cierra la única grieta
 funcional (el release gate del pin de revisiones en la carga del engine) y siete
 Menores (gate de `daemon serve`, identidad del health check, sandbox acotado del
 daemon, exactitud documental y procedencia del lockfile). Todos los cambios
@@ -399,7 +397,7 @@ de contrato son aditivos: los códigos de salida existentes no cambian y
   `THIRD-PARTY-LICENSES.md`).
 
 - **El engine honra las revisiones fijadas en la carga y en las descargas de
-  respaldo** (release gate de la auditoría de production-readiness): la
+  respaldo** (release gate): la
   resolución de snapshot en tiempo de carga (language pack y snapshot base del
   Voice Encoder) y las dos redes de seguridad de descarga (`snapshot_download`
   del modelo, `hf_hub_download` de `ve.safetensors`) pasan `revision=`
@@ -407,23 +405,19 @@ de contrato son aditivos: los códigos de salida existentes no cambian y
   detección honraba el pin pero la carga caía al fallback `refs/main`→mtime: tras
   un bump futuro de revisión ya no puede producirse síntesis silenciosa con el
   modelo viejo. Simétrico con `setup` y la detección de caché.
-- **`daemon serve` exige el modelo en caché antes de arrancar** (auditoría de
-  production-readiness): mismo gate que `daemon start`; sin modelo provisionado
+- **`daemon serve` exige el modelo en caché antes de arrancar**: mismo gate que `daemon start`; sin modelo provisionado
   falla rápido remitiendo a `setup` (exit 2) sin cargar el engine ni disparar la
   descarga de su red de seguridad. Ningún subcomando descarga de forma implícita.
-- **Sandbox de audio del daemon acotado a un subdirectorio namespaced**
-  (auditoría de production-readiness): `/synthesize` acepta audio bajo los
+- **Sandbox de audio del daemon acotado a un subdirectorio namespaced**: `/synthesize` acepta audio bajo los
   directorios de voces (fábrica/usuario) y `<tempdir>/tts-sidecar/`, pero ya no
   bajo el tempdir compartido general (`%TEMP%`/`/tmp`), reduciendo la superficie
   de temp compartido preservando el staging IPC. `docs/DAEMON-MODE.md` y
   `USAGE.md` describen la superficie real.
-- **Exactitud documental de estados, conteos y `doctor`** (auditoría de
-  production-readiness): `daemon status` documenta los valores reales
+- **Exactitud documental de estados, conteos y `doctor`**: `daemon status` documenta los valores reales
   (`"healthy"`/`"initializing"`, ya no `"ready"`) en prosa y en la tabla del
   esquema JSON de `USAGE.md`; el ejemplo de `doctor` incluye el chequeo de RAM y
   el total de chequeos coherente (5); conteo de tests a **268**.
-- **`requirements-lock.txt` regenerado con el comando canónico** (auditoría de
-  production-readiness): sin el `--constraint` a un archivo externo al repo; su
+- **`requirements-lock.txt` regenerado con el comando canónico**: sin el `--constraint` a un archivo externo al repo; su
   header ya no referencia ningún override y la procedencia vuelve a ser
   reproducible desde `CLAUDE.md`/`docs/BUILD.md`. La resolución de versiones es
   idéntica a la anterior; instala con `--require-hashes`.
@@ -445,8 +439,7 @@ de contrato son aditivos: los códigos de salida existentes no cambian y
 - **Fixture `mock_daemon_client` alineada con el cliente real**: la
   firma de `synthesize` coincide con `DaemonIPCClient.synthesize`
   (`on_progress` en vez de los inexistentes `model`/`compute_backend`).
-- **La detección de vida del daemon valida la identidad del servicio**
-  (auditoría de production-readiness): `DaemonIPCClient.is_running` ya no acepta
+- **La detección de vida del daemon valida la identidad del servicio**: `DaemonIPCClient.is_running` ya no acepta
   cualquier `200` en `/health`, sino que valida el cuerpo contra `HealthResponse`;
   si otro servicio local ocupara el puerto 8765 y respondiera `200`, ya no se
   confunde con un falso «daemon ya corriendo» (que derivaba en síntesis fallidas
