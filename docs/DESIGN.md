@@ -12,6 +12,7 @@
 - [Invocación desde otros lenguajes](#invocación-desde-otros-lenguajes)
 - [Compilación PyInstaller](#compilación-pyinstaller)
 - [Extensibilidad](#extensibilidad)
+- [Warnings silenciados](#warnings-silenciados)
 - [Referencias](#referencias)
 
 ## Resumen ejecutivo
@@ -60,7 +61,14 @@ TTS-Sidecar/
 ├── src/
 │   └── tts_sidecar/           # Paquete Python
 │       ├── __init__.py            # Imports perezosos (lazy)
-│       ├── engine.py              # Wrapper de ChatterboxTTS
+│       ├── __main__.py            # Entry point de `python -m tts_sidecar`
+│       ├── bootstrap.py           # apply() idempotente: warnings, env vars, logging, mock pkg_resources
+│       ├── engine.py              # Façade / composition root de síntesis
+│       ├── compute_backend.py     # ComputeBackendResolver: detección/resolución de backend (cuda/mps/cpu)
+│       ├── audio_writer.py        # AudioWriter: audio → bytes WAV PCM 16-bit mono
+│       ├── synthesis.py           # SynthesisOrchestrator: flujo speak (conditionals → generate → encode → save)
+│       ├── model_loader.py        # ModelLoader: carga del checkpoint según caché (inyectable)
+│       ├── conditionals.py        # ConditionalsPreparer: cómputo/carga de conditionals (inyectable)
 │       ├── audio.py               # Reproducción de audio multiplataforma
 │       ├── timing.py              # Instrumentación y timing
 │       ├── cli.py                 # Interfaz CLI
@@ -218,6 +226,26 @@ Para añadir un nuevo motor TTS:
 1. Crear nuevo módulo en `src/tts_sidecar/`
 2. Mantener la misma interfaz CLI en `cli.py`
 3. Re-empaquetar con PyInstaller para cada plataforma
+
+## Warnings silenciados
+
+`src/tts_sidecar/bootstrap.py` (`apply()`) silencia mediante una **allow-list explícita**
+(`_SILENCED_WARNINGS`), **no** un catch-all global `warnings.filterwarnings("ignore")`
+ni `PYTHONWARNINGS=ignore` (para no enmascarar deprecaciones propias
+ni de terceros). La allow-list acota solo dos warnings benignos del módulo `warnings`:
+
+- `pkg_resources is deprecated` — por **mensaje**; lo emite `perth` al importar
+  `pkg_resources` en Python 3.13. Con `category=Warning` (no `DeprecationWarning`)
+  porque `perth` lo emite como `UserWarning` en este entorno; así queda acotado por
+  mensaje y cubre ambas categorías.
+- `diffusers LoRACompatibleLinear` — por **módulo** (`r"^diffusers\."`), al importar
+  `chatterbox`, para no atarse al texto exacto del mensaje.
+
+Las tres supresiones siguientes son de `logging` (no las gobierna el catch-all) y se
+conservan intactas:
+- `huggingface_hub` HTTP warnings
+- `chatterbox.models.tokenizers.tokenizer` pkuseg
+- `chatterbox.models.t3.inference.alignment_stream_analyzer` repetition
 
 ---
 

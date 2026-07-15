@@ -37,7 +37,7 @@ validación E2E» en
 - CLI completa con todos los comandos
 - **Instalación auto-hospedada de una línea por SO** (Linux y Cask de macOS en v0.3.0; Windows en v0.4.0; one-liner macOS `install-macos.sh` en v0.5.0): `install-linux.sh` (`curl | sh`) en Linux, `install-macos.sh` (`curl | sh`, sin Homebrew ni `sudo`) y el Cask de Homebrew propio en macOS, e `install-windows.ps1` (`irm | iex`) en Windows (instalador Inno Setup per-user, sin UAC; entró en alcance al refutarse la premisa de SmartScreen — la descarga por CLI no aplica el Mark-of-the-Web). Todos los canales publican de forma autónoma, sin aprobación ni pull request a terceros. Ver [docs/SELF-HOSTED-INSTALL.md](SELF-HOSTED-INSTALL.md)
 - **Paridad de experiencia entre los 3 SO** (v0.6.0): cerradas a nivel de código/scripts/tests **las siete** brechas accionables de [docs/PARITY.md](PARITY.md) — las seis de v0.5.0 (one-liner macOS, `.command` sin `sudo`, limpieza de AppImages, `setup --uninstall` en Linux, `zap` del Cask completo, README con las tres plataformas) más la de *desinstalación en un comando* (`setup --uninstall` multiplataforma en macOS/Windows, cerrada en v0.6.0). Queda **una sola brecha abierta**, la de *firma de código* (SmartScreen/Gatekeeper, binarios sin firmar, cross-SO), diferida al goal a largo plazo
-- Tests pytest (314 tests: timing, protocolo, daemon, CLI, voces, rutas, caché de modelo, audio, Cask y utilidades de build), más los smoke-tests de instaladores (bats Linux/macOS y Pester Windows) en CI
+- Tests pytest (572 tests: timing, protocolo, daemon, CLI, voces, rutas, caché de modelo, audio, Cask y utilidades de build), más los smoke-tests de instaladores (bats Linux/macOS y Pester Windows) en CI
 - Documentación sincronizada
 
 ## Trabajo pendiente (roadmap al Goal inmediato)
@@ -337,7 +337,7 @@ La brecha se considera cerrada a nivel de código cuando: `_uninstall_macos` y
 `_uninstall_windows` existen y respetan el contrato compartido; el guard
 `is_frozen` protege las tres ramas; la suite `TestSetupUninstall` cubre los tres
 SO en verde; y la documentación queda sincronizada. **Satisfecho en v0.6.0**: las
-tres ramas y el despachador viven en `cli.py`, la suite pasa (314 tests en verde)
+tres ramas y el despachador viven en `cli.py`, la suite pasa (572 tests en verde)
 y los siete documentos quedaron sincronizados. La **marca** del criterio de
 aceptación 10 depende además de la validación por feedback de usuarios reales en
 Linux y macOS (frontera E2E externa al CI; ver abajo).
