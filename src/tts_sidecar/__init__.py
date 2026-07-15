@@ -3,7 +3,7 @@ TTS Sidecar — síntesis de voz con clonación de voz.
 100% local, licencia GPL-3.0-or-later, soporte para español latinoamericano.
 """
 
-__version__ = "0.7.3"
+__version__ = "0.7.4"
 __author__ = "Cristián Rojas Arredondo"
 __license__ = "GPL-3.0-or-later"
 

@@ -5,6 +5,17 @@ Todos los cambios notables de TTS Sidecar se documentan en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
+## [0.7.4] — 2026-07-15
+
+### Corregido
+
+- **Ventana de consola visible al iniciar el daemon en Windows**: `daemon
+  start` lanzaba el subproceso con `DETACHED_PROCESS`, que evita heredar la
+  consola del padre pero no evita que Windows le asigne una consola nueva y
+  visible (el ejecutable es de subsistema consola). Se agrega
+  `CREATE_NO_WINDOW` junto a `DETACHED_PROCESS` para que el daemon arranque
+  sin ninguna ventana visible. Sin cambios de contrato del CLI.
+
 ## [0.7.3] — 2026-07-15
 
 Release de documentación que acompaña el lanzamiento del plugin de narración
@@ -580,6 +591,7 @@ estado con el que nace el producto.
   `THIRD-PARTY-LICENSES.md` (inventario de licencias generado del lockfile).
   Código propio bajo GPL-3.0-or-later; modelo MIT.
 
+[0.7.4]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.7.0...v0.7.2
 [0.7.0]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.6.0...v0.7.0
