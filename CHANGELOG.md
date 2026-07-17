@@ -5,6 +5,23 @@ Todos los cambios notables de TTS Sidecar se documentan en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
+## [0.7.5] — 2026-07-17
+
+Corrección de robustez del empaquetado (PyInstaller). No hay cambios de
+contrato ni de comportamiento del CLI: los artefactos son funcionalmente
+idénticos a 0.7.4 (las voces de fábrica ya viajaban por `--add-data`).
+
+### Corregido
+
+- **Fuente única de las voces de fábrica en el bundle**: se elimina
+  `--collect-all tts_sidecar` de los args de PyInstaller y se documenta que
+  `--add-data` es la única fuente real de las voces en CI. Como el proyecto no
+  se instala editable en el venv del build (solo `requirements-lock*.txt`),
+  PyInstaller emitía *"collect_data_files - skipping data collection for module
+  'tts_sidecar' as it is not a package"* y `--collect-all` no aportaba nada; la
+  redundancia era falsa. `--add-data` falla ruidosamente si falta el dir fuente,
+  en vez de enmascarar la ausencia de voces en silencio.
+
 ## [0.7.4] — 2026-07-15
 
 ### Corregido
@@ -591,6 +608,7 @@ estado con el que nace el producto.
   `THIRD-PARTY-LICENSES.md` (inventario de licencias generado del lockfile).
   Código propio bajo GPL-3.0-or-later; modelo MIT.
 
+[0.7.5]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.7.0...v0.7.2
