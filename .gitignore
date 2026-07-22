@@ -20,3 +20,6 @@ __pycache__/
 .coverage
 coverage.json
 coverage.xml
+
+# Lockfile de uv (proyecto usa requirements-lock.txt)
+uv.lock
