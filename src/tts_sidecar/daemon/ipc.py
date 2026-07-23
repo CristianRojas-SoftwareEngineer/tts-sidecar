@@ -234,6 +234,42 @@ class DaemonIPCClient:
         except (requests.ConnectionError, requests.Timeout):
             return []
 
+    def precompute_voice(self, name: str) -> bool:
+        """Precomputa los conditionals de una voz registrada vía daemon.
+
+        Aprovecha el modelo caliente del daemon (evita una carga en frío por
+        clon). Usa REQUEST_TIMEOUT porque el precómputo puede tardar en CPU.
+        Valida el cuerpo contra `PrecomputeVoiceResponse` (protocol.py); un
+        error HTTP o un cuerpo no conforme elevan `DaemonIPCError`.
+        """
+        from ..daemon.protocol import PrecomputeVoiceResponse
+
+        try:
+            response = requests.post(
+                f"{self.base_url}/voices/precompute",
+                json={"name": name},
+                timeout=self.REQUEST_TIMEOUT,
+            )
+            if response.status_code != 200:
+                try:
+                    error = response.json().get("detail", "Error desconocido")
+                except ValueError:
+                    error = f"HTTP {response.status_code}"
+                raise DaemonIPCError(f"Error del daemon: {error}")
+            try:
+                body = PrecomputeVoiceResponse.model_validate(response.json())
+            except (ValidationError, ValueError) as e:
+                raise DaemonIPCError(
+                    f"El daemon devolvió un cuerpo /voices/precompute no conforme: {e}"
+                )
+            return body.precomputed
+        except requests.ConnectionError as e:
+            raise DaemonIPCError(f"No se puede conectar al daemon: {e}")
+        except requests.Timeout as e:
+            raise DaemonIPCError(f"Timeout del daemon: {e}")
+        except requests.RequestException as e:
+            raise DaemonIPCError(f"Error de comunicación con el daemon: {e}")
+
 
 def is_daemon_running() -> bool:
     """

@@ -490,52 +490,27 @@ class ChatterboxEngine:
             text, voice_audio, speech_audio, output_path, progress_callback
         )
 
-    def clone_voice(
-        self,
-        name: str,
-        reference_audio: str,
-        speech_audio: str,
-        precompute: bool = True,
-        force: bool = False,
-    ) -> tuple[str, str]:
+    def precompute_voice(self, name: str) -> None:
         """
-        Clona una voz a partir de dos archivos de audio.
+        Precomputa y guarda los conditionals de una voz ya registrada.
+
+        Resuelve las rutas de audio de la voz desde el registro (usuario→fábrica)
+        y escribe `conditionals.pt` en su directorio, para que las síntesis
+        posteriores los carguen desde disco en lugar de recomputarlos. No copia
+        audios: el registro de la voz es responsabilidad de `voices.clone_voice_files`.
 
         Args:
-            name: Nombre para la voz
-            reference_audio: Ruta al archivo de audio de referencia (cualquier largo, audio completo para el timbre)
-            speech_audio: Ruta al archivo de audio de habla (10+ segundos, habla limpia para el conditioning)
-            precompute: Si es True, precomputa y cachea los conditionals (default True)
-            force: Si es True, sobrescribe una voz existente con el mismo nombre
-
-        Returns:
-            Tupla de (reference_path, speech_path)
+            name: Nombre de una voz ya registrada.
 
         Raises:
-            ValueError: si algún audio no es cargable, o si la voz ya existe
-                        (usuario o fábrica) y no se pasó force.
+            FileNotFoundError: si la voz no está registrada (vía `voices.voice_paths`).
         """
-        # Validación y copia sin modelo: núcleo compartido con `voice clone`,
-        # que clona voces sin instanciar el motor (voices.clone_voice_files).
-        ref_path, speech_path = voices.clone_voice_files(
-            name=name,
-            reference_audio=reference_audio,
-            speech_audio=speech_audio,
-            force=force,
+        ref_path, speech_path = voices.voice_paths(name)
+        voice_dir = os.path.dirname(ref_path)
+        self._conditionals_prep.precompute_and_save(
+            voice_dir, ref_path, speech_path, self._tts, self.compute_backend
         )
-
-        # Precomputa los conditionals y los guarda a disco para una carga más rápida
-        if precompute:
-            try:
-                voices_dir = os.path.dirname(ref_path)
-                self._conditionals_prep.precompute_and_save(
-                    voices_dir, ref_path, speech_path, self._tts, self.compute_backend
-                )
-                log(f"Conditionals precomputados para la voz '{name}'")
-            except Exception as e:
-                log(f"Advertencia: no se pudieron precomputar los conditionals: {e}")
-
-        return (ref_path, speech_path)
+        log(f"Conditionals precomputados para la voz '{name}'")
 
     def load_precomputed_conditionals(self, voice_dir: str) -> bool:
         """

@@ -424,14 +424,21 @@ def cmd_speak(args):
 def cmd_voice_clone(args):
     """Clona una voz a partir de dos archivos de audio (timbre + habla).
 
-    Clonado ligero: valida y copia los audios sin instanciar el motor de
-    inferencia; la precomputación de conditionals se difiere al primer
-    `speak --voice <nombre>`. El clonado es libre de modelo:
-    no exige `setup` previo, porque validar y copiar audio no necesita el
-    checkpoint; la descarga sigue siendo responsabilidad exclusiva de `setup`
-    para la síntesis.
+    Valida y copia los audios, y luego precomputa sus conditionals a disco
+    (`conditionals.pt`) para que toda síntesis posterior los cargue en vez de
+    recomputarlos. Exige el modelo en caché (`setup` previo), porque el
+    precómputo ejecuta el modelo. Si hay un daemon activo, el precómputo lo hace
+    con el modelo caliente (sin carga en frío); si no, carga el modelo en modo
+    directo. Un fallo del precómputo no aborta el clonado: la voz queda
+    registrada y el primer `speak --voice <nombre>` recae en el cómputo
+    on-the-fly.
     """
     try:
+        # Exige el modelo en caché antes de tocar el filesystem: el precómputo lo
+        # necesita, así que un modelo ausente aborta con exit 2 sin dejar una voz
+        # a medias. Las descargas son responsabilidad exclusiva de 'setup'.
+        _require_model_cached()
+
         from . import voices
         ref_path, speech_path = voices.clone_voice_files(
             name=args.name,
@@ -440,17 +447,27 @@ def cmd_voice_clone(args):
             force=getattr(args, "force", False),
         )
 
+        # Precómputo daemon-first: con daemon activo se aprovecha el modelo
+        # caliente; si no, se carga en frío en modo directo. El fallo se degrada
+        # a aviso (register + lazy fallback), no aborta el clonado.
+        precomputed = _precompute_cloned_voice(args)
+
         if getattr(args, "json", False):
             emit_json({
                 "name": args.name,
                 "reference": str(ref_path),
                 "speech": str(speech_path),
+                "precomputed": precomputed,
             })
             return
 
         print(f"Voz '{args.name}' clonada:")
         print(f"  timbre (reference): {ref_path}")
         print(f"  habla (conditioning): {speech_path}")
+        if precomputed:
+            print("  conditionals: precomputados")
+        else:
+            print("  conditionals: se computarán en la primera síntesis")
 
     except ValueError as e:
         # Audio ilegible, nombre de voz inválido o colisión sin --force.
@@ -459,6 +476,36 @@ def cmd_voice_clone(args):
     except Exception as e:
         print(f"Error al clonar la voz: {e}", file=sys.stderr)
         sys.exit(EXIT_ERROR)
+
+
+def _precompute_cloned_voice(args) -> bool:
+    """Precomputa los conditionals de la voz recién clonada; True si tuvo éxito.
+
+    Daemon-first: usa el modelo caliente del daemon si está activo, o lo carga
+    en frío en modo directo. Cualquier fallo (daemon o motor) se captura, se
+    avisa por stderr y se devuelve False para que el clonado siga siendo exitoso
+    (la voz queda registrada y el primer `speak` computa los conditionals).
+    """
+    from .daemon import is_daemon_running, DaemonIPCClient
+
+    try:
+        if is_daemon_running():
+            return DaemonIPCClient().precompute_voice(args.name)
+        from .engine import ChatterboxEngine
+        with Spinner("Cargando modelo…") as _sp:
+            engine = ChatterboxEngine.get_instance(
+                compute_backend=getattr(args, "compute_backend", "auto")
+            )
+            _sp.update("Precomputando conditionals…")
+            engine.precompute_voice(args.name)
+        return True
+    except Exception as e:
+        print(
+            f"Advertencia: no se pudieron precomputar los conditionals de "
+            f"'{args.name}': {e}. Se computarán en la primera síntesis.",
+            file=sys.stderr,
+        )
+        return False
 
 
 @timed_command

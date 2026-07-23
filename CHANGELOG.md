@@ -7,6 +7,7 @@ y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ## Tabla de contenidos
 
+- [0.9.0 — 2026-07-23](#090--2026-07-23)
 - [0.8.0 — 2026-07-22](#080--2026-07-22)
 - [0.7.8 — 2026-07-22](#078--2026-07-22)
 - [0.7.7 — 2026-07-22](#077--2026-07-22)
@@ -24,6 +25,32 @@ y el proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 - [0.2.0 — 2026-07-08](#020--2026-07-08)
 - [0.1.1 — 2026-07-07](#011--2026-07-07)
 - [0.1.0 — 2026-07-03](#010--2026-07-03)
+
+## [0.9.0] — 2026-07-23
+
+### Cambiado
+
+- **`voice clone` precomputa los conditionals en el momento de clonar**: antes el
+  clonado solo validaba y copiaba los audios, y la preparación de la voz (cómputo
+  de conditionals) se difería a cada síntesis — que, sin `conditionals.pt` en
+  disco, la recomputaba **cada vez**. Ahora `voice clone` precomputa y guarda
+  `conditionals.pt` al clonar, de modo que toda síntesis posterior los carga desde
+  disco (latencia estable, sin sobrecosto en la primera reproducción). Con un
+  daemon activo, el precómputo aprovecha el modelo caliente vía el nuevo endpoint
+  IPC `POST /voices/precompute`; sin daemon, carga el modelo en modo directo.
+- **`voice clone` ahora exige el modelo provisionado** (revierte el «clonado libre
+  de modelo» de S2-15): el precómputo ejecuta el modelo, así que sin `setup`
+  previo el comando aborta con exit 2. Un fallo del precómputo **no** aborta el
+  clonado: la voz queda registrada con un aviso por stderr y sus conditionals se
+  computan en la primera síntesis (red de seguridad on-the-fly conservada). El
+  payload `--json` incluye la clave `precomputed`.
+
+### Eliminado
+
+- **Método muerto `ChatterboxEngine.clone_voice`**: mezclaba copia de audios y
+  precómputo y ningún llamador de producción lo usaba (solo sus tests). Se
+  reemplazó por `ChatterboxEngine.precompute_voice(name)`, que precomputa una voz
+  ya registrada, eliminando la divergencia de «dos caminos» de clonado.
 
 ## [0.8.0] — 2026-07-22
 
@@ -669,6 +696,7 @@ estado con el que nace el producto.
   `THIRD-PARTY-LICENSES.md` (inventario de licencias generado del lockfile).
   Código propio bajo GPL-3.0-or-later; modelo MIT.
 
+[0.9.0]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.7.8...v0.8.0
 [0.7.8]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.7.7...v0.7.8
 [0.7.7]: https://github.com/CristianRojas-SoftwareEngineer/TTS-Sidecar/compare/v0.7.6...v0.7.7

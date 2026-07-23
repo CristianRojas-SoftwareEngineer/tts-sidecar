@@ -542,25 +542,32 @@ tts-sidecar voice clone --name mi_voz --reference timbre.wav --speech condicion.
 ```
 
 **Qué esperar:** el comando valida que ambos audios sean cargables, copia los
-archivos al directorio de voces de usuario y confirma:
+archivos al directorio de voces de usuario, **precomputa los conditionals** de
+la voz (`conditionals.pt`) y confirma:
 
 ```
 Iniciando voice_clone...
 Voz 'mi_voz' clonada:
   timbre (reference): <ruta>/voices/mi_voz/reference.wav
   habla (conditioning): <ruta>/voices/mi_voz/speech.wav
-Finalizado en 0.4s
+  conditionals: precomputados
+Finalizado en 3.1s
 ```
 
 A partir de ese momento la voz aparece en `voice list` y puede usarse con
 `speak --voice mi_voz`.
 
-El clonado es **casi instantáneo** (< 1 s): no carga el motor de inferencia,
-solo valida y copia los audios. La preparación de la voz (cómputo de
-conditionals) la absorbe la primera síntesis con `speak --voice mi_voz`, que
-por eso puede tardar unos segundos más que las siguientes. Como el resto de
-comandos de escritura, `voice clone` requiere el modelo provisionado
-(`tts-sidecar setup`).
+El clonado **precomputa los conditionals** en el momento de clonar, de modo que
+toda síntesis posterior con `speak --voice mi_voz` los carga desde disco en vez
+de recomputarlos (latencia estable, sin sobrecosto en la primera reproducción).
+Por eso `voice clone` requiere el modelo provisionado (`tts-sidecar setup`): el
+precómputo ejecuta el modelo. Si hay un [daemon](#modo-daemon) activo, el
+precómputo aprovecha el modelo ya caliente y es casi inmediato; si no, el
+comando carga el modelo una vez (unos segundos) para precomputar.
+
+Si el precómputo falla (por ejemplo, un audio problemático), el clonado **no se
+aborta**: la voz queda registrada con un aviso por stderr y sus conditionals se
+computarán en la primera síntesis.
 
 **Opciones:**
 - `--name, -n` (requerido): Nombre para la voz

@@ -585,6 +585,43 @@ class TestDaemonManager:
             client.list_voices()
 
     @patch("requests.post")
+    def test_precompute_voice_success(self, mock_post):
+        from tts_sidecar.daemon import DaemonIPCClient
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"name": "crist", "precomputed": True}
+        mock_post.return_value = mock_resp
+
+        client = DaemonIPCClient()
+        assert client.precompute_voice("crist") is True
+
+    @patch("requests.post")
+    def test_precompute_voice_http_error(self, mock_post):
+        """Un 404 del daemon (voz inexistente) eleva DaemonIPCError con el detail."""
+        from tts_sidecar.daemon import DaemonIPCClient, DaemonIPCError
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        mock_resp.json.return_value = {"detail": "Voz no encontrada"}
+        mock_post.return_value = mock_resp
+
+        client = DaemonIPCClient()
+        with pytest.raises(DaemonIPCError, match="Voz no encontrada"):
+            client.precompute_voice("missing")
+
+    @patch("requests.post")
+    def test_precompute_voice_non_conforming_body(self, mock_post):
+        """Cuerpo 200 sin las claves esperadas no valida → DaemonIPCError."""
+        from tts_sidecar.daemon import DaemonIPCClient, DaemonIPCError
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"message": "otro servicio"}
+        mock_post.return_value = mock_resp
+
+        client = DaemonIPCClient()
+        with pytest.raises(DaemonIPCError, match="no conforme"):
+            client.precompute_voice("crist")
+
+    @patch("requests.post")
     def test_synthesize_success(self, mock_post):
         """El cliente reconstruye el WAV desde el frame `result` (base64) y
         reenvía cada frame `progress` (model_dump) a on_progress."""
@@ -874,6 +911,60 @@ class TestDaemonStateInjection:
             with TestClient(server.app) as client:
                 resp = client.post("/synthesize", json={"text": "hola"})
                 assert resp.status_code == 503
+        finally:
+            server.app.dependency_overrides.clear()
+
+    def test_precompute_voice_success(self):
+        """El endpoint invoca engine.precompute_voice y devuelve precomputed=True."""
+        from fastapi.testclient import TestClient
+        from tts_sidecar.daemon import server
+
+        engine = MagicMock()
+        override_state = server.DaemonState(engine=engine)
+        server.app.dependency_overrides[server.get_daemon_state] = lambda: override_state
+        try:
+            with TestClient(server.app) as client:
+                resp = client.post("/voices/precompute", json={"name": "crist"})
+                assert resp.status_code == 200
+                assert resp.json() == {
+                    "schema_version": "1",
+                    "name": "crist",
+                    "precomputed": True,
+                }
+            engine.precompute_voice.assert_called_once_with("crist")
+        finally:
+            server.app.dependency_overrides.clear()
+
+    def test_precompute_voice_503_when_no_engine(self):
+        from fastapi.testclient import TestClient
+        from tts_sidecar.daemon import server
+
+        override_state = server.DaemonState(engine=None)
+        server.app.dependency_overrides[server.get_daemon_state] = lambda: override_state
+        try:
+            with TestClient(server.app) as client:
+                resp = client.post("/voices/precompute", json={"name": "crist"})
+                assert resp.status_code == 503
+        finally:
+            server.app.dependency_overrides.clear()
+
+    def test_precompute_voice_404_when_voice_missing(self):
+        """FileNotFoundError del engine se mapea a 404 sin filtrar rutas."""
+        from fastapi.testclient import TestClient
+        from tts_sidecar.daemon import server
+
+        engine = MagicMock()
+        engine.precompute_voice.side_effect = FileNotFoundError(
+            "Voz 'missing' no encontrada en /ruta/secreta"
+        )
+        override_state = server.DaemonState(engine=engine)
+        server.app.dependency_overrides[server.get_daemon_state] = lambda: override_state
+        try:
+            with TestClient(server.app) as client:
+                resp = client.post("/voices/precompute", json={"name": "missing"})
+                assert resp.status_code == 404
+                assert resp.json()["detail"] == "Voz no encontrada"
+                assert "secreta" not in resp.text
         finally:
             server.app.dependency_overrides.clear()
 

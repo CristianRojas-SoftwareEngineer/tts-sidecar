@@ -21,6 +21,8 @@ from .protocol import (
     SynthesizeRequest,
     HealthResponse,
     VoicesResponse,
+    PrecomputeVoiceRequest,
+    PrecomputeVoiceResponse,
     ProgressEvent,
     ResultEvent,
     ErrorEvent,
@@ -289,6 +291,37 @@ async def list_voices(state: DaemonState = Depends(get_daemon_state)):
         raise HTTPException(status_code=503, detail="Modelo no cargado")
 
     return VoicesResponse(voices=state.engine.list_voices())
+
+
+@app.post("/voices/precompute", response_model=PrecomputeVoiceResponse)
+def precompute_voice(
+    req: PrecomputeVoiceRequest,
+    state: DaemonState = Depends(get_daemon_state),
+) -> PrecomputeVoiceResponse:
+    """Precomputa y guarda los conditionals de una voz ya registrada.
+
+    Endpoint síncrono (def): FastAPI lo despacha a su threadpool. El precómputo
+    corre bajo `_synthesis_lock` porque comparte el modelo con la síntesis
+    (forward passes sobre tts.ve/s3gen/t3); serializarlo evita contención en el
+    dispositivo con una síntesis en vuelo. El engine lee los audios desde el
+    registro (voice_paths), dentro de los directorios permitidos.
+    """
+    engine = state.engine
+    if not engine:
+        raise HTTPException(status_code=503, detail="Modelo no cargado")
+
+    try:
+        with _synthesis_lock:
+            engine.precompute_voice(req.name)
+    except FileNotFoundError as e:
+        # El detalle real (con rutas) queda solo en el log del servidor.
+        logging.getLogger(__name__).warning("precompute_voice: voz no encontrada: %s", e)
+        raise HTTPException(status_code=404, detail="Voz no encontrada")
+    except Exception as e:
+        logging.getLogger(__name__).error("precompute_voice: error interno: %s", e)
+        raise HTTPException(status_code=500, detail="Error interno de precómputo")
+
+    return PrecomputeVoiceResponse(name=req.name, precomputed=True)
 
 
 @app.post("/shutdown")

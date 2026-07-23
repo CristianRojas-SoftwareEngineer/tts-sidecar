@@ -27,6 +27,11 @@ MAX_TEXT_LENGTH = 5000
 # validación de directorio permitido de /synthesize.
 MAX_AUDIO_PATH_LENGTH = 4096
 
+# Tope de longitud del nombre de voz: holgado sobre el límite de nombre de
+# archivo de los tres SO (255), suficiente para acotar el payload antes de que
+# la resolución en el registro (voices.voice_paths) lo valide de verdad.
+MAX_VOICE_NAME_LENGTH = 255
+
 
 class ProtocolModel(BaseModel):
     """Clase base de los modelos del protocolo daemon↔cliente (NDJSON + REST).
@@ -119,3 +124,19 @@ class HealthResponse(ProtocolModel):
 class VoicesResponse(ProtocolModel):
     """Lista de voces registradas."""
     voices: list[str]
+
+
+class PrecomputeVoiceRequest(ProtocolModel):
+    """Petición de precómputo de conditionals para una voz ya registrada.
+
+    Solo lleva el nombre: el daemon resuelve los audios desde el registro
+    (voices.voice_paths), dentro de sus directorios permitidos, así que la
+    petición nunca transporta rutas del sistema de archivos del cliente.
+    """
+    name: str = Field(min_length=1, max_length=MAX_VOICE_NAME_LENGTH)
+
+
+class PrecomputeVoiceResponse(ProtocolModel):
+    """Resultado del precómputo: la voz y si se escribieron sus conditionals."""
+    name: str
+    precomputed: bool

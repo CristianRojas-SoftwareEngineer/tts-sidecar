@@ -123,11 +123,29 @@ class TestCmdVoiceList:
 class TestCmdVoiceClone:
     @patch("tts_sidecar.model_cache.is_model_cached", return_value=False)
     @patch("tts_sidecar.voices.clone_voice_files")
-    def test_cmd_voice_clone_success_without_engine(self, mock_register, _cached, capsys):
-        """Voice clone clona sin instanciar ChatterboxEngine."""
+    def test_cmd_voice_clone_requires_model(self, mock_register, _cached, capsys):
+        """Sin modelo cacheado, el clonado aborta (exit 2) antes de copiar audios."""
+        from tts_sidecar.cli import cmd_voice_clone, EXIT_MODEL_MISSING
+
+        with pytest.raises(SystemExit) as exc:
+            cmd_voice_clone(MockArgs(name="newvoice", reference="ref.wav", speech="speech.wav"))
+
+        assert exc.value.code == EXIT_MODEL_MISSING
+        assert "setup" in capsys.readouterr().err
+        mock_register.assert_not_called()
+
+    @patch("tts_sidecar.daemon.is_daemon_running", return_value=True)
+    @patch("tts_sidecar.daemon.DaemonIPCClient")
+    @patch("tts_sidecar.model_cache.is_model_cached", return_value=True)
+    @patch("tts_sidecar.voices.clone_voice_files")
+    def test_cmd_voice_clone_precomputes_via_daemon(
+        self, mock_register, _cached, mock_client_cls, _running, capsys
+    ):
+        """Con daemon activo, precomputa vía IPC sin cargar el motor en frío."""
         from tts_sidecar.cli import cmd_voice_clone
 
         mock_register.return_value = ("/path/to/ref.wav", "/path/to/speech.wav")
+        mock_client_cls.return_value.precompute_voice.return_value = True
 
         with patch("tts_sidecar.engine.ChatterboxEngine") as mock_engine_cls:
             cmd_voice_clone(MockArgs(name="newvoice", reference="ref.wav", speech="speech.wav"))
@@ -135,22 +153,70 @@ class TestCmdVoiceClone:
 
         out = capsys.readouterr().out
         assert "Voz 'newvoice' clonada" in out
-        mock_register.assert_called_once()
+        assert "precomputados" in out
+        mock_client_cls.return_value.precompute_voice.assert_called_once_with("newvoice")
 
-    @patch("tts_sidecar.model_cache.is_model_cached", return_value=False)
+    @patch("tts_sidecar.daemon.is_daemon_running", return_value=False)
+    @patch("tts_sidecar.model_cache.is_model_cached", return_value=True)
     @patch("tts_sidecar.voices.clone_voice_files")
-    def test_cmd_voice_clone_succeeds_without_model(self, mock_register, _cached, capsys):
-        """Sin modelo cacheado, voice clone clona la voz (clonado libre de modelo)."""
+    def test_cmd_voice_clone_precomputes_direct(
+        self, mock_register, _cached, _running, capsys
+    ):
+        """Sin daemon, carga el motor en modo directo y precomputa."""
         from tts_sidecar.cli import cmd_voice_clone
 
         mock_register.return_value = ("/path/to/ref.wav", "/path/to/speech.wav")
 
-        cmd_voice_clone(MockArgs(name="newvoice", reference="ref.wav", speech="speech.wav"))
+        with patch("tts_sidecar.engine.ChatterboxEngine") as mock_engine_cls:
+            engine = mock_engine_cls.get_instance.return_value
+            cmd_voice_clone(MockArgs(name="newvoice", reference="ref.wav", speech="speech.wav"))
+            engine.precompute_voice.assert_called_once_with("newvoice")
+
+        assert "precomputados" in capsys.readouterr().out
+
+    @patch("tts_sidecar.daemon.is_daemon_running", return_value=False)
+    @patch("tts_sidecar.model_cache.is_model_cached", return_value=True)
+    @patch("tts_sidecar.voices.clone_voice_files")
+    def test_cmd_voice_clone_precompute_failure_non_fatal(
+        self, mock_register, _cached, _running, capsys
+    ):
+        """Un fallo del precómputo avisa pero no aborta el clonado (lazy fallback)."""
+        from tts_sidecar.cli import cmd_voice_clone
+
+        mock_register.return_value = ("/path/to/ref.wav", "/path/to/speech.wav")
+
+        with patch("tts_sidecar.engine.ChatterboxEngine") as mock_engine_cls:
+            mock_engine_cls.get_instance.side_effect = RuntimeError("boom")
+            cmd_voice_clone(MockArgs(name="newvoice", reference="ref.wav", speech="speech.wav"))
 
         captured = capsys.readouterr()
         assert "Voz 'newvoice' clonada" in captured.out
-        assert "setup" not in captured.err
-        mock_register.assert_called_once()
+        assert "primera síntesis" in captured.out
+        assert "Advertencia" in captured.err
+
+    @patch("tts_sidecar.daemon.is_daemon_running", return_value=True)
+    @patch("tts_sidecar.daemon.DaemonIPCClient")
+    @patch("tts_sidecar.model_cache.is_model_cached", return_value=True)
+    @patch("tts_sidecar.voices.clone_voice_files")
+    def test_cmd_voice_clone_json_includes_precomputed(
+        self, mock_register, _cached, mock_client_cls, _running, capsys
+    ):
+        """El payload --json incluye la clave precomputed."""
+        import json
+        from tts_sidecar.cli import cmd_voice_clone, SCHEMA_VERSION
+
+        mock_register.return_value = ("/path/to/ref.wav", "/path/to/speech.wav")
+        mock_client_cls.return_value.precompute_voice.return_value = True
+
+        cmd_voice_clone(MockArgs(name="newvoice", reference="ref.wav", speech="speech.wav", json=True))
+
+        assert json.loads(capsys.readouterr().out) == {
+            "schema_version": SCHEMA_VERSION,
+            "name": "newvoice",
+            "reference": "/path/to/ref.wav",
+            "speech": "/path/to/speech.wav",
+            "precomputed": True,
+        }
 
 
 class TestCmdVoiceRemove:
@@ -1728,13 +1794,18 @@ class TestWriteCommandsJSON:
     """Los cuatro comandos de escritura aceptan --json y emiten un único
     objeto JSON en stdout, con los listados informativos en stderr."""
 
+    @patch("tts_sidecar.daemon.is_daemon_running", return_value=True)
+    @patch("tts_sidecar.daemon.DaemonIPCClient")
     @patch("tts_sidecar.model_cache.is_model_cached", return_value=True)
     @patch("tts_sidecar.voices.clone_voice_files")
-    def test_voice_clone_json_payload(self, mock_register, _cached, capsys):
+    def test_voice_clone_json_payload(
+        self, mock_register, _cached, mock_client_cls, _running, capsys
+    ):
         import json
         from tts_sidecar.cli import cmd_voice_clone, SCHEMA_VERSION
 
         mock_register.return_value = ("/voices/nueva/reference.wav", "/voices/nueva/speech.wav")
+        mock_client_cls.return_value.precompute_voice.return_value = True
 
         cmd_voice_clone(MockArgs(name="nueva", json=True))
 
@@ -1744,6 +1815,7 @@ class TestWriteCommandsJSON:
             "name": "nueva",
             "reference": "/voices/nueva/reference.wav",
             "speech": "/voices/nueva/speech.wav",
+            "precomputed": True,
         }
 
     @patch("tts_sidecar.voices.remove_voice", return_value=True)
