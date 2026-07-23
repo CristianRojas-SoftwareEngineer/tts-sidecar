@@ -1,5 +1,45 @@
 # Guía de Uso de TTS Sidecar
 
+## Tabla de contenidos
+
+- [Instalación](#instalación)
+  - [Usuario del binario](#usuario-del-binario)
+  - [Usuario de PyPI (`uv tool install` / `pipx`)](#usuario-de-pypi-uv-tool-install-pipx)
+  - [Desarrollador (desde el código fuente)](#desarrollador-desde-el-código-fuente)
+- [Primer uso: provisionar el modelo (`setup`)](#primer-uso-provisionar-el-modelo-setup)
+- [Comandos](#comandos)
+  - [Referencia de esquemas `--json`](#referencia-de-esquemas-json)
+  - [`version`](#version)
+  - [`doctor`](#doctor)
+  - [`devices`](#devices)
+  - [`speak`](#speak)
+  - [`voice clone`](#voice-clone)
+  - [`voice list`](#voice-list)
+  - [`voice remove`](#voice-remove)
+  - [`cleanup`](#cleanup)
+- [Desinstalación completa](#desinstalación-completa)
+- [Actualizar de versión](#actualizar-de-versión)
+- [Modo Daemon](#modo-daemon)
+  - [Gestión del daemon](#gestión-del-daemon)
+  - [Uso con daemon](#uso-con-daemon)
+  - [Requisitos de hardware](#requisitos-de-hardware)
+- [Clonación de voz: recorrido completo](#clonación-de-voz-recorrido-completo)
+- [Experiencia unificada entre sistemas operativos](#experiencia-unificada-entre-sistemas-operativos)
+- [Formato de Audio](#formato-de-audio)
+- [Solución de Problemas](#solución-de-problemas)
+  - ["el modelo 'es-mx-latam' no está descargado"](#el-modelo-es-mx-latam-no-está-descargado)
+  - ["GLIBC_2.35 not found" (o similar) al ejecutar el AppImage en Linux](#glibc_235-not-found-o-similar-al-ejecutar-el-appimage-en-linux)
+  - ["OneDrive user-data-dir" [WARN] en doctor (Windows)](#onedrive-user-data-dir-warn-en-doctor-windows)
+  - ["Voice 'x' not found"](#voice-x-not-found)
+  - ["La voz 'x' ya existe"](#la-voz-x-ya-existe)
+  - ["reference.wav/speech.wav not found"](#referencewavspeechwav-not-found)
+  - ["Voz 'x' es una voz de fábrica (solo lectura)"](#voz-x-es-una-voz-de-fábrica-solo-lectura)
+  - [Error al eliminar una voz: "uno de sus archivos parece estar en uso"](#error-al-eliminar-una-voz-uno-de-sus-archivos-parece-estar-en-uso)
+  - [Sin audio de salida](#sin-audio-de-salida)
+  - [El sistema bloquea el primer arranque (binarios sin firmar)](#el-sistema-bloquea-el-primer-arranque-binarios-sin-firmar)
+- [Uso ético y responsable](#uso-ético-y-responsable)
+- [Licencia](#licencia)
+
 TTS Sidecar es un sintetizador de voz (TTS) 100 % local con clonación de voz en
 español latinoamericano. Esta guía recorre cada caso de uso desde la perspectiva
 del usuario: qué comando ejecutar, qué ocurre y qué salida esperar.

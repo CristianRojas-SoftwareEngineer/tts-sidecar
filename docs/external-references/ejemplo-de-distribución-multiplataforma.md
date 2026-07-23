@@ -1,3 +1,21 @@
+# Desafíos de distribución multiplataforma para software open source
+
+## Tabla de contenidos
+
+- [¿Cuál es el problema?](#cual-es-el-problema)
+  - [1. Firma digital (Code Signing)](#1-firma-digital-code-signing)
+  - [2. Reputación](#2-reputacion)
+  - [3. Heurísticas](#3-heuristicas)
+- [¿Por qué afecta tanto a proyectos pequeños?](#por-que-afecta-tanto-a-proyectos-pequenos)
+- [¿Cómo lo resuelve Engram?](#como-lo-resuelve-engram)
+- [¿Significa que un binario compilado localmente es "más seguro"?](#significa-que-un-binario-compilado-localmente-es-mas-seguro)
+- [¿Es Engram multiplataforma?](#es-engram-multiplataforma)
+- [Plataformas soportadas](#plataformas-soportadas)
+- [¿Necesita runtime?](#necesita-runtime)
+- [¿Cómo distribuyen el mismo programa para todas las plataformas?](#como-distribuyen-el-mismo-programa-para-todas-las-plataformas)
+- [¿Y cómo instala cada plataforma?](#y-como-instala-cada-plataforma)
+- [Lo que más me gustó de la arquitectura](#lo-que-mas-me-gusto-de-la-arquitectura)
+
 Sí, investigué específicamente ese punto y es interesante porque **no es un problema propio de Engram**, sino un problema general de la distribución de software open source para Windows.
 
 ## ¿Cuál es el problema?
@@ -68,7 +86,7 @@ Ese nombre es una **clasificación heurística**, no una identificación de un m
 
 ---
 
-# ¿Por qué afecta tanto a proyectos pequeños?
+## ¿Por qué afecta tanto a proyectos pequeños?
 
 Porque un certificado de firma cuesta normalmente **cientos de dólares al año** y además requiere un proceso de validación de identidad.
 
@@ -78,7 +96,7 @@ El propio autor de Engram explica que **no piensa pagar un certificado de firma 
 
 ---
 
-# ¿Cómo lo resuelve Engram?
+## ¿Cómo lo resuelve Engram?
 
 En lugar de intentar convencer al antivirus de que el binario descargado es seguro, propone algo diferente:
 
@@ -118,7 +136,7 @@ Por eso normalmente Windows Defender ya no lo clasifica como sospechoso. ([GitHu
 
 ---
 
-# ¿Significa que un binario compilado localmente es "más seguro"?
+## ¿Significa que un binario compilado localmente es "más seguro"?
 
 No necesariamente.
 
@@ -133,7 +151,7 @@ Es una cuestión de **cadena de confianza**, no de que el código cambie.
 
 ---
 
-# ¿Es Engram multiplataforma?
+## ¿Es Engram multiplataforma?
 
 Sí.
 
@@ -152,7 +170,7 @@ El resultado es un único ejecutable nativo por plataforma. ([GitHub][3])
 
 ---
 
-# Plataformas soportadas
+## Plataformas soportadas
 
 Actualmente distribuye binarios para:
 
@@ -166,7 +184,7 @@ Todos son binarios nativos. ([GitHub][2])
 
 ---
 
-# ¿Necesita runtime?
+## ¿Necesita runtime?
 
 No.
 
@@ -191,7 +209,7 @@ Solamente el ejecutable. Además, el proyecto utiliza la implementación pura de
 
 ---
 
-# ¿Cómo distribuyen el mismo programa para todas las plataformas?
+## ¿Cómo distribuyen el mismo programa para todas las plataformas?
 
 Utilizan compilación cruzada (*cross-compilation*).
 
@@ -215,7 +233,7 @@ Todos esos artefactos se construyen desde el mismo código fuente durante el pro
 
 ---
 
-# ¿Y cómo instala cada plataforma?
+## ¿Y cómo instala cada plataforma?
 
 Aquí el proyecto adapta el método a las convenciones de cada sistema operativo:
 

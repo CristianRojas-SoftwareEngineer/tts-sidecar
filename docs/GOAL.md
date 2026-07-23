@@ -32,7 +32,7 @@ El [criterio de clasificación](#clasificación-de-specs) decide a cuál de las 
 
 ---
 
-# Clasificación de specs
+## Clasificación de specs
 
 Toda spec nueva se clasifica corriendo este test **antes** de ubicarla, sin heredar la clasificación de specs vecinas. Una spec va al **goal a largo plazo** únicamente si cumple **al menos uno** de estos tres impedimentos objetivos:
 
@@ -48,7 +48,7 @@ Si la spec **no cumple ninguno** de los tres, va al **goal inmediato** y se trab
 
 ---
 
-# Goal inmediato
+## Goal inmediato
 
 ## Objetivo
 
@@ -221,7 +221,7 @@ La implementación está completa únicamente cuando:
 
 ---
 
-# Goal a largo plazo
+## Goal a largo plazo
 
 Especificaciones **no comprometidas** para el goal inmediato. No se trabajan ahora — cada una registra por qué se difiere (según el [criterio de clasificación](#clasificación-de-specs)) y qué condición la promueve al goal inmediato.
 

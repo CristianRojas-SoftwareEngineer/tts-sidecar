@@ -1,5 +1,19 @@
 # Política de seguridad
 
+## Tabla de contenidos
+
+- [Versiones soportadas](#versiones-soportadas)
+- [Cómo reportar una vulnerabilidad](#cómo-reportar-una-vulnerabilidad)
+- [Modelo de amenaza](#modelo-de-amenaza)
+  - [Daemon local (modo daemon)](#daemon-local-modo-daemon)
+  - [Modelo y provisión](#modelo-y-provisión)
+  - [Contenido generado](#contenido-generado)
+  - [Nota sobre los instaladores de una línea](#nota-sobre-los-instaladores-de-una-línea)
+- [Artefactos sin firmar](#artefactos-sin-firmar)
+  - [Runbook: reportar un falso positivo de Defender Antivirus (WDSI)](#runbook-reportar-un-falso-positivo-de-defender-antivirus-wdsi)
+  - [Runbook: reportar un falso positivo de ClamAV](#runbook-reportar-un-falso-positivo-de-clamav)
+  - [Runbook: bloqueo de Gatekeeper en macOS](#runbook-bloqueo-de-gatekeeper-en-macos)
+
 ## Versiones soportadas
 
 TTS Sidecar está en desarrollo activo pre-1.0. Solo la última versión publicada

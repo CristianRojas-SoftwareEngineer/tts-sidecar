@@ -3,6 +3,19 @@
 Gracias por tu interés en contribuir a TTS Sidecar. Este documento describe el
 flujo de desarrollo, los estándares del proyecto y cómo proponer cambios.
 
+## Tabla de contenidos
+
+- [Requisitos](#requisitos)
+- [Configuración del entorno de desarrollo](#configuración-del-entorno-de-desarrollo)
+- [Tests](#tests)
+  - [Cobertura](#cobertura)
+  - [Smoke-tests de instaladores](#smoke-tests-de-instaladores)
+- [Dependencias y lockfile](#dependencias-y-lockfile)
+- [Compilación de binarios](#compilación-de-binarios)
+- [Estilo y convenciones](#estilo-y-convenciones)
+- [Flujo de Pull Request](#flujo-de-pull-request)
+- [Reporte de problemas](#reporte-de-problemas)
+
 ## Requisitos
 
 - **Python 3.13** (el proyecto fija esta versión en el build y en CI).

@@ -1,5 +1,14 @@
 # AGENTS GUIDELINES
 
+## Tabla de contenidos
+
+- [0. Language & Token Efficiency](#0-language--token-efficiency)
+- [1. Think Before Coding](#1-think-before-coding)
+- [2. Goal-Driven Execution](#2-goal-driven-execution)
+- [3. Simplicity First](#3-simplicity-first)
+- [4. Surgical Changes](#4-surgical-changes)
+- [5. Version Control](#5-version-control)
+
 <!-- <language_efficiency> -->
 
 ## 0. Language & Token Efficiency
